@@ -245,6 +245,7 @@ async function pageIdentify() {
     <div class="login"><div class="card stack identify">
       <span class="brand-mark" aria-hidden="true"></span>
       <h1>${esc(config.collaName)}</h1>
+      ${config.demo ? `<div class="demo-note">${t('Versió de prova: tria qualsevol nom per entrar com a membre, o entra com a administrador/a amb {user} / {pass}. Les dades són inventades i es reinicien de tant en tant.', { user: '<b>admin</b>', pass: '<b>admin1234</b>' })}</div>` : ''}
       ${inner}
       <a href="#/admin" class="small" style="display:block;text-align:center">${t('Entrar com a administrador/a')}</a>
       <div class="login-settings">${settingsControls()}</div>

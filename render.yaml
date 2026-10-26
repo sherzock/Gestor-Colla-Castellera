@@ -1,0 +1,13 @@
+# Configuració per publicar una versió de prova gratuïta a Render (https://render.com).
+# Cada vegada que el servei arrenca es tornen a crear les dades de demostració.
+services:
+  - type: web
+    name: colla-castellera-demo
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run demo
+    healthCheckPath: /api/config
+    envVars:
+      - key: COLLA_NAME
+        value: Colla de prova

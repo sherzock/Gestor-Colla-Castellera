@@ -129,6 +129,18 @@ malnoms de la demostració són inventats (els malnoms són noms de fruites i ve
 | `ADMIN_PASSWORD` | aleatòria | Contrasenya de l'`admin` inicial (només si encara no n'hi ha cap) |
 | `COLLA_CODE` | (cap) | Codi compartit que es demana als membres abans de «Qui ets?» |
 
+## Versió de prova gratuïta (Render)
+
+Per deixar que la gent la provi sense instal·lar res, el repositori ja porta `render.yaml`:
+
+1. Entra a <https://render.com> amb el compte de GitHub.
+2. **New → Blueprint** i tria aquest repositori. Render llegeix `render.yaml` i crea el servei gratuït.
+3. Quan acabi, tindràs una adreça com `https://colla-castellera-demo.onrender.com`.
+
+El servei arrenca amb `npm run demo`: torna a crear les dades de demostració i mostra a la pantalla d'entrada com entrar
+(`admin` / `admin1234`). En el pla gratuït el servei s'atura si ningú l'utilitza durant una estona i triga uns
+segons a tornar a arrencar; aleshores les dades es reinicien. **No ho feu servir per a dades reals de la colla.**
+
 ## Publicar-la per a la colla
 
 Qualsevol servidor amb Node (un VPS, Railway, Fly.io, Render amb disc persistent…) serveix. Posa-hi HTTPS

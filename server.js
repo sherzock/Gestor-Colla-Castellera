@@ -10,6 +10,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const COLLA_NAME = process.env.COLLA_NAME || 'La meva colla';
 const PUBLIC_DIR = path.join(import.meta.dirname, 'public');
 const COLLA_CODE = process.env.COLLA_CODE || '';
+// Mode demostració: la pantalla d'entrada explica com provar l'app (les dades es tornen a crear a cada arrencada amb «npm run demo»).
+const DEMO = process.env.DEMO === '1';
 const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;
 const MEMBER_TTL_MS = 365 * 24 * 3600 * 1000;
 
@@ -203,7 +205,7 @@ function cookieHeader(req, token, maxAgeSec) {
 }
 
 // ---------- Rutes: autenticació i perfil ----------
-route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE }), 'public');
+route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO }), 'public');
 
 function checkCollaCode(code) {
   if (COLLA_CODE && String(code || '').trim() !== COLLA_CODE) fail(401, 'El codi de la colla no és correcte');

@@ -539,3 +539,4 @@ body.no-scroll { overflow: hidden; }
   .cal-legend { margin-left: 0; width: 100%; }
   .cal-agenda { display: block; }
 }
+.demo-note { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: .88rem; text-align: center; }
