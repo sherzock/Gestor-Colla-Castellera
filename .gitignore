@@ -1,0 +1,9 @@
+node_modules/
+# Base de dades (dades reals de la colla): no es puja mai al repositori
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.DS_Store
+.claude/

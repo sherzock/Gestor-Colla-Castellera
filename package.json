@@ -1,0 +1,12 @@
+{
+  "name": "colla-castellera",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gestió d'assistència, sessions i castells per a una colla castellera",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  }
+}
