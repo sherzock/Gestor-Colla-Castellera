@@ -117,6 +117,27 @@ if (columns('castells').includes('top_off')) {
     ALTER TABLE castells DROP COLUMN top_off;`);
 }
 db.exec("UPDATE castells SET result = 'intent desfet' WHERE result = 'intent desmuntat'");
+
+// Pinya: els laterals passen a ser de cada baix (una línia a cada costat de les seves mans). Abans n'hi havia
+// a banda i banda dels vents («plv…») i uns «laterals de mans» («plm…»): es mouen a la posició nova equivalent.
+const oldLaterals = db.prepare(`SELECT cp.castell_id, cp.pos_key, c.width FROM castell_positions cp
+  JOIN castells c ON c.id = cp.castell_id WHERE cp.pos_key GLOB '[pf]lv*' OR cp.pos_key GLOB '[pf]lm*'`).all();
+if (oldLaterals.length) {
+  const move = db.prepare('UPDATE OR IGNORE castell_positions SET pos_key = ? WHERE castell_id = ? AND pos_key = ?');
+  db.exec('BEGIN');
+  for (const r of oldLaterals) {
+    const m = r.pos_key.match(/^([pf])(lv|lm)(\d+)-(\d+)-([ed])$/);
+    if (!m) continue;
+    const [, pre, kind, n, i, side] = m;
+    let key = null;
+    // El lateral d'un costat del vent i és del baix que té a tocar (i o i + 1).
+    if (kind === 'lv' && r.width >= 2 && r.width <= 4) key = side === 'e' ? `${pre}l${n}-${(Number(i) + 1) % r.width}-d` : `${pre}l${n}-${i}-e`;
+    else if (kind === 'lm') key = `${pre}l${Number(n) + 1}-${i}-${side}`;
+    if (key) move.run(key, r.castell_id, r.pos_key);
+  }
+  db.exec("DELETE FROM castell_positions WHERE pos_key GLOB '[pf]lv*' OR pos_key GLOB '[pf]lm*'");
+  db.exec('COMMIT');
+}
 addColumn('people', 'instrument', 'TEXT');
 
 // La primera versió limitava els tipus de sessió amb un CHECK: es refà la taula per poder afegir-ne.

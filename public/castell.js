@@ -60,17 +60,21 @@ function columnName(width, i) {
 }
 
 // ---------- Pinya en planta ----------
-// Cada persona és una caixa (BOX_W × BOX_H píxels). La pinya s'organitza en línies que surten
-// del centre, com als esquemes de pinya habituals:
-//  - per cada baix: agulla (cap a dins), baix, contrafort, dues crosses als costats, i la línia de
-//    mans darrere del contrafort, amb una línia de laterals de mans a cada costat;
-//  - pel buit entre dos baixos: la línia de vents, amb una línia de laterals a cada costat.
-// Cada línia té tantes posicions com cordons. Si una caixa toparia amb una altra ja col·locada
-// (a prop del centre no hi ha lloc), aquella línia comença una mica més enfora.
+// Cada persona és una caixa (BOX_W × BOX_H píxels), vista des de dalt, com als esquemes de pinya habituals:
+//  - cada baix té l'agulla al davant (cap a dins), el contrafort al darrere i una crossa a cada costat;
+//  - darrere el contrafort hi ha la línia de mans (primeres, segones…) i, a cada costat d'aquesta línia,
+//    una línia de laterals (entregirats), que treballen sobre una sola cama del segon;
+//  - pel buit entre dos baixos hi va la línia de vents (daus), que treballen sobre dos segons;
+//  - cada línia té tantes posicions com cordons.
+// El pilar no porta crosses: té l'agulla a un costat, el contrafort a l'altre, mans pels dos costats i vents
+// als laterals. La torre té una sola agulla. Els castells compostos són la unió de castells simples
+// (5 = tres i torre, 7 = quatre i tres, 9 = tres i tres torres): els baixos de dins tenen el braç cap enfora
+// passant entre els de fora, i les posicions que no caben a prop del centre se situen més enllà.
 const BOX_W = 78;
 const BOX_H = 30;
 const STEP = BOX_H + 2;
 const SIDE = BOX_W + 4;
+const DEG = Math.PI / 180;
 
 function overlaps(a, b) {
   for (const t of [a.rot, a.rot + Math.PI / 2, b.rot, b.rot + Math.PI / 2]) {
@@ -87,14 +91,52 @@ function overlaps(a, b) {
   return true;
 }
 
-// Distància del centre als baixos: prou gran perquè hi càpiguen agulles i crosses.
+// Distància del centre als baixos d'un castell simple: prou gran perquè hi càpiguen agulles i crosses.
 function baseDistance(width) {
-  if (width === 1) return 0;
   if (width === 2) return 2 * STEP;
   return Math.max(STEP + 47 + 41 / Math.tan(Math.PI / width), (150 * width) / (2 * Math.PI) - 16);
 }
 
-function buildLayer({ id, label, width, prefix, baseKey, rings, vents, agulles, add }) {
+// On és cada baix (x, y), cap on va el seu braç (dir: contrafort i mans) i entre quins baixos hi ha vents.
+// L'índex de cada baix és la columna del tronc (0 = rengla).
+function pinyaPlan(width) {
+  const polar = (r, a, dir = a) => ({ x: r * Math.cos(a), y: r * Math.sin(a), dir });
+  const up = -Math.PI / 2;
+  if (width === 1) return { baixos: [{ x: 0, y: 0, dir: up }], gaps: [{ a: 0, b: 0, dir: 0 }, { a: 0, b: 0, dir: Math.PI }], pilar: true };
+  if (width <= 4) {
+    const R = baseDistance(width);
+    const baixos = Array.from({ length: width }, (_, i) => polar(R, up + (i * 2 * Math.PI) / width));
+    return { baixos, gaps: baixos.map((b, i) => ({ a: i, b: (i + 1) % width, dir: b.dir + Math.PI / width })) };
+  }
+  if (width === 5) {
+    // Tres i torre: la rengla del tres és al mig i el seu braç passa entre els dos baixos de la torre (a dalt).
+    // Els altres dos baixos del tres queden a sota, amb els braços sortint del centre del tres.
+    const tres = { x: 0, y: 103 };
+    const of = (x, y, c) => ({ x, y, dir: Math.atan2(y - c.y, x - c.x) });
+    return {
+      baixos: [{ x: 0, y: 0, dir: up }, of(-105, -165, { x: 0, y: 0 }), of(105, -165, { x: 0, y: 0 }), of(89, 154, tres), of(-89, 154, tres)],
+      gaps: [[2, 3], [3, 4], [4, 1]],
+    };
+  }
+  if (width === 7) {
+    // Quatre i tres: un baix al mig, amb el braç cap amunt entre els dos baixos de dalt, i sis al voltant.
+    const at = (x, y, dir) => ({ x, y, dir });
+    return {
+      baixos: [at(0, 0, up), at(-175, -150, up), at(175, -150, up), at(330, 0, 0), at(175, 150, -up), at(-175, 150, -up), at(-330, 0, Math.PI)],
+      gaps: [[2, 3], [3, 4], [4, 5], [5, 6], [6, 1]],
+    };
+  }
+  // Nou: un tres al mig i una torre davant de cada baix del tres; el braç de cada baix del tres passa
+  // entre els dos baixos de la seva torre.
+  const baixos = [];
+  for (let k = 0; k < 3; k++) {
+    const A = up + k * 120 * DEG;
+    baixos.push(polar(95, A), polar(265, A - 20 * DEG, A - 65 * DEG), polar(265, A + 20 * DEG, A + 65 * DEG));
+  }
+  return { baixos, gaps: [[2, 4], [5, 7], [8, 1]] };
+}
+
+function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, add }) {
   const items = [];
   const placed = [];
   // «cat» és la categoria comparable entre castells diferents (per a l'historial).
@@ -104,54 +146,74 @@ function buildLayer({ id, label, width, prefix, baseKey, rings, vents, agulles, 
     items.push(shared ? { key, role, kind, ...box, shared }
       : add(key, role, id, { kind, ...box, cat: catPrefix + (extra.cat || role), ...extra }));
   };
-  const point = (phi, d, o = 0) => ({ x: d * Math.cos(phi) - o * Math.sin(phi), y: d * Math.sin(phi) + o * Math.cos(phi) });
-  const across = (phi, d, o = 0) => ({ ...point(phi, d, o), w: BOX_W, h: BOX_H, rot: phi + Math.PI / 2 });
-  // Una línia és contínua: es busca la primera distància on hi caben totes les caixes seguides.
-  const line = (count, phi, o, startD, make) => {
-    if (count <= 0) return;
-    for (let d = startD, guard = 0; guard < 300; d += STEP / 2, guard++) {
-      const boxes = Array.from({ length: count }, (_, n) => across(phi, d + n * STEP, o));
-      if (boxes.some((box) => placed.some((p) => overlaps(p, box)))) continue;
-      boxes.forEach((box, n) => make(n + 1, box));
-      return;
+  const free = (box) => !placed.some((p) => overlaps(p, box));
+  // Caixa travessada respecte a una direcció (com un baix mirant cap al centre), a distància d i desplaçada o.
+  const across = (from, dir, d, o = 0) => ({
+    x: from.x + d * Math.cos(dir) - o * Math.sin(dir), y: from.y + d * Math.sin(dir) + o * Math.cos(dir),
+    w: BOX_W, h: BOX_H, rot: dir + Math.PI / 2,
+  });
+  // Primera caixa lliure seguint una línia, a partir de la distància d.
+  const nextFree = (from, dir, o, d) => {
+    for (let guard = 0; guard < 400; d += STEP / 2, guard++) {
+      const box = across(from, dir, d, o);
+      if (free(box)) return { box, d };
     }
+    return null;
   };
 
-  const Rb = baseDistance(width);
-  // El primer baix (la rengla) queda a dalt.
-  const arms = Array.from({ length: width }, (_, i) => -Math.PI / 2 + (i * 2 * Math.PI) / width);
-  const gaps = arms.map((phi) => phi + Math.PI / width);
+  const plan = pinyaPlan(width);
+  const simple = width <= 4;
+  // Als castells compostos, l'agulla o una crossa que no hi càpiga a prop del centre no hi va.
+  const maybe = (box, fn) => { if (simple || free(box)) fn(box); };
 
-  // Nucli: agulla, baix, contrafort i crosses de cada baix.
-  arms.forEach((phi, i) => {
-    if (agulles) put(`${prefix}a${i}`, 'Agulla', 'agulla', across(phi, Rb - STEP));
-    put(baseKey(i), null, 'base', across(phi, Rb), {}, true);
-    put(`${prefix}c${i}`, 'Contrafort', 'contrafort', across(phi, Rb + STEP));
-    const crossOffset = BOX_W / 2 + BOX_H / 2 + 2;
-    for (const [side, o] of [['e', crossOffset], ['d', -crossOffset]]) {
-      put(`${prefix}x${side}${i}`, 'Crossa', 'crossa', { ...point(phi, Rb + STEP / 2, o), w: 2 * STEP, h: BOX_H, rot: phi });
+  if (centerKey) put(centerKey, null, 'base', { x: 0, y: 0, w: BOX_W, h: BOX_H, rot: 0 }, {}, true);
+  plan.baixos.forEach((b, i) => put(baseKey(i), null, 'base', across(b, b.dir, 0), {}, true));
+  plan.baixos.forEach((b, i) => {
+    put(`${prefix}c${i}`, 'Contrafort', 'contrafort', across(b, b.dir, STEP));
+    // La torre té una sola agulla; el pilar la té al costat contrari del contrafort.
+    if (agulles && (width !== 2 || i === 0)) maybe(across(b, b.dir, -STEP), (box) => put(`${prefix}a${i}`, 'Agulla', 'agulla', box));
+    if (!plan.pilar) {
+      const off = BOX_W / 2 + BOX_H / 2 + 2;
+      for (const [side, o] of [['e', off], ['d', -off]]) {
+        const p = across(b, b.dir, STEP / 2, o);
+        maybe({ ...p, w: 2 * STEP, h: BOX_H, rot: b.dir }, (box) => put(`${prefix}x${side}${i}`, 'Crossa', 'crossa', box));
+      }
     }
   });
 
-  arms.forEach((phi, i) => line(rings, phi, 0, Rb + 2 * STEP, (n, box) =>
-    put(`${prefix}m${n}-${i}`, `${ordinal(n, true)} mans`, 'mans', box, { ring: n })));
-  if (vents) {
-    gaps.forEach((phi, i) => line(rings, phi, 0, width === 1 ? 2 * STEP : STEP / 2, (n, box) =>
-      put(`${prefix}v${n}-${i}`, `${ordinal(n, false)} vent`, 'vent', box, { ring: n })));
-    gaps.forEach((phi, i) => {
-      for (const [side, o] of [['e', SIDE], ['d', -SIDE]]) {
-        line(rings, phi, o, STEP / 2, (n, box) =>
-          put(`${prefix}lv${n}-${i}-${side}`, `Lateral ${n}`, 'lateral', box, { ring: n, cat: 'Lateral' }));
-      }
+  // Braços amb línia de mans: un per baix (i el pilar en té un altre darrere l'agulla).
+  const arms = plan.baixos.map((b, i) => ({ b, i, dir: b.dir, key: i, mans: '' }));
+  if (plan.pilar) arms.push({ b: plan.baixos[0], i: 1, dir: plan.baixos[0].dir + Math.PI, key: 1, mans: " de l'agulla" });
+  const cursor = new Map();
+  // maxJump: si la línia hauria de saltar més enllà d'això per trobar lloc, s'acaba (no hi cap).
+  const step = (k, from, dir, o, start, maxJump = Infinity) => {
+    const at = cursor.get(k) ?? start;
+    if (at === Infinity) return null;
+    const found = nextFree(from, dir, o, at);
+    if (!found || found.d - at > maxJump) { cursor.set(k, Infinity); return null; }
+    cursor.set(k, found.d + STEP);
+    return found.box;
+  };
+  // Cordó a cordó, perquè cada cordó ocupi el lloc més proper al centre que li quedi.
+  for (let n = 1; n <= rings; n++) {
+    for (const arm of arms) {
+      const box = step(`m${arm.key}`, arm.b, arm.dir, 0, 2 * STEP);
+      if (box) put(`${prefix}m${n}-${arm.key}`, `${ordinal(n, true)} mans${arm.mans}`, 'mans', box, { ring: n, cat: `${ordinal(n, true)} mans` });
+    }
+    if (!vents) continue;
+    plan.gaps.forEach((g, gi) => {
+      const [a, b] = Array.isArray(g) ? g : [g.a, g.b];
+      const A = plan.baixos[a], B = plan.baixos[b];
+      const dir = g.dir ?? Math.atan2(Math.sin(Math.atan2(A.y, A.x)) + Math.sin(Math.atan2(B.y, B.x)), Math.cos(Math.atan2(A.y, A.x)) + Math.cos(Math.atan2(B.y, B.x)));
+      const box = step(`v${gi}`, { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, dir, 0, STEP / 2);
+      if (box) put(`${prefix}v${n}-${gi}`, `${ordinal(n, false)} vent`, 'vent', box, { ring: n });
     });
-  }
-  if (rings > 1) {
-    arms.forEach((phi, i) => {
+    for (const arm of arms) {
       for (const [side, o] of [['e', SIDE], ['d', -SIDE]]) {
-        line(rings - 1, phi, o, Rb + 2 * STEP, (n, box) =>
-          put(`${prefix}lm${n}-${i}-${side}`, `Lateral de mans ${n}`, 'latmans', box, { ring: n + 1, cat: 'Lateral de mans' }));
+        const box = step(`l${arm.key}${side}`, arm.b, arm.dir, o, STEP, simple ? Infinity : 2 * STEP);
+        if (box) put(`${prefix}l${n}-${arm.key}-${side}`, `Lateral ${n}`, 'lateral', box, { ring: n, cat: 'Lateral' });
       }
-    });
+    }
   }
   return { id, label, items };
 }
@@ -210,12 +272,14 @@ export function buildStructure(c) {
   // En una prova parcial hi són igual: només es treuen pisos del tronc, i el pis més baix que es fa
   // ocupa el lloc dels baixos a la pinya.
   const layers = [];
+  // Als castells amb agulla (pilar al mig), el baix del pilar queda al centre de la pinya.
+  const center = (L) => (positions.has(`ag${L}`) ? `ag${L}` : null);
   if (!c.net) {
-    layers.push(buildLayer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`,
+    layers.push(buildLayer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`, centerKey: center(from),
       rings: Number(c.cordons ?? 3), vents: true, agulles: true, add }));
   }
   if (folre && troncLevels >= 2) {
-    layers.push(buildLayer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`,
+    layers.push(buildLayer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),
       rings: 1, vents: true, agulles: false, add }));
   }
   if (folre && c.manilles && troncLevels >= 3) {

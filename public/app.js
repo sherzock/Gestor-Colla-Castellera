@@ -971,7 +971,7 @@ function layerSvg(layer, s, byKey, ctx) {
 }
 
 function pinyaView(s, byKey, ctx) {
-  const kinds = ['base', 'contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral', 'latmans'];
+  const kinds = ['base', 'contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral'];
   return s.layers.map((layer, i) => {
     const filled = layer.items.filter((x) => !x.shared && byKey.has(x.key)).length;
     const total = layer.items.filter((x) => !x.shared).length;

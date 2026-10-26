@@ -31,9 +31,12 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     estadístiques més endavant.
 - **Visualitzador** de cada castell amb el nom de cada persona a la seva posició:
   - *Tronc*: pisos de baix a dalt (baixos, segons… dosos, acotxador, enxaneta) i pilar central si n'hi ha.
-  - *Pinya*: planta en caixes de colors, com els esquemes de pinya en paper. Per cada baix: agulla, baix, contrafort,
-    crosses i la línia de mans, amb laterals de mans als costats; pel buit entre baixos, la línia de vents amb laterals
-    a cada costat. «Cordons» = persones per línia (fins a 12). També folre, manilles i puntals. La rengla queda a dalt.
+  - *Pinya*: planta en caixes de colors, com els esquemes de pinya en paper. Cada baix té l'agulla al davant, el
+    contrafort al darrere, una crossa a cada costat i la línia de mans (primeres, segones…) amb una línia de laterals
+    a cada costat; entre dos baixos hi ha la línia de vents. «Cordons» = persones per línia (fins a 12).
+    La torre té una sola agulla; el pilar no porta crosses i té mans i vents pels dos costats; als castells amb
+    agulla, el baix del pilar queda al centre. Els castells compostos segueixen la seva estructura: 5 = tres i torre,
+    7 = quatre i tres, 9 = tres i tres torres. També folre, manilles i puntals. La rengla queda a dalt.
   - *Llista*: totes les posicions en text, còmode per al mòbil.
   - *Historial*: a cada posició, qui l'ha fet en castells anteriors de la mateixa amplada i quants cops
     (toca-la per veure la llista completa i, si ets admin, col·locar-hi algú directament).
