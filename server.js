@@ -767,10 +767,12 @@ route('GET', '/api/castells/:id/history', ({ params, user }) => {
   const rows = historyRows({ excludeCastell: castell.id });
   const exact = new Map();
   const byCat = {};
-  const sameWidth = new Set();
+  // Una mateixa posició no és igual en castells diferents: només compta el mateix castell (un 3d7 amb altres 3d7).
+  const name = castellName(castell);
+  const same = new Set();
   for (const r of rows) {
-    if (r.width === castell.width) {
-      sameWidth.add(r.castell_id);
+    if (r.result !== 'previst' && castellName(r) === name) {
+      same.add(r.castell_id);
       const k = `${r.pos_key}|${r.person_id}`;
       const e = exact.get(k) || { pos_key: r.pos_key, person_id: r.person_id, n: 0, last: r.date };
       e.n++;
@@ -781,7 +783,7 @@ route('GET', '/api/castells/:id/history', ({ params, user }) => {
   }
   const people = new Map(db.prepare('SELECT id, name, alias FROM people').all().map((p) => [p.id, p]));
   return {
-    castellsCount: sameWidth.size,
+    castellsCount: same.size,
     exact: [...exact.values()].map((e) => ({ ...e, name: people.get(e.person_id)?.name, alias: people.get(e.person_id)?.alias })),
     byCat: user.role === 'admin' ? byCat : undefined,
   };

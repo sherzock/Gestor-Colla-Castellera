@@ -1174,12 +1174,12 @@ function listView(s, byKey, ctx) {
 function historyView(s, ctx) {
   const { hist } = ctx;
   if (!hist.castellsCount) {
-    return `<div class="empty">${s.width === 1 ? t('Encara no hi ha pilars en sessions passades.') : t('Encara no hi ha castells de {w} en sessions passades.', { w: s.width })}<br>
+    return `<div class="empty">${t("Encara no s'ha fet cap {castell} en sessions passades.", { castell: s.name })}<br>
       <span class="small">${t("L'historial es construeix sol amb les alineacions dels castells que ja s'han fet.")}</span></div>`;
   }
   const cell = (p) => histCell(p, ctx);
   const pinyaSections = listSections(s).filter(({ id }) => !['tronc', 'agulla', 'musica'].includes(id));
-  return `<p class="small muted" style="margin-top:0">${t("Qui ha fet cada posició en els {n} castells anteriors de la mateixa amplada, i quants cops. Toca una posició per veure'n la llista completa.", { n: hist.castellsCount })}</p>
+  return `<p class="small muted" style="margin-top:0">${t("Qui ha fet cada posició en els {n} {castell} anteriors, i quants cops. Toca una posició per veure'n la llista completa.", { n: hist.castellsCount, castell: s.name })}</p>
     ${troncView(s, cell)}
     ${pinyaSections.map(({ title, items }) => `<h3 style="margin:20px 0 8px">${esc(title)}</h3><div class="hist-grid">${items.map(cell).join('')}</div>`).join('')}`;
 }
@@ -1544,7 +1544,7 @@ async function pageCastell(id) {
 function historyModal(castell, pos, list, current, admin, reload) {
   const max = list[0]?.n || 1;
   openModal(`${modalHead(esc(pos.role))}
-    <p class="muted" style="margin:-6px 0 12px">${t('Qui l\'ha fet en castells anteriors de la mateixa amplada.')}${current ? ` ${t('Ara: {name}.', { name: `<strong>${esc(assignedName(current))}</strong>` })}` : ''}</p>
+    <p class="muted" style="margin:-6px 0 12px">${t("Qui l'ha fet en {castell} anteriors.", { castell: castellName(castell) })}${current ? ` ${t('Ara: {name}.', { name: `<strong>${esc(assignedName(current))}</strong>` })}` : ''}</p>
     ${list.length ? `<div class="bars">${list.map((h) => `<div class="bar-row">
         <span class="nm">${esc(fullName(h))}</span>
         <span class="bar"><i style="width:${(h.n / max) * 100}%"></i></span>
@@ -1569,7 +1569,7 @@ function autoBuildModal({ castell, s, candidates, saved, hist, onPropose }) {
   const musicians = candidates.filter((c) => c.instrument && c.status === 'si').length;
   openModal(`${modalHead(t('Muntador automàtic'))}
     <form id="auto-form" class="stack">
-      <p class="muted" style="margin:0">${t("Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició ({n} castells anteriors de la mateixa amplada). Primer veuràs la proposta i després decideixes si l'apliques.", { n: hist.castellsCount })}</p>
+      <p class="muted" style="margin:0">${t("Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició en aquest castell ({n} {castell} anteriors). Primer veuràs la proposta i després decideixes si l'apliques.", { n: hist.castellsCount, castell: s.name })}</p>
       <fieldset class="stack"><legend>${t('Què vols muntar?')}</legend>
         <label class="check"><input type="checkbox" name="tronc" ${opts.tronc ? 'checked' : ''}> ${t('Tronc i pom de dalt')}${s.agulla.length ? ` + ${t('pilar central')}` : ''}</label>
         ${s.layers.length ? `<label class="check"><input type="checkbox" name="pinya" ${opts.pinya ? 'checked' : ''}> Pinya${s.layers.length > 1 ? ', folre, manilles' : ''}</label>` : ''}

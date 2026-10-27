@@ -174,11 +174,10 @@ const es = {
   '+{n} més': '+{n} más',
   'Amplia': 'Ampliar',
   "Planta vista des de dalt. La rengla (primer baix) queda a dalt. Toca una caixa per veure'n la posició.": 'Planta vista desde arriba. La rengla (primer baix) queda arriba. Toca una caja para ver la posición.',
-  'Encara no hi ha pilars en sessions passades.': 'Todavía no hay pilares en sesiones pasadas.',
-  'Encara no hi ha castells de {w} en sessions passades.': 'Todavía no hay castells de {w} en sesiones pasadas.',
+  "Encara no s'ha fet cap {castell} en sessions passades.": 'Todavía no se ha hecho ningún {castell} en sesiones pasadas.',
   "L'historial es construeix sol amb les alineacions dels castells que ja s'han fet.": 'El historial se construye solo con las alineaciones de los castells que ya se han hecho.',
-  "Qui ha fet cada posició en els {n} castells anteriors de la mateixa amplada, i quants cops. Toca una posició per veure'n la llista completa.":
-    'Quién ha hecho cada posición en los {n} castells anteriores de la misma anchura, y cuántas veces. Toca una posición para ver la lista completa.',
+  "Qui ha fet cada posició en els {n} {castell} anteriors, i quants cops. Toca una posició per veure'n la llista completa.":
+    'Quién ha hecho cada posición en los {n} {castell} anteriores, y cuántas veces. Toca una posición para ver la lista completa.',
   'Redueix': 'Reducir',
   'Ajusta a la pantalla': 'Ajustar a la pantalla',
   'Pinça o fes servir + i − per ampliar. Arrossega per moure. Toca una posició per veure qui hi ha.': 'Pellizca o usa + y − para ampliar. Arrastra para mover. Toca una posición para ver quién hay.',
@@ -219,15 +218,15 @@ const es = {
   'Es copiarà el castell amb totes les persones a les mateixes posicions.': 'Se copiará el castell con todas las personas en las mismas posiciones.',
   'Sessió de destinació': 'Sesión de destino',
   'Castell duplicat': 'Castell duplicado',
-  "Qui l'ha fet en castells anteriors de la mateixa amplada.": 'Quién la ha hecho en castells anteriores de la misma anchura.',
+  "Qui l'ha fet en {castell} anteriors.": 'Quién la ha hecho en {castell} anteriores.',
   'Ara: {name}.': 'Ahora: {name}.',
   'Última: {date}': 'Última: {date}',
   'Ningú ha fet encara aquesta posició.': 'Nadie ha hecho todavía esta posición.',
   'Col·locat': 'Colocado',
   // Muntador
   'Muntador automàtic': 'Montador automático',
-  "Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició ({n} castells anteriors de la mateixa amplada). Primer veuràs la proposta i després decideixes si l'apliques.":
-    'Propone una alineación con la gente que ha confirmado, según el peso, la altura de hombros, la edad y el historial de quién ha hecho cada posición ({n} castells anteriores de la misma anchura). Primero verás la propuesta y después decides si la aplicas.',
+  "Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició en aquest castell ({n} {castell} anteriors). Primer veuràs la proposta i després decideixes si l'apliques.":
+    'Propone una alineación con la gente que ha confirmado, según el peso, la altura de hombros, la edad y el historial de quién ha hecho cada posición en este castell ({n} {castell} anteriores). Primero verás la propuesta y después decides si la aplicas.',
   'Què vols muntar?': '¿Qué quieres montar?',
   'Tronc i pom de dalt': 'Tronc y pom de dalt',
   'pilar central': 'pilar central',
@@ -737,11 +736,10 @@ const en = {
   '+{n} més': '+{n} more',
   'Amplia': 'Enlarge',
   "Planta vista des de dalt. La rengla (primer baix) queda a dalt. Toca una caixa per veure'n la posició.": 'Seen from above. The rengla (first baix) is at the top. Tap a box to see the position.',
-  'Encara no hi ha pilars en sessions passades.': 'No pilars in past sessions yet.',
-  'Encara no hi ha castells de {w} en sessions passades.': 'No castells of {w} in past sessions yet.',
+  "Encara no s'ha fet cap {castell} en sessions passades.": 'No {castell} in past sessions yet.',
   "L'historial es construeix sol amb les alineacions dels castells que ja s'han fet.": 'History builds up automatically from the line-ups of castells already done.',
-  "Qui ha fet cada posició en els {n} castells anteriors de la mateixa amplada, i quants cops. Toca una posició per veure'n la llista completa.":
-    'Who has done each position in the {n} previous castells of the same width, and how many times. Tap a position for the full list.',
+  "Qui ha fet cada posició en els {n} {castell} anteriors, i quants cops. Toca una posició per veure'n la llista completa.":
+    'Who has done each position in the {n} previous {castell}, and how many times. Tap a position for the full list.',
   'Redueix': 'Shrink',
   'Ajusta a la pantalla': 'Fit to screen',
   'Pinça o fes servir + i − per ampliar. Arrossega per moure. Toca una posició per veure qui hi ha.': 'Pinch or use + and − to zoom. Drag to move. Tap a position to see who is there.',
@@ -782,15 +780,15 @@ const en = {
   'Es copiarà el castell amb totes les persones a les mateixes posicions.': 'The castell will be copied with everyone in the same positions.',
   'Sessió de destinació': 'Target session',
   'Castell duplicat': 'Castell duplicated',
-  "Qui l'ha fet en castells anteriors de la mateixa amplada.": 'Who has done it in previous castells of the same width.',
+  "Qui l'ha fet en {castell} anteriors.": 'Who has done it in previous {castell}.',
   'Ara: {name}.': 'Now: {name}.',
   'Última: {date}': 'Last: {date}',
   'Ningú ha fet encara aquesta posició.': 'Nobody has done this position yet.',
   'Col·locat': 'Placed',
   // Muntador
   'Muntador automàtic': 'Automatic builder',
-  "Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició ({n} castells anteriors de la mateixa amplada). Primer veuràs la proposta i després decideixes si l'apliques.":
-    'Proposes a line-up with the people who confirmed, based on weight, shoulder height, age and the history of who has done each position ({n} previous castells of the same width). You’ll see the proposal first and then decide whether to apply it.',
+  "Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició en aquest castell ({n} {castell} anteriors). Primer veuràs la proposta i després decideixes si l'apliques.":
+    'Proposes a line-up with the people who confirmed, based on weight, shoulder height, age and the history of who has done each position in this castell ({n} previous {castell}). You’ll see the proposal first and then decide whether to apply it.',
   'Què vols muntar?': 'What do you want to build?',
   'Tronc i pom de dalt': 'Tronc and pom de dalt',
   'pilar central': 'central pillar',

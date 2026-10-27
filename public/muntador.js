@@ -49,7 +49,7 @@ function profileOf(pos, s) {
  * @param structure  resultat de buildStructure()
  * @param candidates persones actives amb status, mides i data de naixement
  * @param current    Map pos_key → assignació actual
- * @param exact      Map "pos_key|person_id" → cops que ha fet aquesta posició en castells de la mateixa amplada
+ * @param exact      Map "pos_key|person_id" → cops que ha fet aquesta posició en castells iguals (mateix nom: 3d7, 4d7a…)
  * @param byCat      { person_id: { categoria: cops } }
  * @param options    { tronc, pinya, musica, keep, maybe }
  * @returns { map: Map pos_key → { person, exact, cat } | null, filled, empty, unused }

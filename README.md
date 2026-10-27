@@ -47,7 +47,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     agulla, el baix del pilar queda al centre. Els castells compostos segueixen la seva estructura: 5 = tres i torre,
     7 = quatre i tres, 9 = tres i tres torres. També folre, manilles i puntals. La rengla queda a dalt.
   - *Llista*: totes les posicions en text, còmode per al mòbil.
-  - *Historial*: a cada posició, qui l'ha fet en castells anteriors de la mateixa amplada i quants cops
+  - *Historial*: a cada posició, qui l'ha fet en aquest mateix castell (un 3d7, en altres 3d7) i quants cops
     (toca-la per veure la llista completa i, si ets admin, col·locar-hi algú directament).
   - **Cercador**: escriu un nom i es ressalta la seva posició (o, a l'historial, les posicions que ha fet).
   - Botó **On sóc?** per trobar-te ràpidament, i la teva posició destacada a dalt.
@@ -79,7 +79,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   que no ha contestat; posicions buides al tronc; pisos amb més de 5 cm de diferència d'alçada d'espatlles; i algú que
   pesa més de 3 kg més que qui el porta. Tocant un nom es va a la seva posició.
 - **Muntador automàtic** (admins): proposa una alineació amb qui ha confirmat, tenint en
-  compte l'historial (la mateixa posició i la categoria, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
+  compte l'historial (la mateixa posició en el mateix castell i, en segon terme, la categoria en qualsevol castell, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
   (la canalla només al pom de dalt). Pots muntar només el tronc, només la pinya o tot, i mantenir el que ja hi ha.
   La proposta es veu marcada al castell i no es desa fins que no la apliques. La lògica és a `public/muntador.js`.
 - **Administradors**: creen/editen sessions i castells, assignen o canvien persones a cada posició
