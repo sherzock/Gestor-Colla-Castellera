@@ -16,7 +16,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   **enviar-la per WhatsApp** o copiar el missatge (porta l'enllaç a la sessió).
 - **Sessions pendents**: a l'inici, cada sessió porta una franja de color segons la teva resposta, i un avís si en tens
   sense respondre.
-- **Assistència**: cada persona confirma *Vinc / Potser / No vinc* i respon els **camps extra** de la sessió
+- **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
   Els administradors veuen la taula completa amb totals i exporten a CSV.
 - **Passar llista**: el dia de la sessió (i després), qui havia dit «Vinc» compta com a present. L'admin només ha de
@@ -55,6 +55,13 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     per moure't. Al mòbil, tocar la pinya l'obre directament ampliada, centrada on ets tu si hi surts.
 - **Estadístiques** per temporades (cada any natural: 2025, 2026…) o de tota la història, i de totes les sessions,
   només diades o només assajos. Només compten les sessions passades.
+  - *Tècnica* (admins): un castell és de tota la colla, així que no es mira qui ha fallat sinó:
+    - **què acompanya els castells descarregats**: tronc repetit respecte a l'últim cop o amb canvis, tronc amb
+      experiència a cada posició o amb gent nova, i pinya plena (≥90 %) o incompleta;
+    - **com avança cada castell**: tots els intents per ordre (parcials, assajos i diades), quants intents ha calgut
+      fins al primer descarregat i el percentatge de descarregats a assajos i a diades;
+    - **on fallen** els castells (segons el que s'hagi marcat);
+    - **qui sap fer cada posició del tronc**, amb un avís quan només una persona (o ningú) ho ha fet sovint.
   - *Resum de temporada* (tothom): millor castell, resultats, mitjana de gent per assaig i per diada, castells
     descarregats (i els només carregats) i les diades amb els seus castells. No hi surt cap persona.
   - *Cada membre* veu les seves: castells fets, com han acabat (descarregat, carregat, intent, intent desfet),
@@ -64,10 +71,10 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     estadístiques de cadascú.
 - **Historial de posicions** de cada persona (fitxa i perfil): quantes vegades ha fet cada posició i els últims castells.
   Es calcula sol a partir de les alineacions dels castells de sessions passades (fins avui inclòs).
-- **Revisió de l'alineació** (admins): a cada castell, avisos de gent col·locada que ha dit que no ve, «potser» o
+- **Revisió de l'alineació** (admins): a cada castell, avisos de gent col·locada que ha dit que no ve o
   que no ha contestat; posicions buides al tronc; pisos amb més de 5 cm de diferència d'alçada d'espatlles; i algú que
   pesa més de 3 kg més que qui el porta. Tocant un nom es va a la seva posició.
-- **Muntador automàtic** (admins): proposa una alineació amb qui ha confirmat (opcionalment també «Potser»), tenint en
+- **Muntador automàtic** (admins): proposa una alineació amb qui ha confirmat, tenint en
   compte l'historial (la mateixa posició i la categoria, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
   (la canalla només al pom de dalt). Pots muntar només el tronc, només la pinya o tot, i mantenir el que ja hi ha.
   La proposta es veu marcada al castell i no es desa fins que no la apliques. La lògica és a `public/muntador.js`.
@@ -79,8 +86,12 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   Només la veuen els administradors.
 - **Malnoms**: cada persona pot tenir un malnom únic; és el que surt a la pinya, al tronc i a les llistes.
   Sense malnom, es mostra «Nom I.» (nom i inicial del cognom).
-- **Persones temporals**: gent que no és a l'aplicació (d'una altra colla, de prova…) es pot col·locar en un castell
-  escrivint-ne el nom. Només es guarda en aquell castell i no compta a l'historial.
+- **Persones temporals** de cada sessió: gent que no és de la colla (d'una altra colla, de prova…). Es creen a la
+  sessió o des del castell (nom i, si voleu, colla, alçada d'espatlles i pes) i es poden col·locar a qualsevol castell
+  d'aquella sessió. No surten a la llista de persones ni compten a l'historial ni a les estadístiques. Les mides, si
+  s'hi posen, compten a la revisió de l'alineació.
+- **On ha fallat** (admins): quan un castell queda carregat o en intent, es pot marcar on ha fallat (pinya, folre,
+  manilles, un pis o el pilar central). Només ho veu la tècnica: serveix per saber què cal treballar, no per assenyalar ningú.
 
 - **Idioma i aparença**: català, castellà o anglès, i tema automàtic, clar o fosc (es recorda a cada dispositiu).
   Els termes castellers (baix, pinya, enxaneta, folre…) es mantenen en català a tots els idiomes.

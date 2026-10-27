@@ -1,7 +1,7 @@
 // Omple la base de dades amb dades de demostració.
 // Ús: node seed.js   (esborra les dades existents!)
 import { db, hashPassword, transaction } from './db.js';
-import { buildStructure } from './public/castell.js';
+import { buildStructure, failPoints } from './public/castell.js';
 
 const ADMIN_PASSWORD = 'admin1234';
 
@@ -28,7 +28,7 @@ const nextWeekday = (wd, weeks = 0) => { const d = new Date(today); d.setDate(d.
 const birth = (years) => { const d = new Date(today); d.setFullYear(d.getFullYear() - years); d.setDate(d.getDate() - between(0, 360)); return iso(d); };
 
 transaction(() => {
-  for (const t of ['castell_positions', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
+  for (const t of ['castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
 
   const insPerson = db.prepare(`INSERT INTO people (username, password_hash, role, name, alias, birthdate, height_cm, shoulder_height_cm, shoulder_width_cm, weight_kg, instrument)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -92,7 +92,7 @@ transaction(() => {
   for (const p of people) {
     for (const [key, eid] of Object.entries(events)) {
       const r = rand();
-      const status = r < 0.72 ? 'si' : r < 0.82 ? 'potser' : r < 0.92 ? 'no' : null;
+      const status = r < 0.76 ? 'si' : r < 0.9 ? 'no' : null;
       if (!status) continue;
       let extra = {};
       if (key === 'diada' && status === 'si') extra = { [fDinar]: rand() < 0.6, [fAcomp]: between(0, 2) };
@@ -164,6 +164,19 @@ transaction(() => {
   castell(events.diada, { width: 4, height: 7, agulla: 1, gralles: 3, timbals: 2 }, '2a ronda', 'previst', 2, 0.85);
   castell(events.diada, { width: 2, height: 6, cordons: 2 }, '3a ronda', 'previst', 3, 0.5);
   castell(events.diada, { width: 1, height: 5, cordons: 1 }, 'Pilar de sortida', 'previst', 4, 1);
+});
+
+// Per a les estadístiques de la tècnica: on van fallar els castells que no es van descarregar,
+// i dues persones temporals d'una colla convidada a la propera diada.
+transaction(() => {
+  for (const c of db.prepare("SELECT * FROM castells WHERE result IN ('carregat', 'intent', 'intent desfet')").all()) {
+    const points = failPoints(c);
+    db.prepare('UPDATE castells SET fail_point = ? WHERE id = ?').run(pick(points.slice(1, -1).length ? points.slice(1, -1) : points)[0], c.id);
+  }
+  const diada = db.prepare("SELECT id FROM events WHERE title = 'Diada de Tots Sants'").get();
+  const insGuest = db.prepare('INSERT INTO event_guests (event_id, name, colla, shoulder_height_cm, weight_kg) VALUES (?, ?, ?, ?, ?)');
+  insGuest.run(diada.id, 'Rovelló', 'Colla convidada', 142, 66);
+  insGuest.run(diada.id, 'Bolet', 'Colla convidada', 150, 74);
 });
 
 console.log(`Dades de demostració creades.

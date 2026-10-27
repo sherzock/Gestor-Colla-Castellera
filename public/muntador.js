@@ -66,9 +66,8 @@ export function proposeLineup({ structure: s, candidates, current, exact, byCat 
     if (!inScope(pos) || options.keep) locked.add(a.person_id);
   }
 
-  const statuses = options.maybe ? ['si', 'potser'] : ['si'];
   const pool = candidates
-    .filter((p) => statuses.includes(p.status) && !locked.has(p.id))
+    .filter((p) => p.status === 'si' && !locked.has(p.id))
     .map((p) => ({ ...p, age: ageOf(p.birthdate) }));
 
   // Percentil de pes dins del grup disponible (sense dada → al mig).

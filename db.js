@@ -166,6 +166,8 @@ addColumn('attendance', 'escoleta', 'INTEGER');
 
 // Data i hora límit per respondre (AAAA-MM-DDTHH:MM). Sense límit, es pot respondre fins al mateix dia de la sessió.
 addColumn('events', 'rsvp_until', 'TEXT');
+// Ja no hi ha «Potser»: només sí o no. Qui havia dit «Potser» queda sense resposta, perquè triï.
+db.exec("UPDATE attendance SET status = NULL WHERE status = 'potser'");
 
 // Comptes d'administració: separats de les persones de la colla. Només serveixen per editar;
 // qui és administrador i també fa castells té, a més, la seva fitxa de membre com tothom.
@@ -199,6 +201,21 @@ if (oldAdmins.length) {
     db.exec("DELETE FROM auth_tokens WHERE mode = 'admin'");
   });
 }
+
+// Persones temporals d'una sessió (d'una altra colla, de prova…): no són de la colla ni compten a l'historial,
+// però es poden col·locar a qualsevol castell d'aquella sessió.
+db.exec(`CREATE TABLE IF NOT EXISTS event_guests (
+  id INTEGER PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  colla TEXT,
+  shoulder_height_cm REAL,
+  weight_kg REAL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+addColumn('castell_positions', 'guest_id', 'INTEGER REFERENCES event_guests(id) ON DELETE CASCADE');
+// On ha fallat un castell que no s'ha descarregat: «pinya», «folre», «manilles», «agulla» o «L{pis}».
+addColumn('castells', 'fail_point', 'TEXT');
 
 db.exec(`CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_castells_event ON castells(event_id);`);
