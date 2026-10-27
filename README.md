@@ -23,7 +23,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   marcar **qui no ha vingut** i, amb «Afegeix qui ha vingut», qui ha vingut **sense apuntar-se** (fins i tot algú que
   encara no és a l'app: es crea en aquell moment). Els qui no han vingut deixen de sortir com a disponibles per als
   castells i els que han vingut sense apuntar-se hi passen a sortir.
-- **Escoleta**: un assaig pot tenir escoleta abans (amb hora). Cadascú marca si hi vindrà o no, a part de l'assaig.
+- **Escoleta**: un assaig pot tenir escoleta abans (amb hora), oberta a tothom qui vulgui. Cadascú marca si hi vindrà
+  o no, a part de l'assaig.
 - **Música**: cada persona pot ser músic (gralla o timbal). Cada castell pot tenir gralles i timbals: surten al
   tronc i a la llista, i el muntador automàtic hi posa músics de l'instrument corresponent.
 - **Castells** per sessió (pilars, torres, 3, 4, 5, 7, 9; amb agulla, folre, manilles i puntals; aixecats per sota;
@@ -161,7 +162,7 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
 - L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula.
 - Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
 - Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
-  qui va a l'escoleta (que diria qui és menor), sense comentaris ni respostes als camps extra dels altres, i sense les
+  dir qui va a l'escoleta, sense comentaris ni respostes als camps extra dels altres, i sense les
   notes de la tècnica. Les persones temporals també surten com a «Nom I.».
 
 Una limitació que ve del disseny (entrar sense codis): qualsevol persona amb l'enllaç pot triar un nom i contestar

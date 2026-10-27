@@ -104,7 +104,7 @@ transaction(() => {
       const here = came === 1 || (came === null && status === 'si');
       if (here) present.add(p.id);
       if (!status && !came) continue;
-      insAtt.run(eid, p.id, status, past && here ? 1 : 0, came, escoleta && p.kid ? (rand() < 0.8 ? 1 : 0) : null,
+      insAtt.run(eid, p.id, status, past && here ? 1 : 0, came, escoleta && here ? (rand() < (p.kid ? 0.8 : 0.2) ? 1 : 0) : null,
         JSON.stringify(status === 'si' ? extra() : {}));
     }
     return present;
