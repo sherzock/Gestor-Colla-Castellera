@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import zlib from 'node:zlib';
 import { db, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
-import { buildStructure, castellName, levelNames, levelRange, positionOf } from './public/castell.js';
+import { buildStructure, castellName, levelNames, levelRange, positionOf, structureOf } from './public/castell.js';
 import { translate } from './public/i18n.js';
 
 // Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
@@ -856,27 +856,73 @@ route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
   return { ok: true, count: list.length };
 }, 'admin');
 
+// ---------- Memòria de càlculs ----------
+// Les estadístiques i els historials llegeixen milers de posicions: es calculen un sol cop i es reaprofiten fins
+// que algú canvia qualsevol dada (dataVersion puja amb cada petició que no és GET) o canvia el dia.
+// És només una memòria del servidor: cada ruta continua comprovant abans qui pot veure què.
+let dataVersion = 0;
+const versionKey = () => `${dataVersion}|${nowLocal().slice(0, 10)}`;
+let responseCache = { key: null, map: new Map() };
+// Per a rutes d'administració que només depenen de les dades i dels filtres (temporada i tipus de sessió).
+// Peticions que no són GET però no toquen cap dada de sessions, castells ni persones.
+const NO_DATA_CHANGE = new Set(['/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me']);
+const memoized = new Map();
+const memo = (name, handler) => {
+  const wrapped = (ctx) => {
+    if (responseCache.key !== versionKey()) responseCache = { key: versionKey(), map: new Map() };
+    const key = `${name}|${ctx.query.get('season') || ''}|${ctx.query.get('kind') || ''}`;
+    if (!responseCache.map.has(key)) responseCache.map.set(key, handler(ctx));
+    return responseCache.map.get(key);
+  };
+  memoized.set(name, wrapped);
+  return wrapped;
+};
+// Uns segons després de l'últim canvi (i en arrencar) es deixa calculat el que s'obre més sovint (la temporada
+// actual, com ho demana l'app), perquè la primera persona que hi entri no s'hagi d'esperar.
+let warmTimer = null;
+function warmCaches(delayMs = 3000) {
+  clearTimeout(warmTimer);
+  warmTimer = setTimeout(() => {
+    try {
+      historyIndex();
+      const query = new URLSearchParams({ season: String(new Date().getFullYear()), kind: 'all' });
+      for (const name of ['tecnica', 'people']) memoized.get(name)({ query });
+    } catch (err) { console.error(err); }
+  }, delayMs);
+  warmTimer.unref();
+}
+
 // ---------- Historial de posicions ----------
-// L'historial surt dels castells de sessions passades (fins avui inclòs).
+// L'historial surt dels castells de sessions passades (fins avui inclòs). Les files són compartides: no es modifiquen.
+let pastCache = null;
+function pastRows() {
+  if (pastCache?.key !== versionKey()) {
+    pastCache = { key: versionKey(), rows: db.prepare(`SELECT cp.pos_key, cp.person_id, c.id AS castell_id, c.width, c.height, c.agulla, c.folre,
+        c.manilles, c.puntals, c.sota, c.gralles, c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result,
+        e.id AS event_id, e.date, e.title, e.type
+      FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
+      WHERE e.date <= date('now','localtime') AND cp.person_id IS NOT NULL ORDER BY e.date DESC, c.position`).all() };
+  }
+  return pastCache.rows;
+}
+// Els mateixos filtres que statsFilter, però sobre les files ja llegides.
 function historyRows({ personId, excludeCastell, query } = {}) {
-  const { where, args } = statsFilter(query);
-  where.push('cp.person_id IS NOT NULL');
-  if (personId) { where.push('cp.person_id = ?'); args.push(personId); }
-  if (excludeCastell) { where.push('c.id != ?'); args.push(excludeCastell); }
-  return db.prepare(`SELECT cp.pos_key, cp.person_id, c.id AS castell_id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota,
-      c.gralles, c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result, e.id AS event_id, e.date, e.title, e.type
-    FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
-    WHERE ${where.join(' AND ')} ORDER BY e.date DESC, c.position`).all(...args);
+  const season = query?.get('season') || '';
+  const kind = query?.get('kind');
+  const year = /^\d{4}$/.test(season) ? season : null;
+  const types = kind === 'diades' ? ['diada', 'esdeveniment'] : kind === 'assajos' ? ['assaig'] : null;
+  const person = personId ? Number(personId) : null;
+  const exclude = excludeCastell ? Number(excludeCastell) : null;
+  return pastRows().filter((r) => (!person || r.person_id === person) && (!exclude || r.castell_id !== exclude)
+    && (!year || r.date.startsWith(year)) && (!types || types.includes(r.type)));
 }
 
 // Índex de totes les posicions dels castells passats, per a l'historial i la preparació de cada castell.
 // Llegir-les totes (milers de files) és el que fa lenta la pàgina d'un castell: es llegeixen un sol cop i es
-// reaprofiten fins que algú canvia qualsevol dada (dataVersion puja amb cada petició que no és GET) o canvia el dia.
-// Només és una memòria del servidor: cada ruta continua comprovant qui pot veure què.
-let dataVersion = 0;
+// reaprofiten fins al següent canvi (vegeu «Memòria de càlculs»).
 let historyCache = null;
 function historyIndex() {
-  const key = `${dataVersion}|${nowLocal().slice(0, 10)}`;
+  const key = versionKey();
   if (historyCache?.key === key) return historyCache;
   const byName = new Map();     // «3d7» → files de castells fets (no previstos)
   const byCat = {};             // persona → { categoria de posició: vegades }
@@ -1027,7 +1073,7 @@ route('GET', '/api/stats/people/:id', ({ params, user, query }) => {
   return { person: user.role === 'admin' ? person : publicPerson(person), seasons: seasons(), ...personStats(personId, query) };
 });
 
-route('GET', '/api/stats/people', ({ query }) => {
+route('GET', '/api/stats/people', memo('people', ({ query }) => {
   const people = new Map(db.prepare('SELECT id, name, alias, instrument, active FROM people').all()
     .map((p) => [p.id, { ...p, castells: 0, sessions: 0, results: emptyResults(), cats: new Map() }]));
   for (const r of historyRows({ query })) {
@@ -1050,9 +1096,9 @@ route('GET', '/api/stats/people', ({ query }) => {
     })
     .sort((a, b) => b.castells - a.castells || b.sessions - a.sessions || a.name.localeCompare(b.name));
   return { seasons: seasons(), people: list };
-}, 'admin');
+}), 'admin');
 
-route('GET', '/api/stats/castells', ({ query }) => {
+route('GET', '/api/stats/castells', memo('castells', ({ query }) => {
   const { where, args } = statsFilter(query);
   const rows = db.prepare(`SELECT c.id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.net, c.from_level, c.to_level,
       c.result, c.label, e.id AS event_id, e.date, e.title, e.type
@@ -1076,7 +1122,7 @@ route('GET', '/api/stats/castells', ({ query }) => {
     types.set(name, c);
   }
   return { seasons: seasons(), total: rows.length, results: totals, castells: [...types.values()].sort(byCount) };
-}, 'admin');
+}), 'admin');
 
 // Resum de temporada: castells i sessions, sense dades de ningú (el veu tothom).
 // Dificultat aproximada per trobar el millor castell: mana l'alçada; a igual alçada, com més estret, més difícil.
@@ -1161,7 +1207,7 @@ function reserves(query) {
     types.set(name, t);
   }
   return [...types.values()].sort((a, b) => b.attempts.size - a.attempts.size).map((t) => {
-    const s = buildStructure(t.sample);
+    const s = structureOf(t.sample);
     const positions = [...s.positions.values()].filter((p) => TRONC_GROUPS.includes(p.group)).map((p) => {
       const done = [...(t.pos.get(p.key) || [])].filter(([id]) => byId.get(id)?.active)
         .map(([id, n]) => ({ id, name: publicName(byId.get(id)), n })).sort((a, b) => b.n - a.n);
@@ -1187,7 +1233,7 @@ function reserves(query) {
 // Preparació del tronc d'un castell: qui l'ha assajat abans (mateix castell, mateixa posició).
 const PREP_DAYS = 42;
 function troncPrep(castell) {
-  const s = buildStructure(castell);
+  const s = structureOf(castell);
   const keys = [...s.positions.values()].filter((p) => TRONC_GROUPS.includes(p.group));
   const placedRows = new Map(db.prepare('SELECT pos_key, person_id, guest_id FROM castell_positions WHERE castell_id = ?')
     .all(castell.id).map((r) => [r.pos_key, r]));
@@ -1206,7 +1252,7 @@ function troncPrep(castell) {
 
 route('GET', '/api/castells/:id/prep', ({ params }) => ({ days: PREP_DAYS, positions: troncPrep(getCastell(params.id)) }), 'admin');
 
-route('GET', '/api/stats/tecnica', ({ query }) => {
+route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
   const { where, args } = statsFilter(query);
   const inFilter = new Set(db.prepare(`SELECT c.id FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')}`)
     .all(...args).map((r) => r.id));
@@ -1231,7 +1277,7 @@ route('GET', '/api/stats/tecnica', ({ query }) => {
 
   for (const c of all) {
     if (c.result === 'previst') continue; // no consta que s'hagi fet
-    const s = buildStructure(c);
+    const s = structureOf(c);
     const filled = placed.get(c.id) || new Map();
     const positions = [...s.positions.values()];
     const troncKeys = positions.filter((p) => TRONC_GROUPS.includes(p.group)).map((p) => p.key);
@@ -1290,7 +1336,7 @@ route('GET', '/api/stats/tecnica', ({ query }) => {
         total: rows.length, placed: rows.filter((r) => r.person_id).length, rehearsed: rows.filter((r) => r.recent).length };
     }).filter((c) => c.placed),
   };
-}, 'admin');
+}), 'admin');
 
 // ---------- Calendari per subscriure-s'hi (Google Calendar, iPhone…) ----------
 // És públic perquè les apps de calendari no poden identificar-se: només hi surten les sessions, cap persona.
@@ -1454,7 +1500,7 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     const body = req.method === 'GET' ? {} : await readBody(req);
     let result;
     try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }
-    finally { if (req.method !== 'GET') dataVersion++; }
+    finally { if (req.method !== 'GET' && !NO_DATA_CHANGE.has(url.pathname)) { dataVersion++; warmCaches(); } }
     if (result !== undefined) send(200, result);
   } catch (err) {
     const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
@@ -1464,4 +1510,7 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
   }
 });
 
-server.listen(PORT, () => console.log(`${COLLA_NAME} → http://localhost:${PORT}`));
+server.listen(PORT, () => {
+  console.log(`${COLLA_NAME} → http://localhost:${PORT}`);
+  warmCaches(0);
+});

@@ -308,10 +308,14 @@ export function buildStructure(c) {
 export const inTroncView = (pos) => ['tronc', 'baixos', 'pom', 'agulla', 'musica'].includes(pos.group);
 
 // Cache de categories per configuració, útil per calcular l'historial de molts castells.
+// L'estructura que torna no s'ha de modificar (és compartida).
 const structureCache = new Map();
-export function positionOf(c, key) {
+export function structureOf(c) {
   const id = [c.width, c.height, c.agulla ? 1 : 0, c.folre ? 1 : 0, c.manilles ? 1 : 0, c.puntals ? 1 : 0, c.cordons ?? 3, c.gralles || 0, c.timbals || 0,
     c.net ? 1 : 0, c.from_level || 1, c.to_level || 0].join('|');
-  if (!structureCache.has(id)) structureCache.set(id, buildStructure(c).positions);
-  return structureCache.get(id).get(key) ?? null;
+  if (!structureCache.has(id)) structureCache.set(id, buildStructure(c));
+  return structureCache.get(id);
+}
+export function positionOf(c, key) {
+  return structureOf(c).positions.get(key) ?? null;
 }
