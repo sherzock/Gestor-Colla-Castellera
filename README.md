@@ -60,7 +60,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
       experiència a cada posició o amb gent nova, i pinya plena (≥90 %) o incompleta;
     - **com avança cada castell**: tots els intents per ordre (parcials, assajos i diades), quants intents ha calgut
       fins al primer descarregat i el percentatge de descarregats a assajos i a diades (quan n'hi ha molts, els
-      intents s'agrupen en una columna per mes amb quants n'hi ha de cada resultat);
+      intents s'agrupen en un gràfic de columnes per mes, separat per anys, amb quants n'hi ha de cada resultat);
       amb les últimes **notes de la tècnica** de cada castell;
     - **preparació de les properes diades**: per a cada castell, quanta gent del tronc ha assajat la seva posició
       d'aquell castell les últimes 6 setmanes;

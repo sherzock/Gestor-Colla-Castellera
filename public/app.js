@@ -2118,24 +2118,31 @@ async function pageTecnica(tabs) {
       if (a.type !== 'assaig') m.diades++;
       months.set(a.date.slice(0, 7), m);
     }
-    const years = new Set([...months.keys()].map((k) => k.slice(0, 4)));
-    let lastYear = null;
+    // Petit gràfic de columnes: totes comparteixen la base i els anys van agrupats a sobre.
+    const BAR_H = 84;
     const max = Math.max(...[...months.values()].map((m) => m.ok + m.warn + m.bad));
-    return `<div class="tl-months">${[...months].map(([k, m]) => {
+    const byYear = new Map();
+    for (const [k, m] of months) byYear.set(k.slice(0, 4), [...(byYear.get(k.slice(0, 4)) || []), [k, m]]);
+    // Cada tram porta el seu número quan hi cap.
+    const seg = (cls, n) => {
+      if (!n) return '';
+      return `<i class="${cls}" style="flex:${n}">${(n / max) * (BAR_H - 16) >= 15 ? n : ''}</i>`;
+    };
+    const col = ([k, m]) => {
       const n = m.ok + m.warn + m.bad;
       const date = `${k}-15`;
-      // Si hi ha més d'un any, l'any surt només al primer mes de cada any.
-      const year = years.size > 1 && k.slice(0, 4) !== lastYear ? k.slice(0, 4) : null;
-      lastYear = k.slice(0, 4);
-      const label = fmt(date, { month: 'short' }) + (year ? `<span class="y">${year}</span>` : '');
       const tip = [fmt(date, { month: 'long', year: 'numeric' }), tn(n, '{n} intent', '{n} intents'),
         m.ok ? tn(m.ok, '{n} descarregat', '{n} descarregats') : null, m.warn ? tn(m.warn, '{n} carregat', '{n} carregats') : null,
         m.bad ? tn(m.bad, '{n} caigut', '{n} caiguts') : null, m.partial ? tn(m.partial, '{n} parcial', '{n} parcials') : null,
         m.diades ? tn(m.diades, '{n} a diada', '{n} a diades') : null].filter(Boolean).join(' · ');
-      return `<div class="tl-month" title="${esc(tip)}"><span class="n">${n}</span>
-        <span class="col" style="height:${Math.max(12, (n / max) * 56)}px">${m.bad ? `<i class="bad" style="flex:${m.bad}"></i>` : ''}${m.warn ? `<i class="warn" style="flex:${m.warn}"></i>` : ''}${m.ok ? `<i class="ok" style="flex:${m.ok}"></i>` : ''}</span>
-        <span class="m">${label}${m.diades ? '<b class="d"></b>' : ''}</span></div>`;
-    }).join('')}</div>`;
+      return `<div class="tl-col ${m.diades ? 'has-diada' : ''}" title="${esc(tip)}">
+        <div class="tl-bar-area" style="height:${BAR_H}px"><span class="tl-total">${n}</span>
+          <span class="tl-bar" style="height:${Math.max(6, (n / max) * (BAR_H - 16))}px">${seg('bad', m.bad)}${seg('warn', m.warn)}${seg('ok', m.ok)}</span></div>
+        <span class="tl-m">${fmt(date, { month: 'short' }).replace('.', '')}</span>
+      </div>`;
+    };
+    return `<div class="tl-chart">${[...byYear].map(([y, list]) => `<div class="tl-year" style="flex:${list.length}">
+      ${byYear.size > 1 ? `<div class="tl-year-label">${y}</div>` : ''}<div class="tl-cols">${list.map(col).join('')}</div></div>`).join('')}</div>`;
   };
   const dot = (a) => `<a href="#/castell/${a.castell_id}" class="dot ${resultClass(a.result)} ${a.partial ? 'partial' : ''} ${a.type === 'assaig' ? '' : 'diada'}"
     title="${esc([fmt(a.date, { day: 'numeric', month: 'short' }), a.title, resultName(a.result), a.range, a.notes].filter(Boolean).join(' · '))}"></a>`;
@@ -2189,7 +2196,7 @@ async function pageTecnica(tabs) {
       <div class="grid-2">
         <div class="card">
           <h2 style="margin-bottom:6px">${t('Com avança cada castell')}</h2>
-          <p class="small muted" style="margin:0 0 12px">${t('Cada quadre és un intent, per ordre. Buit: prova parcial. Gran: diada. Toca\'l per obrir el castell.')} ${t("Si n'hi ha molts, s'agrupen per mesos: l'alçada és el nombre d'intents i el punt marca els mesos amb diada.")}</p>
+          <p class="small muted" style="margin:0 0 12px">${t('Cada quadre és un intent, per ordre. Buit: prova parcial. Gran: diada. Toca\'l per obrir el castell.')} ${t("Si n'hi ha molts, s'agrupen per mesos: cada columna diu quants n'hi ha de cada resultat, i les que tenen vora són mesos amb diada.")}</p>
           ${castellRows ? `<ul class="prog-list">${castellRows}</ul>` : `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
         </div>
         <div class="card">
@@ -2202,6 +2209,8 @@ async function pageTecnica(tabs) {
     </div>`;
   bindStatsFilters();
   bindStatsTabs();
+  // Si el gràfic per mesos no hi cap (mòbil), comença pels mesos més recents.
+  qsa('.tl-chart').forEach((el) => { el.scrollLeft = el.scrollWidth; });
   qs('#reserve-castell')?.addEventListener('change', (e) => { reserveCastell = e.target.value; render({ keepScroll: true }); });
 }
 
