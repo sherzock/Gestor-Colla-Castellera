@@ -29,7 +29,8 @@ const aliases = ['Pebrot', 'Ceba', 'Fesol', 'Cigró', 'Pruna', 'Nespra', 'Rave',
   'Gínjol', 'Atzerola', 'Cacauet', 'Safrà', 'Canyella', 'Vainilla', 'Gingebre', 'Comí'];
 
 const today = new Date();
-const iso = (d) => d.toISOString().slice(0, 10);
+// Data local (no UTC): si no, prop de mitjanit els dies i els dies de la setmana no quadren.
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return iso(d); };
 const nextWeekday = (wd, weeks = 0) => { const d = new Date(today); d.setDate(d.getDate() + ((wd - d.getDay() + 7) % 7 || 7) + weeks * 7); return iso(d); };
 const birth = (years) => { const d = new Date(today); d.setFullYear(d.getFullYear() - years); d.setDate(d.getDate() - between(0, 360)); return iso(d); };
@@ -45,8 +46,8 @@ const C = {
 // Què s'assaja i què es fa a plaça a cada moment de la temporada (inici, mitjan, final).
 const ASSAIG = [['3d6', '4d6', '2d6', 'pd4', '3d7'], ['3d7', '4d7', '2d6', 'pd5', '3d6n', '4d7a'], ['3d7', '4d7a', '2d6', 'pd5', '3d8', '3d6n']];
 const DIADA = [['3d6', '4d6', '2d6', 'pd4'], ['3d7', '4d7', '2d6', 'pd5'], ['3d7', '4d7a', '2d6', 'pd5']];
-const DIADA_NAMES = ['Diada del Mercat', 'Diada de la Plaça Nova', 'Trobada de colles', 'Diada del barri de Sant Pere', 'Diada a la Rambla',
-  'Diada de la colla', 'Diada de les entitats', 'Diada de la Festa Major'];
+const DIADA_NAMES = ['Diada de Sant Jordi', "Diada de l'aniversari", 'Diada de la Verema', 'Diada del Mercat', 'Diada de la Plaça Nova',
+  'Trobada de colles', 'Diada del barri de Sant Pere', 'Diada a la Rambla', 'Diada de la colla', 'Diada de les entitats', 'Diada de la Festa Major'];
 
 transaction(() => {
   for (const t of ['castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
@@ -183,7 +184,9 @@ transaction(() => {
     if (lastDiada != null) diadaDays[diadaDays.length - 1] = lastDiada;
     // Les diades són en diumenge.
     const sundays = diadaDays.map((d) => { const wd = weekday(addDays(d)); return d - wd; }).filter((d) => d >= fromDay && d < 0);
-    const names = DIADA_NAMES.slice(-sundays.length);
+    // L'última diada de la temporada és sempre la mateixa; si en surten més que noms, es tornen a fer servir.
+    const L = DIADA_NAMES.length;
+    const names = sundays.map((_, i) => DIADA_NAMES[(((L - sundays.length + i) % L) + L) % L]);
     for (let day = fromDay; day <= toDay && day < 0; day++) {
       const date = addDays(day);
       const wd = weekday(date);
