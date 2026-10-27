@@ -87,6 +87,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   i dupliquen castells (amb l'alineació) a una altra sessió. Truc ràpid: toca un nom a «Confirmats sense posició»
   i després una posició.
 - **Fitxa de cada persona**: alçada, alçada i amplada d'espatlles, pes, data de naixement (edat), contacte i notes.
+  A la llista de persones, l'assistència és la de la temporada actual (sense comptar els assajos de músics).
   Només la veuen els administradors.
 - **Malnoms**: cada persona pot tenir un malnom únic; és el que surt a la pinya, al tronc i a les llistes.
   Sense malnom, es mostra «Nom I.» (nom i inicial del cognom).
@@ -176,6 +177,9 @@ node seed.js
 
 A la demostració, els membres entren triant el seu nom; l'administrador és `admin` / `admin1234`. Les persones i els
 malnoms de la demostració són inventats (els malnoms són noms de fruites i verdures).
+Hi ha unes 125 persones (amb mainada i músics) i dues temporades senceres: assajos els dimarts i divendres, una diada
+cada 3–4 setmanes i castells que van pujant al llarg de la temporada, cadascun amb el seu tronc habitual i
+substitucions quan algú falta.
 
 ### Configuració (variables d'entorn)
 

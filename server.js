@@ -381,15 +381,18 @@ const CAME_SQL = "COALESCE(a.came, a.status = 'si', 0) = 1";
 const EFFECTIVE_STATUS_SQL = "CASE WHEN a.came = 0 THEN 'no' WHEN a.came = 1 THEN 'si' ELSE a.status END";
 
 // ---------- Rutes: persones (administradors) ----------
+// L'assistència de la llista de persones és la de la temporada (l'any natural), fins avui.
+// Els assajos de músics no hi compten: la majoria de gent no hi ha d'anar i li baixaria el percentatge.
+const SEASON_SQL = "e.date >= strftime('%Y-01-01','now','localtime') AND e.date <= date('now','localtime') AND e.type != 'musics'";
 route('GET', '/api/people', () => {
   const people = db.prepare(`SELECT p.*,
       (SELECT COUNT(*) FROM attendance a JOIN events e ON e.id = a.event_id
-        WHERE a.person_id = p.id AND ${CAME_SQL} AND e.date <= date('now','localtime')) AS attended,
+        WHERE a.person_id = p.id AND ${CAME_SQL} AND ${SEASON_SQL}) AS attended,
       (SELECT COUNT(*) FROM attendance a JOIN events e ON e.id = a.event_id
-        WHERE a.person_id = p.id AND a.status = 'si' AND e.date <= date('now','localtime')) AS confirmed
+        WHERE a.person_id = p.id AND a.status = 'si' AND ${SEASON_SQL}) AS confirmed
     FROM people p ORDER BY p.active DESC, p.name COLLATE NOCASE`).all();
-  const pastEvents = db.prepare("SELECT COUNT(*) AS n FROM events WHERE date <= date('now','localtime')").get().n;
-  return { people: people.map(personRow), pastEvents };
+  const pastEvents = db.prepare(`SELECT COUNT(*) AS n FROM events e WHERE ${SEASON_SQL}`).get().n;
+  return { people: people.map(personRow), pastEvents, season: String(new Date().getFullYear()) };
 }, 'admin');
 
 route('POST', '/api/people', ({ body }) => {

@@ -1709,7 +1709,7 @@ let peopleSort = store.get('peopleSort', 'name');
 
 async function pagePeople() {
   if (!isAdmin()) { location.hash = '#/'; return; }
-  const { people, pastEvents } = await api('GET', '/people');
+  const { people, pastEvents, season } = await api('GET', '/people');
   const sorters = {
     name: (a, b) => b.active - a.active || a.name.localeCompare(b.name),
     height: (a, b) => (b.height_cm ?? -1) - (a.height_cm ?? -1),
@@ -1734,7 +1734,7 @@ async function pagePeople() {
         </select></label>
     </div>
     <div class="card"><div class="table-wrap"><table class="responsive" id="people-table">
-      <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th><th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th><th class="num">${t('Assistència')}</th></tr></thead>
+      <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th><th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th><th class="num">${t('Assistència {year}', { year: season })}</th></tr></thead>
       <tbody>${sorted.map((p) => `<tr class="clickable ${p.active ? '' : 'inactive'}" data-id="${p.id}" data-name="${esc(norm(p.name + ' ' + (p.alias || '')))}">
         <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
         <td class="num" data-l="${t('Edat')}">${v(age(p.birthdate))}</td>
@@ -1745,7 +1745,7 @@ async function pagePeople() {
         <td class="num" data-l="${t('Assistència')}">${p.attended}${pastEvents ? ` <span class="muted small">(${Math.round((p.attended / pastEvents) * 100)}%)</span>` : ''}</td>
       </tr>`).join('')}</tbody>
     </table></div>
-    <p class="small muted">${t('{n} persones actives. L\'assistència compta les sessions passades on la persona ha vingut.', { n: people.filter((p) => p.active).length })}</p></div>`;
+    <p class="small muted">${t("{n} persones actives. L'assistència és de la temporada {year}: sessions fins avui on la persona ha vingut, de {total}.", { n: people.filter((p) => p.active).length, year: season, total: pastEvents })}</p></div>`;
 
   const sort = qs('#people-sort');
   sort.value = peopleSort;
