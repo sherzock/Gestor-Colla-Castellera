@@ -624,8 +624,7 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 /* Persones temporals al selector de posició */
 .guest-pick { display: grid; gap: 6px; margin: 12px 0 4px; }
 .guest-pick button svg { width: 12px; height: 12px; vertical-align: -1px; }
-.fail-point { display: inline-flex; align-items: center; gap: 8px; }
-.fail-point select { width: auto; }
+.tech-notes { display: grid; gap: 4px; flex: 1 1 100%; }
 
 /* Estadístiques per a la tècnica */
 .factor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
@@ -658,3 +657,55 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
   #st-tab { width: 100%; }
   #st-tab button { flex: 1 0 auto; padding-left: 9px; padding-right: 9px; }
 }
+
+/* ---------- Visualitzador més llegible: cada posició amb el color del seu grup ---------- */
+.pos { --c: var(--line); border: 1.5px solid color-mix(in srgb, var(--c) 45%, var(--line)); border-left: 5px solid var(--c);
+  background: color-mix(in srgb, var(--c) 9%, var(--surface)); min-height: 62px; gap: 2px; box-shadow: 0 1px 2px rgb(0 0 0 / .06); }
+.pos.g-baixos, .pos.g-tronc, .pos.g-pom, .pos.g-agulla { border-left: 5px solid var(--c); }
+.pos .role { color: color-mix(in srgb, var(--c) 75%, var(--ink)); font-size: .72rem; font-weight: 700; letter-spacing: .01em; }
+.pos .who { font-size: .95rem; color: var(--ink); line-height: 1.2; }
+.pos .meta { font-size: .7rem; }
+.pos.empty { background: transparent; border-style: dashed; border-left-style: solid; box-shadow: none; }
+.pos.empty .who { font-size: .8rem; font-weight: 600; color: var(--ink-3); }
+.pos.editable.empty .who { color: var(--accent); }
+.pos.editable:hover { border-color: var(--c); background: color-mix(in srgb, var(--c) 16%, var(--surface)); }
+.t-label .lv { display: inline-block; max-width: 100%; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--ink-2);
+  font-size: .76rem; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.legend { gap: 8px 16px; font-size: .85rem; }
+.legend i { width: 12px; height: 12px; }
+
+.box { --c: var(--ink-3); }
+.box rect { fill: color-mix(in srgb, var(--c) 10%, var(--surface)); stroke: var(--c); stroke-width: 1.6; }
+.box .r { font-size: 8px; font-weight: 700; fill: color-mix(in srgb, var(--c) 75%, var(--ink)); }
+.box .n { font-size: 11px; font-weight: 800; fill: var(--ink); }
+.box.empty rect { fill: transparent; }
+.box.empty .n { fill: var(--ink-3); font-weight: 600; }
+
+.pos-list h3 { display: flex; align-items: baseline; gap: 8px; }
+.pos-list li { --c: var(--line); border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 7%, var(--surface-2)); padding: 9px 12px; font-size: .95rem; }
+.pos-list li .r { color: color-mix(in srgb, var(--c) 70%, var(--ink-2)); font-weight: 600; }
+.pos-list li.empty { background: transparent; border: 1px dashed var(--line); border-left: 4px solid var(--c); }
+.pos-list li.mine { outline: 3px solid var(--accent); }
+
+@media (max-width: 600px) {
+  .pos { min-height: 56px; padding: 5px 6px; }
+  .pos .role { font-size: .64rem; }
+  .pos .who { font-size: .84rem; }
+  .pos .meta { font-size: .62rem; }
+  .t-label .lv { padding: 0; background: none; font-size: .64rem; line-height: 1.15; }
+}
+
+/* ---------- Tècnica: preparació, recanvis i notes ---------- */
+.prep-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.prep-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding: 10px 12px; border-radius: 10px;
+  background: var(--surface-2); text-decoration: none; color: var(--ink); }
+.prep-row:hover { outline: 2px solid var(--accent); }
+.prep-bar { grid-column: 1 / -1; height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.prep-bar i { display: block; height: 100%; border-radius: 99px; }
+.prep-bar i.ok { background: var(--ok); } .prep-bar i.warn { background: var(--warn); } .prep-bar i.bad { background: var(--bad); }
+.prep-row > .small:last-child { grid-column: 1 / -1; }
+.suggest { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.suggest a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.tech-note-list { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; border-left: 3px solid var(--line); display: grid; gap: 3px; font-size: .85rem; }
+.tech-note-list a { text-decoration: none; font-size: .78rem; margin-right: 4px; }
+.tech-notes textarea { width: 100%; resize: vertical; }

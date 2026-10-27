@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { db, hashPassword, verifyPassword, transaction } from './db.js';
-import { buildStructure, castellName, levelNames, levelRange, positionOf, failPointLabel, LEVEL_NAMES } from './public/castell.js';
+import { buildStructure, castellName, levelNames, levelRange, positionOf } from './public/castell.js';
 import { translate } from './public/i18n.js';
 
 // Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
@@ -175,10 +175,8 @@ function castellInput(body, existing = {}) {
     label: str(merged.label, 100),
     notes: str(merged.notes, 2000),
     result: RESULTS.includes(merged.result) ? merged.result : 'previst',
-    fail_point: /^(pinya|folre|manilles|agulla|L\d{1,2})$/.test(merged.fail_point || '') ? merged.fail_point : null,
+    tech_notes: str(merged.tech_notes, 1000),
   };
-  // Només té sentit dir on ha fallat si no s'ha descarregat.
-  if (['previst', 'descarregat'].includes(out.result)) out.fail_point = null;
   if (out.folre && height < 6) fail(400, 'El folre necessita un castell de 6 pisos o més');
   if (out.puntals && height < (width === 1 ? 8 : 9)) fail(400, 'Els puntals necessiten un castell més alt');
   // Prova parcial: el pis final 0 vol dir «fins a dalt».
@@ -490,7 +488,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   const mine = db.prepare('SELECT * FROM attendance WHERE event_id = ? AND person_id = ?').get(event.id, user.id);
   const castells = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM castell_positions WHERE castell_id = c.id) AS assigned_count
     FROM castells c WHERE c.event_id = ? ORDER BY c.position, c.id`).all(event.id)
-    .map((c) => (isAdmin ? c : { ...c, fail_point: undefined }));
+    .map((c) => (isAdmin ? c : { ...c, tech_notes: undefined }));
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
       ${CAME_SQL} AS present
     FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -654,8 +652,8 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
     FROM castell_positions cp LEFT JOIN people p ON p.id = cp.person_id LEFT JOIN event_guests g ON g.id = cp.guest_id
     WHERE cp.castell_id = ?`).all(castell.id);
   const siblings = db.prepare('SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level, label, result FROM castells WHERE event_id = ? ORDER BY position, id').all(event.id);
-  // On ha fallat un castell només ho veu la tècnica: no és per assenyalar ningú.
-  const result = { castell: isAdmin ? castell : { ...castell, fail_point: undefined }, event, siblings,
+  // Les notes de la tècnica no les veuen els membres.
+  const result = { castell: isAdmin ? castell : { ...castell, tech_notes: undefined }, event, siblings,
     positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null } : p)) };
   if (isAdmin) {
     result.candidates = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, ${measures}, ${EFFECTIVE_STATUS_SQL} AS status
@@ -695,7 +693,7 @@ route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
   return transaction(() => {
     const { id, event_id, position, ...rest } = castell;
     const nextPos = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(target.id).p;
-    const newId = insertRow('castells', { ...rest, result: 'previst', fail_point: null, event_id: target.id, position: nextPos });
+    const newId = insertRow('castells', { ...rest, result: 'previst', tech_notes: null, event_id: target.id, position: nextPos });
     // Les persones temporals són d'una sessió: només es copien si el castell queda a la mateixa sessió.
     db.prepare(`INSERT INTO castell_positions (castell_id, pos_key, person_id, guest_name, guest_id)
       SELECT ?, pos_key, person_id, guest_name, guest_id FROM castell_positions
@@ -997,6 +995,80 @@ const outcomeOf = (r) => (r === 'descarregat' ? 'descarregat' : r === 'carregat'
 const emptyOutcome = () => ({ n: 0, descarregat: 0, carregat: 0, caigut: 0 });
 const STABLE = 0.75, EXPERIENCED = 0.75, FULL_PINYA = 0.9;
 
+// Recanvis: per a cada castell, qui ha fet cada posició del tronc en aquell mateix castell.
+// Una mateixa posició no és igual en un 3de7 que en un 4de8, per això no es barregen castells diferents.
+const MIN_PEOPLE = 2, MIN_TIMES = 2, SHOULDER_GAP = 4, WEIGHT_GAP = 10;
+const median = (list) => { const v = list.filter((x) => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
+function reserves(query) {
+  const people = db.prepare('SELECT id, name, alias, active, shoulder_height_cm, weight_kg FROM people').all();
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const rows = historyRows({ query }).filter((r) => r.result !== 'previst');
+  const types = new Map();
+  const catCount = new Map(); // persona → categoria (Baixos, Segons…) → vegades, en qualsevol castell
+  for (const r of rows) {
+    const pos = positionOf(r, r.pos_key);
+    if (!pos || !TRONC_GROUPS.includes(pos.group)) continue;
+    const cats = catCount.get(r.person_id) || new Map();
+    cats.set(pos.cat, (cats.get(pos.cat) || 0) + 1);
+    catCount.set(r.person_id, cats);
+    const name = castellName(r);
+    const t = types.get(name) || { castell: name, sample: r, attempts: new Set(), pos: new Map() };
+    t.attempts.add(r.castell_id);
+    const m = t.pos.get(r.pos_key) || new Map();
+    m.set(r.person_id, (m.get(r.person_id) || 0) + 1);
+    t.pos.set(r.pos_key, m);
+    types.set(name, t);
+  }
+  return [...types.values()].sort((a, b) => b.attempts.size - a.attempts.size).map((t) => {
+    const s = buildStructure(t.sample);
+    const positions = [...s.positions.values()].filter((p) => TRONC_GROUPS.includes(p.group)).map((p) => {
+      const done = [...(t.pos.get(p.key) || [])].filter(([id]) => byId.get(id)?.active)
+        .map(([id, n]) => ({ id, name: publicName(byId.get(id)), n })).sort((a, b) => b.n - a.n);
+      const few = done.filter((d) => d.n >= MIN_TIMES).length < MIN_PEOPLE;
+      let suggest = [];
+      if (few) {
+        // Gent amb mides semblants a les de qui ja l'ha fet, i amb experiència al mateix pis en altres castells.
+        const sh = median(done.map((d) => byId.get(d.id).shoulder_height_cm));
+        const wt = median(done.map((d) => byId.get(d.id).weight_kg));
+        const taken = new Set(done.map((d) => d.id));
+        suggest = people.filter((x) => x.active && !taken.has(x.id) && (sh != null || wt != null)
+            && (sh == null || (x.shoulder_height_cm != null && Math.abs(x.shoulder_height_cm - sh) <= SHOULDER_GAP))
+            && (wt == null || (x.weight_kg != null && Math.abs(x.weight_kg - wt) <= WEIGHT_GAP)))
+          .map((x) => ({ id: x.id, name: publicName(x), n: catCount.get(x.id)?.get(p.cat) || 0 }))
+          .sort((a, b) => b.n - a.n || (a.name || '').localeCompare(b.name || '')).slice(0, 4);
+      }
+      return { key: p.key, role: p.role, cat: p.cat, people: done, few, suggest };
+    });
+    return { castell: t.castell, attempts: t.attempts.size, positions };
+  });
+}
+
+// Preparació del tronc d'un castell: qui l'ha assajat abans (mateix castell, mateixa posició).
+const PREP_DAYS = 42;
+function troncPrep(castell) {
+  const s = buildStructure(castell);
+  const keys = [...s.positions.values()].filter((p) => TRONC_GROUPS.includes(p.group));
+  const placedRows = new Map(db.prepare('SELECT pos_key, person_id, guest_id FROM castell_positions WHERE castell_id = ?')
+    .all(castell.id).map((r) => [r.pos_key, r]));
+  const date = castell.date || db.prepare('SELECT date FROM events WHERE id = ?').get(castell.event_id)?.date;
+  const since = new Date(`${date}T12:00:00`); since.setDate(since.getDate() - PREP_DAYS);
+  const sinceIso = since.toISOString().slice(0, 10);
+  const name = castellName(castell);
+  const past = db.prepare(`SELECT c.*, e.date, e.type, cp.pos_key, cp.person_id FROM castell_positions cp
+      JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
+    WHERE cp.person_id IS NOT NULL AND c.id != ? AND c.result != 'previst' AND e.date < ? AND e.date <= date('now','localtime')`)
+    .all(castell.id, date).filter((r) => castellName(r) === name);
+  return keys.map((p) => {
+    const r = placedRows.get(p.key);
+    const mine = r?.person_id ? past.filter((x) => x.pos_key === p.key && x.person_id === r.person_id) : [];
+    return { key: p.key, role: p.role, person_id: r?.person_id || null, guest: !!r?.guest_id,
+      recent: mine.filter((x) => x.type === 'assaig' && x.date >= sinceIso).length,
+      ever: mine.length, last: mine.map((x) => x.date).sort().pop() || null };
+  });
+}
+
+route('GET', '/api/castells/:id/prep', ({ params }) => ({ days: PREP_DAYS, positions: troncPrep(getCastell(params.id)) }), 'admin');
+
 route('GET', '/api/stats/tecnica', ({ query }) => {
   const { where, args } = statsFilter(query);
   const inFilter = new Set(db.prepare(`SELECT c.id FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')}`)
@@ -1040,14 +1112,12 @@ route('GET', '/api/stats/tecnica', ({ query }) => {
       if (pinyaKeys.length) add(factors.pinya[pinyaKeys.filter((k) => filled.has(k)).length / pinyaKeys.length >= FULL_PINYA ? 'high' : 'low'], c.result);
     }
     if (inFilter.has(c.id)) {
-      const t = types.get(name) || { castell: name, attempts: [], fails: {} };
+      const t = types.get(name) || { castell: name, attempts: [] };
       const levels = levelNames(c);
       const { from, to } = levelRange(c);
       const label = (L) => levels.find((l) => l.level === L)?.label;
-      const fail = c.fail_point ? failPointLabel(c, c.fail_point) : null;
       t.attempts.push({ castell_id: c.id, date: c.date, title: c.title, type: c.type, result: c.result, partial,
-        range: partial ? `${label(from)} – ${label(to)}` : null, fail });
-      if (fail) t.fails[fail] = (t.fails[fail] || 0) + 1;
+        range: partial ? `${label(from)} – ${label(to)}` : null, notes: c.tech_notes || null });
       types.set(name, t);
     }
     // Després de comptar-lo, aquest castell passa a ser experiència i «l'últim tronc» per als següents.
@@ -1061,39 +1131,27 @@ route('GET', '/api/stats/tecnica', ({ query }) => {
     const first = full.findIndex((a) => a.result === 'descarregat');
     return {
       ...t,
-      fails: Object.entries(t.fails).map(([where, n]) => ({ where, n })).sort((a, b) => b.n - a.n),
       full: full.length,
       partials: t.attempts.length - full.length,
       tilFirst: first >= 0 ? first + 1 : null,
       assajos: rate(full.filter((a) => a.type === 'assaig')),
       diades: rate(full.filter((a) => a.type !== 'assaig')),
+      notes: t.attempts.filter((a) => a.notes).slice(-3).reverse(),
     };
   }).sort((a, b) => b.attempts.length - a.attempts.length);
 
-  const failTotals = {};
-  for (const t of castells) for (const f of t.fails) failTotals[f.where] = (failTotals[f.where] || 0) + f.n;
-
-  // Fondària: quanta gent ha fet cada posició del tronc (i quantes vegades) en el període triat.
-  const names = new Map(db.prepare('SELECT id, name, alias, active FROM people').all().map((p) => [p.id, p]));
-  const depth = new Map();
-  for (const r of historyRows({ query })) {
-    const pos = positionOf(r, r.pos_key);
-    if (!pos || !TRONC_GROUPS.includes(pos.group) || r.result === 'previst') continue;
-    if (!depth.has(pos.cat)) depth.set(pos.cat, new Map());
-    const m = depth.get(pos.cat);
-    m.set(r.person_id, (m.get(r.person_id) || 0) + 1);
-  }
-  const CAT_ORDER = [...LEVEL_NAMES, 'Dosos', 'Acotxador', 'Enxaneta', 'Pilar central'];
-  const catIndex = (cat) => { const i = CAT_ORDER.indexOf(cat); return i < 0 ? 99 : i; };
+  const upcoming = db.prepare(`SELECT c.*, e.date, e.title, e.type FROM castells c JOIN events e ON e.id = c.event_id
+    WHERE e.date >= date('now','localtime') AND e.type != 'assaig' ORDER BY e.date, e.start_time, c.position, c.id`).all();
   return {
     seasons: seasons(),
     factors,
     castells,
-    fails: Object.entries(failTotals).map(([where, n]) => ({ where, n })).sort((a, b) => b.n - a.n),
-    depth: [...depth].sort((a, b) => catIndex(a[0]) - catIndex(b[0])).map(([cat, m]) => ({
-      cat,
-      people: [...m].filter(([id]) => names.get(id)?.active).map(([id, n]) => ({ id, name: publicName(names.get(id)), n })).sort((a, b) => b.n - a.n),
-    })),
+    reserves: reserves(query),
+    prep: upcoming.map((c) => {
+      const rows = troncPrep(c);
+      return { castell_id: c.id, event_id: c.event_id, date: c.date, title: c.title, castell: castellName(c),
+        total: rows.length, placed: rows.filter((r) => r.person_id).length, rehearsed: rows.filter((r) => r.recent).length };
+    }).filter((c) => c.placed),
   };
 }, 'admin');
 

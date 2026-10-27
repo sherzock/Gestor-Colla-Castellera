@@ -1,7 +1,7 @@
 // Omple la base de dades amb dades de demostració.
 // Ús: node seed.js   (esborra les dades existents!)
 import { db, hashPassword, transaction } from './db.js';
-import { buildStructure, failPoints } from './public/castell.js';
+import { buildStructure } from './public/castell.js';
 
 const ADMIN_PASSWORD = 'admin1234';
 
@@ -166,12 +166,12 @@ transaction(() => {
   castell(events.diada, { width: 1, height: 5, cordons: 1 }, 'Pilar de sortida', 'previst', 4, 1);
 });
 
-// Per a les estadístiques de la tècnica: on van fallar els castells que no es van descarregar,
-// i dues persones temporals d'una colla convidada a la propera diada.
+// Notes de la tècnica d'alguns intents, i dues persones temporals d'una colla convidada a la propera diada.
+const NOTES = ['La pinya ha arribat tard a tancar.', 'Els baixos s\'han obert una mica a la sortida.', 'Molt bé el pom de dalt.',
+  'Ha costat carregar: cal assajar més l\'aleta.', 'Primer cop amb aquest tronc: bona base.'];
 transaction(() => {
-  for (const c of db.prepare("SELECT * FROM castells WHERE result IN ('carregat', 'intent', 'intent desfet')").all()) {
-    const points = failPoints(c);
-    db.prepare('UPDATE castells SET fail_point = ? WHERE id = ?').run(pick(points.slice(1, -1).length ? points.slice(1, -1) : points)[0], c.id);
+  for (const c of db.prepare("SELECT id FROM castells WHERE result != 'previst'").all()) {
+    if (rand() < 0.35) db.prepare('UPDATE castells SET tech_notes = ? WHERE id = ?').run(pick(NOTES), c.id);
   }
   const diada = db.prepare("SELECT id FROM events WHERE title = 'Diada de Tots Sants'").get();
   const insGuest = db.prepare('INSERT INTO event_guests (event_id, name, colla, shoulder_height_cm, weight_kg) VALUES (?, ?, ?, ?, ?)');

@@ -44,20 +44,6 @@ export function levelNames(c) {
   return out;
 }
 
-// On pot fallar un castell (per a la tècnica, no per buscar culpables): pinya, folre, manilles,
-// cadascun dels pisos que es fan i el pilar central. Les claus es guarden a «fail_point».
-export function failPoints(c) {
-  const { from, to } = levelRange(c);
-  const out = [];
-  if (!c.net) out.push(['pinya', 'Pinya']);
-  if (c.folre && !c.net) out.push(['folre', 'Folre']);
-  if (c.manilles && c.folre && !c.net) out.push(['manilles', 'Manilles']);
-  for (const l of levelNames(c)) if (l.level >= from && l.level <= to) out.push([`L${l.level}`, l.label]);
-  if (c.agulla && Number(c.width) >= 3) out.push(['agulla', 'Pilar central']);
-  return out;
-}
-export const failPointLabel = (c, key) => failPoints(c).find(([k]) => k === key)?.[1] ?? null;
-
 // Prova parcial (assajos): només es fan els pisos entre from_level i to_level (0 = fins a dalt).
 // El nom del castell no canvia: un 3d6 sense pom de dalt continua sent un 3d6.
 export function levelRange(c) {

@@ -214,8 +214,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS event_guests (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 )`);
 addColumn('castell_positions', 'guest_id', 'INTEGER REFERENCES event_guests(id) ON DELETE CASCADE');
-// On ha fallat un castell que no s'ha descarregat: «pinya», «folre», «manilles», «agulla» o «L{pis}».
-addColumn('castells', 'fail_point', 'TEXT');
+// Nota de la tècnica sobre com ha anat l'intent (només la veuen els administradors).
+addColumn('castells', 'tech_notes', 'TEXT');
+// Una versió anterior guardava «on ha fallat»: es va treure perquè sovint no es pot saber.
+if (columns('castells').includes('fail_point')) db.exec('ALTER TABLE castells DROP COLUMN fail_point');
 
 db.exec(`CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_castells_event ON castells(event_id);`);

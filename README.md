@@ -60,8 +60,12 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
       experiència a cada posició o amb gent nova, i pinya plena (≥90 %) o incompleta;
     - **com avança cada castell**: tots els intents per ordre (parcials, assajos i diades), quants intents ha calgut
       fins al primer descarregat i el percentatge de descarregats a assajos i a diades;
-    - **on fallen** els castells (segons el que s'hagi marcat);
-    - **qui sap fer cada posició del tronc**, amb un avís quan només una persona (o ningú) ho ha fet sovint.
+      amb les últimes **notes de la tècnica** de cada castell;
+    - **preparació de les properes diades**: per a cada castell, quanta gent del tronc ha assajat la seva posició
+      d'aquell castell les últimes 6 setmanes;
+    - **recanvis per a cada castell** (es tria el castell, perquè una mateixa posició no és igual en un 3de7 que en un
+      4de8): qui ha fet cada posició del tronc en aquell castell, un avís quan poca gent ho ha fet sovint i propostes de
+      gent que es podria preparar (alçada d'espatlles i pes semblants, i experiència al mateix pis en altres castells).
   - *Resum de temporada* (tothom): millor castell, resultats, mitjana de gent per assaig i per diada, castells
     descarregats (i els només carregats) i les diades amb els seus castells. No hi surt cap persona.
   - *Cada membre* veu les seves: castells fets, com han acabat (descarregat, carregat, intent, intent desfet),
@@ -90,8 +94,10 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   sessió o des del castell (nom i, si voleu, colla, alçada d'espatlles i pes) i es poden col·locar a qualsevol castell
   d'aquella sessió. No surten a la llista de persones ni compten a l'historial ni a les estadístiques. Les mides, si
   s'hi posen, compten a la revisió de l'alineació.
-- **On ha fallat** (admins): quan un castell queda carregat o en intent, es pot marcar on ha fallat (pinya, folre,
-  manilles, un pis o el pilar central). Només ho veu la tècnica: serveix per saber què cal treballar, no per assenyalar ningú.
+- **Notes de la tècnica** (admins): a cada castell es pot escriure com ha anat i què cal assajar. Només les veuen els
+  administradors.
+- **Preparació del tronc** (admins): a la revisió de l'alineació d'una diada surt qui no ha fet mai la seva posició en
+  aquell castell i qui no l'ha assajada les últimes 6 setmanes.
 
 - **Idioma i aparença**: català, castellà o anglès, i tema automàtic, clar o fosc (es recorda a cada dispositiu).
   Els termes castellers (baix, pinya, enxaneta, folre…) es mantenen en català a tots els idiomes.

@@ -1,4 +1,4 @@
-import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL, failPoints } from './castell.js';
+import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL } from './castell.js';
 import { proposeLineup } from './muntador.js';
 import { translate, LANGS } from './i18n.js';
 import { openZoom } from './zoom.js';
@@ -1050,6 +1050,10 @@ function proposalMeta(a, p) {
   return `<span class="meta warn">${t('sense experiència')}</span>`;
 }
 
+// Color de cada posició (el mateix a totes les vistes): tronc per grups, pinya pel tipus de caixa.
+const GROUP_VAR = { baixos: 'var(--k-baix)', tronc: 'var(--k-tronc)', pom: 'var(--k-pom)', agulla: 'var(--k-agulla)', musica: 'var(--k-musica)' };
+const colorOf = (p) => GROUP_VAR[p.group] || KIND_VAR[p.kind] || 'var(--ink-3)';
+
 function posCell(p, byKey, ctx) {
   const a = byKey.get(p.key);
   const mine = a && a.person_id === me.id;
@@ -1058,14 +1062,14 @@ function posCell(p, byKey, ctx) {
   else if (ctx.admin && a && !a.guest_name && (a.shoulder_height_cm || a.height_cm)) {
     meta = `<span class="meta">${a.shoulder_height_cm ? `esp. ${a.shoulder_height_cm}` : ''}${a.shoulder_height_cm && a.height_cm ? ' · ' : ''}${a.height_cm ? `${a.height_cm} cm` : ''}</span>`;
   }
-  return `<button class="pos g-${p.group} ${p.kind ? `k-${p.kind}` : ''} ${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" data-key="${p.key}" data-names="${namesAttr(a)}">
-    <span class="role">${esc(p.role)}</span><span class="who">${a ? esc(assignedName(a)) : '—'}</span>${meta}</button>`;
+  return `<button class="pos g-${p.group} ${p.kind ? `k-${p.kind}` : ''} ${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(a)}">
+    <span class="role">${esc(p.role)}</span><span class="who">${a ? esc(assignedName(a)) : ctx.admin ? t('+ Afegeix') : t('Buit')}</span>${meta}</button>`;
 }
 
 // Cel·la de la vista d'historial: qui ha fet aquesta posició i quants cops.
 function histCell(p, ctx) {
   const list = ctx.hist.byPos.get(p.key) || [];
-  return `<button class="pos hist g-${p.group}" data-key="${p.key}" data-names="${namesAttr(...list)}">
+  return `<button class="pos hist g-${p.group}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(...list)}">
     <span class="role">${esc(p.role)}</span>
     ${list.length ? list.slice(0, 3).map((h) => `<span class="h"><b>${esc(shortName(h))}</b><span>×${h.n}</span></span>`).join('') : '<span class="who">—</span>'}
     ${list.length > 3 ? `<span class="meta">${t('+{n} més', { n: list.length - 3 })}</span>` : ''}
@@ -1078,7 +1082,7 @@ function troncView(s, cell) {
   const rowClass = `t-row${s.agulla.length ? ' ag' : ''}`;
   const rows = [...s.levels].reverse().map((row) => `
     <div class="${rowClass}">
-      <div class="t-label">${row.label}${row.tags.map((x) => `<span class="tag">+ ${x}</span>`).join('')}</div>
+      <div class="t-label"><span class="lv">${row.label}</span>${row.tags.map((x) => `<span class="tag">+ ${x}</span>`).join('')}</div>
       <div class="t-cells">${row.cells.map(cell).join('')}</div>
       ${s.agulla.length ? `<div class="t-cells">${agByLevel.has(row.level) ? cell(agByLevel.get(row.level)) : ''}</div>` : ''}
     </div>`).join('');
@@ -1116,7 +1120,7 @@ function layerSvg(layer, s, byKey, ctx) {
     let deg = (item.rot * 180) / Math.PI;
     deg = ((deg % 360) + 360) % 360;
     if (deg > 90 && deg <= 270) deg -= 180;
-    const name = a ? truncate(assignedName(a, true), item.w > 70 ? 12 : 9) : '—';
+    const name = a ? truncate(assignedName(a, true), item.w > 70 ? 11 : 8) : '—';
     const short = item.shared ? role?.split(' · ')[0] : `${KIND_SHORT[item.kind]}${item.ring ? ` ${item.ring}` : ''}`;
     if (item.off) {
       return `<g class="box off" transform="translate(${item.x.toFixed(1)} ${item.y.toFixed(1)}) rotate(${deg.toFixed(1)})">
@@ -1125,11 +1129,11 @@ function layerSvg(layer, s, byKey, ctx) {
       <text class="r" y="3" text-anchor="middle">${esc(role)}</text>
     </g>`;
     }
-    return `<g class="box ${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" data-key="${item.key}" data-names="${namesAttr(a)}" transform="translate(${item.x.toFixed(1)} ${item.y.toFixed(1)}) rotate(${deg.toFixed(1)})">
+    return `<g class="box ${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" style="--c:${KIND_VAR[item.kind] || 'var(--ink-3)'}" data-key="${item.key}" data-names="${namesAttr(a)}" transform="translate(${item.x.toFixed(1)} ${item.y.toFixed(1)}) rotate(${deg.toFixed(1)})">
       <title>${esc(role + (a ? ': ' + assignedName(a) : ''))}</title>
-      <rect x="${-item.w / 2}" y="${-item.h / 2}" width="${item.w}" height="${item.h}" rx="3" style="stroke:${KIND_VAR[item.kind]}"/>
-      <text class="r" y="-5" text-anchor="middle">${esc(short)}</text>
-      <text class="n" y="9" text-anchor="middle">${esc(name)}</text>
+      <rect x="${-item.w / 2}" y="${-item.h / 2}" width="${item.w}" height="${item.h}" rx="5"/>
+      <text class="r" y="-4.5" text-anchor="middle">${esc(short)}</text>
+      <text class="n" y="10" text-anchor="middle">${esc(name)}</text>
     </g>`;
   }).join('');
   const w = maxX - minX, h = maxY - minY;
@@ -1162,9 +1166,9 @@ function listView(s, byKey, ctx) {
   const li = (p) => {
     const a = byKey.get(p.key);
     const mine = a && a.person_id === me.id;
-    return `<li class="${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" data-key="${p.key}" data-names="${namesAttr(a)}"><span class="r">${esc(p.role)}</span><span class="n">${a ? esc(assignedName(a)) : '—'}</span></li>`;
+    return `<li class="${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(a)}"><span class="r">${esc(p.role)}</span><span class="n">${a ? esc(assignedName(a)) : t('Buit')}</span></li>`;
   };
-  return `<div class="pos-list">${listSections(s).map(({ title, items }) => `<h3>${esc(title)}</h3><ul>${items.map(li).join('')}</ul>`).join('')}</div>`;
+  return `<div class="pos-list">${listSections(s).map(({ title, items }) => `<h3>${esc(title)} <span class="muted small">${items.filter((p) => byKey.has(p.key)).length}/${items.length}</span></h3><ul>${items.map(li).join('')}</ul>`).join('')}</div>`;
 }
 
 function historyView(s, ctx) {
@@ -1185,7 +1189,7 @@ function historyView(s, ctx) {
 // espatlles desiguals en un mateix pis i algú que pesa més que qui el porta.
 const SHOULDER_GAP_CM = 5;
 const WEIGHT_GAP_KG = 3;
-function lineupWarnings(s, byKey, candidates, event) {
+function lineupWarnings(s, byKey, candidates, event, prep) {
   const out = [];
   const status = new Map(candidates.map((c) => [c.id, c.status]));
   const role = (key) => s.positions.get(key)?.role || key;
@@ -1226,6 +1230,15 @@ function lineupWarnings(s, byKey, candidates, event) {
         items: [chip(up), chip(down)] });
     }
   }
+  // Abans d'una diada: qui no ha assajat la seva posició d'aquest castell (només de l'alineació desada).
+  if (prep && event.type !== 'assaig') {
+    const same = prep.positions.filter((r) => r.person_id && byKey.get(r.key)?.person_id === r.person_id);
+    const never = same.filter((r) => !r.ever);
+    const notRecent = same.filter((r) => r.ever && !r.recent);
+    const chips = (list) => list.map((r) => chip(byKey.get(r.key)));
+    if (never.length) out.push({ level: 'warn', text: t("Mai no han fet aquesta posició en aquest castell"), items: chips(never) });
+    if (notRecent.length) out.push({ level: 'warn', text: t("No l'han assajada les últimes {n} setmanes", { n: Math.round(prep.days / 7) }), items: chips(notRecent) });
+  }
   const order = { bad: 0, warn: 1 };
   return out.sort((a, b) => order[a.level] - order[b.level]);
 }
@@ -1261,9 +1274,10 @@ const zoomLabels = () => ({
 
 async function pageCastell(id) {
   // L'historial de posicions només el veuen els administradors.
-  const [data, history] = await Promise.all([
+  const [data, history, prep] = await Promise.all([
     api('GET', `/castells/${id}`),
     isAdmin() ? api('GET', `/castells/${id}/history`) : { castellsCount: 0, exact: [] },
+    isAdmin() ? api('GET', `/castells/${id}/prep`) : null,
   ]);
   const { castell, event, positions, siblings, candidates = [], events = [], guests: sessionGuests = [] } = data;
   const admin = isAdmin();
@@ -1310,7 +1324,7 @@ async function pageCastell(id) {
   const placedGuests = new Set(guests.map((g) => g.guest_id).filter(Boolean));
   const freeGuests = sessionGuests.filter((g) => !placedGuests.has(g.id));
   const canZoom = castellView !== 'llista';
-  const warnings = admin ? lineupWarnings(s, byKey, candidates, event) : [];
+  const warnings = admin ? lineupWarnings(s, byKey, candidates, event, prep) : [];
 
   $app.innerHTML = `
     <a class="back" href="#/sessio/${event.id}">${icon.back}${esc(event.title)} · ${fmt(event.date, { day: 'numeric', month: 'short' })}</a>
@@ -1328,8 +1342,8 @@ async function pageCastell(id) {
     </div>
     ${admin ? `<div class="result-bar"><span class="small muted">${t('Com ha acabat?')}</span>
       <div class="tabs seg" id="result-seg">${Object.keys(RESULTS).map((r) => `<button type="button" data-v="${r}" class="${resultClass(r)} ${castell.result === r ? 'on' : ''}">${resultLabel(r)}</button>`).join('')}</div>
-      ${['carregat', 'intent', 'intent desfet'].includes(castell.result) ? `<label class="fail-point"><span class="small muted">${t('On ha fallat?')}</span>
-        <select id="fail-point"><option value="">${t('No ho sé')}</option>${failPoints(castell).map(([k, l]) => `<option value="${k}" ${castell.fail_point === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
+      <label class="tech-notes"><span class="small muted">${t('Notes de la tècnica')} · ${t('només les veuen els administradors')}</span>
+        <textarea id="tech-notes" rows="2" maxlength="1000" placeholder="${t('Com ha anat? Què cal assajar?')}">${esc(castell.tech_notes || '')}</textarea></label>
     </div>` : ''}
     ${!admin && mineKey ? `<div class="card my-pos"><span class="small muted">${t('La teva posició')}</span><strong>${esc(s.positions.get(mineKey).role)}</strong></div>` : ''}
     ${castell.notes ? `<div class="card description" style="margin-bottom:14px">${esc(castell.notes)}</div>` : ''}
@@ -1470,8 +1484,8 @@ async function pageCastell(id) {
   qsa('#result-seg button').forEach((b) => (b.onclick = async () => {
     if (await attempt(() => api('PUT', `/castells/${castell.id}`, { result: b.dataset.v }))) { toast(t('Resultat desat')); reload(); }
   }));
-  qs('#fail-point')?.addEventListener('change', async (e) => {
-    if (await attempt(() => api('PUT', `/castells/${castell.id}`, { fail_point: e.target.value || null }))) toast(t('Desat'));
+  qs('#tech-notes').addEventListener('change', async (e) => {
+    if (await attempt(() => api('PUT', `/castells/${castell.id}`, { tech_notes: e.target.value }))) { castell.tech_notes = e.target.value; toast(t('Desat')); }
   });
   qs('#cancel-sel')?.addEventListener('click', () => { selectedPerson = null; reload(); });
   const pickGuest = (g) => { selectedPerson = { guest: true, id: g.id, name: g.name }; reload(); };
@@ -2069,6 +2083,7 @@ async function pageStats() {
 const outcomeBar = (b) => resultsBar({ descarregat: b.descarregat, carregat: b.carregat, intent: b.caigut });
 const FEW_ATTEMPTS = 5;
 
+let reserveCastell = null;
 async function pageTecnica(tabs) {
   const st = await api('GET', `/stats/tecnica?${statsQuery()}`);
   const pct = (b) => (b.n ? `${Math.round((b.descarregat / b.n) * 100)}%` : '—');
@@ -2093,24 +2108,37 @@ async function pageTecnica(tabs) {
   }).join('');
 
   const dot = (a) => `<a href="#/castell/${a.castell_id}" class="dot ${resultClass(a.result)} ${a.partial ? 'partial' : ''} ${a.type === 'assaig' ? '' : 'diada'}"
-    title="${esc([fmt(a.date, { day: 'numeric', month: 'short' }), a.title, resultName(a.result), a.range, a.fail ? t('ha fallat a: {where}', { where: a.fail }) : null].filter(Boolean).join(' · '))}"></a>`;
+    title="${esc([fmt(a.date, { day: 'numeric', month: 'short' }), a.title, resultName(a.result), a.range, a.notes].filter(Boolean).join(' · '))}"></a>`;
   const castellRows = st.castells.map((c) => `<li>
     <div class="prog-head"><span class="castell-tag">${esc(c.castell)}</span>
       <span class="small muted">${[tn(c.full, '{n} sencer', '{n} sencers'), c.partials ? tn(c.partials, '{n} parcial', '{n} parcials') : null,
         c.tilFirst ? tn(c.tilFirst, 'descarregat al primer intent', '{n} intents fins al primer descarregat') : c.full ? t('encara sense descarregar') : null].filter(Boolean).join(' · ')}</span></div>
     <div class="timeline">${c.attempts.map(dot).join('')}</div>
     <div class="small muted">${[c.assajos != null ? t('Assajos: {n}% descarregats', { n: c.assajos }) : null, c.diades != null ? t('Diades: {n}% descarregats', { n: c.diades }) : null,
-      c.fails.length ? t('On falla: {list}', { list: c.fails.map((f) => `${f.where} ×${f.n}`).join(', ') }) : null].filter(Boolean).join(' · ')}</div>
+].filter(Boolean).join(' · ')}</div>
+    ${c.notes.length ? `<ul class="tech-note-list">${c.notes.map((a) => `<li><a href="#/castell/${a.castell_id}" class="muted">${fmt(a.date, { day: 'numeric', month: 'short' })}</a> ${esc(a.notes)}</li>`).join('')}</ul>` : ''}
   </li>`).join('');
 
-  const depthRows = st.depth.map((d) => {
-    const regulars = d.people.filter((p) => p.n >= 2).length;
-    return `<li class="${regulars <= 1 ? 'risk' : ''}">
-      <div class="prog-head"><strong>${esc(d.cat)}</strong>
-        <span class="small muted">${tn(d.people.length, '{n} persona', '{n} persones')} · ${t('{n} amb 2 o més vegades', { n: regulars })}</span>
-        ${regulars <= 1 ? `<span class="status no">${t('Poca gent')}</span>` : ''}</div>
-      <div class="names">${d.people.slice(0, 10).map((p) => `<a href="#/estadistiques/persona/${p.id}">${esc(p.name)} <span class="muted">×${p.n}</span></a>`).join('')}${d.people.length > 10 ? `<span class="muted small">+${d.people.length - 10}</span>` : ''}</div>
-    </li>`;
+  // Recanvis d'un castell concret: la mateixa posició no és igual en castells diferents.
+  if (!st.reserves.some((r) => r.castell === reserveCastell)) reserveCastell = st.reserves[0]?.castell;
+  const res = st.reserves.find((r) => r.castell === reserveCastell);
+  const who = (list) => list.map((p) => `<a href="#/estadistiques/persona/${p.id}">${esc(p.name)} <span class="muted">×${p.n}</span></a>`).join('');
+  const reserveRows = res ? res.positions.map((p) => `<li class="${p.few ? 'risk' : ''}">
+      <div class="prog-head"><strong>${esc(p.role)}</strong>
+        <span class="small muted">${tn(p.people.length, '{n} persona', '{n} persones')}</span>
+        ${p.few ? `<span class="status no">${t('Poca gent')}</span>` : ''}</div>
+      <div class="names">${p.people.length ? who(p.people.slice(0, 8)) : `<span class="muted small">${t('Ningú encara')}</span>`}${p.people.length > 8 ? `<span class="muted small">+${p.people.length - 8}</span>` : ''}</div>
+      ${p.suggest.length ? `<div class="suggest small"><span class="muted">${t('Es podria preparar:')}</span> ${p.suggest.map((x) => `<a href="#/estadistiques/persona/${x.id}">${esc(x.name)}${x.n ? ` <span class="muted">${x.n === 1 ? t('{n} cop a {cat}', { n: 1, cat: p.cat }) : t('{n} cops a {cat}', { n: x.n, cat: p.cat })}</span>` : ''}</a>`).join('')}</div>` : ''}
+    </li>`).join('') : '';
+
+  const prepRows = st.prep.map((c) => {
+    const pctR = c.placed ? Math.round((c.rehearsed / c.placed) * 100) : 0;
+    return `<li><a href="#/castell/${c.castell_id}" class="prep-row">
+      <span class="castell-tag">${esc(c.castell)}</span>
+      <span class="small muted">${fmt(c.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${esc(c.title)}</span>
+      <span class="prep-bar"><i class="${pctR >= 75 ? 'ok' : pctR >= 50 ? 'warn' : 'bad'}" style="width:${pctR}%"></i></span>
+      <span class="small"><strong>${c.rehearsed}/${c.placed}</strong> ${t("l'han assajat")}${c.placed < c.total ? ` · ${t('{n} sense posar', { n: c.total - c.placed })}` : ''}</span>
+    </a></li>`;
   }).join('');
 
   $app.innerHTML = `
@@ -2118,6 +2146,11 @@ async function pageTecnica(tabs) {
     ${statsFilters(st.seasons)}
     <div class="stats-body">
       <p class="muted" style="margin:0">${t("Un castell és cosa de tota la colla. Aquí no es mira qui ha fallat, sinó què acompanya els bons resultats, com avança cada castell i on cal reforçar.")}</p>
+      ${prepRows ? `<div class="card">
+        <h2 style="margin-bottom:6px">${t('Preparació de les properes diades')}</h2>
+        <p class="small muted" style="margin:0 0 12px">${t("Quanta gent del tronc ha assajat la seva posició d'aquest castell les últimes 6 setmanes.")}</p>
+        <ul class="prep-list">${prepRows}</ul>
+      </div>` : ''}
       <div>
         <h2 class="section-h">${t('Què acompanya els castells descarregats')}</h2>
         <div class="factor-grid">${factorCards}</div>
@@ -2129,22 +2162,17 @@ async function pageTecnica(tabs) {
           <p class="small muted" style="margin:0 0 12px">${t('Cada quadre és un intent, per ordre. Buit: prova parcial. Gran: diada. Toca\'l per obrir el castell.')}</p>
           ${castellRows ? `<ul class="prog-list">${castellRows}</ul>` : `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
         </div>
-        <div class="stack">
-          <div class="card">
-            <h2 style="margin-bottom:12px">${t('On fallen els castells')}</h2>
-            ${st.fails.length ? `<div class="bars">${st.fails.map((f) => `<div class="bar-row"><span class="nm">${esc(f.where)}</span><span class="bar"><i style="width:${(f.n / st.fails[0].n) * 100}%"></i></span><span class="num">${f.n}×</span><span></span></div>`).join('')}</div>`
-              : `<p class="muted small" style="margin:0">${t("Encara no s'ha marcat on ha fallat cap castell. Es marca a la pàgina del castell, en posar «Carregat» o «Intent».")}</p>`}
-          </div>
-          <div class="card">
-            <h2 style="margin-bottom:6px">${t('Qui sap fer cada posició del tronc')}</h2>
-            <p class="small muted" style="margin:0 0 12px">${t('Si només una persona ho ha fet sovint, un dia que falti costarà cobrir-ho: val la pena preparar-ne més.')}</p>
-            ${depthRows ? `<ul class="prog-list">${depthRows}</ul>` : `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
-          </div>
+        <div class="card">
+          <h2 style="margin-bottom:6px">${t('Recanvis per a cada castell')}</h2>
+          <p class="small muted" style="margin:0 0 10px">${t("Qui ha fet cada posició del tronc en aquest castell. Si poca gent ho ha fet sovint, un dia que falti costarà cobrir-ho. Les propostes són persones d'alçada d'espatlles i pes semblants.")}</p>
+          ${st.reserves.length ? `<select id="reserve-castell" style="margin-bottom:12px">${st.reserves.map((r) => `<option value="${esc(r.castell)}" ${r.castell === reserveCastell ? 'selected' : ''}>${esc(r.castell)} · ${tn(r.attempts, '{n} intent', '{n} intents')}</option>`).join('')}</select>
+            <ul class="prog-list">${reserveRows}</ul>` : `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
         </div>
       </div>
     </div>`;
   bindStatsFilters();
   bindStatsTabs();
+  qs('#reserve-castell')?.addEventListener('change', (e) => { reserveCastell = e.target.value; render({ keepScroll: true }); });
 }
 
 // Resum de temporada: el veu tothom, perquè només parla de castells i sessions (cap dada de ningú).
