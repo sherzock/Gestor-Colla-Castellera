@@ -28,12 +28,14 @@ const nextWeekday = (wd, weeks = 0) => { const d = new Date(today); d.setDate(d.
 const birth = (years) => { const d = new Date(today); d.setFullYear(d.getFullYear() - years); d.setDate(d.getDate() - between(0, 360)); return iso(d); };
 
 transaction(() => {
-  for (const t of ['castell_positions', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'people']) db.exec(`DELETE FROM ${t}`);
+  for (const t of ['castell_positions', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
 
   const insPerson = db.prepare(`INSERT INTO people (username, password_hash, role, name, alias, birthdate, height_cm, shoulder_height_cm, shoulder_width_cm, weight_kg, instrument)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const people = [];
-  insPerson.run('admin', hashPassword(ADMIN_PASSWORD), 'admin', 'Cap de colla', 'Cap', birth(41), 178, 147, 46, 82, null);
+  // El compte d'administració és a part; el cap de colla, a més, té la seva fitxa de membre com tothom.
+  db.prepare('INSERT INTO admins (username, password_hash, name) VALUES (?, ?, ?)').run('admin', hashPassword(ADMIN_PASSWORD), 'Junta tècnica');
+  insPerson.run(null, null, 'member', 'Cap de colla', 'Cap', birth(41), 178, 147, 46, 82, null);
   // Uns quants músics: les primeres persones toquen la gralla o el timbal.
   const instrumentOf = (i) => (i < 5 ? 'gralla' : i < 8 ? 'timbal' : null);
 
@@ -76,6 +78,11 @@ transaction(() => {
   };
 
   const insField = db.prepare('INSERT INTO event_fields (event_id, label, kind, options, required, position) VALUES (?, ?, ?, ?, ?, ?)');
+  // La diada té data límit per respondre: dos dies abans, a les 22:00.
+  const diadaDate = db.prepare('SELECT date FROM events WHERE id = ?').get(events.diada).date;
+  const until = new Date(`${diadaDate}T22:00:00`);
+  until.setDate(until.getDate() - 2);
+  db.prepare('UPDATE events SET rsvp_until = ? WHERE id = ?').run(`${iso(until)}T22:00`, events.diada);
   const fDinar = Number(insField.run(events.diada, 'Em quedo a dinar', 'bool', null, 0, 1).lastInsertRowid);
   const fAcomp = Number(insField.run(events.diada, 'Acompanyants al dinar', 'number', null, 0, 2).lastInsertRowid);
   const fSoparAcomp = Number(insField.run(events.sopar, 'Acompanyants', 'number', null, 1, 1).lastInsertRowid);

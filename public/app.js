@@ -1,4 +1,4 @@
-import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS } from './castell.js';
+import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL } from './castell.js';
 import { proposeLineup } from './muntador.js';
 import { translate, LANGS } from './i18n.js';
 import { openZoom } from './zoom.js';
@@ -46,7 +46,7 @@ async function api(method, url, body) {
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const isAdmin = () => me?.role === 'admin';
+const isAdmin = () => me?.mode === 'admin';
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const qs = (sel, root = document) => root.querySelector(sel);
 const qsa = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -88,6 +88,20 @@ const INSTRUMENTS = { gralla: 'Gralla', timbal: 'Timbal' };
 const shortName = (p) => p.alias || p.name?.replace(/^(\S+)\s+(\S).*$/, '$1 $2.') || '';
 const fullName = (p) => (p.alias ? `${p.name} «${p.alias}»` : p.name);
 const initial = (p) => (shortName(p)[0] || '?').toUpperCase();
+// «2026-11-07T20:00» → «dv. 7 de nov. a les 20:00»
+const fmtDeadline = (v) => t('{date} a les {time}', { date: fmt(v.slice(0, 10), { weekday: 'short', day: 'numeric', month: 'short' }), time: v.slice(11, 16) });
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const area = Object.assign(document.createElement('textarea'), { value: text });
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+  toast(t('Copiat'));
+}
 
 const svg = (path, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 const icon = {
@@ -98,6 +112,10 @@ const icon = {
   calendar: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
   users: svg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
   user: svg('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+  lock: svg('<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
+  copy: svg('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>'),
+  share: svg('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>'),
+  calAdd: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/>'),
   logout: svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
   swap: svg('<path d="M17 3l4 4-4 4M21 7H9M7 21l-4-4 4-4M3 17h12"/>'),
   pin: svg('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'),
@@ -139,11 +157,28 @@ function formData(form) {
 }
 
 // ---------- Ajustos: persona, idioma i tema ----------
+// Membre: «No sóc jo» torna a «Qui ets?». Administració: tanca només el compte d'administració.
 async function switchPerson() {
   closeModal();
   await attempt(() => api('POST', '/logout'));
   me = null;
   location.hash = '#/login';
+}
+
+// Al mateix mòbil es pot tenir obert el compte d'administració i la fitxa de membre, i passar d'un a l'altre.
+async function switchMode(mode) {
+  closeModal();
+  if (!(await attempt(() => api('POST', '/mode', { mode })))) return;
+  me = await api('GET', '/me');
+  toast(mode === 'admin' ? t('Mode administració') : t('Hola, {name}!', { name: shortName(me) }));
+  if (location.hash === '#/' || !location.hash) render(); else location.hash = '#/';
+}
+
+async function adminLogout() {
+  closeModal();
+  if (!(await attempt(() => api('POST', '/logout')))) return;
+  me = null;
+  try { me = await api('GET', '/me'); location.hash = '#/'; render(); } catch { /* sense fitxa de membre: va a «Qui ets?» */ }
 }
 
 function settingsControls() {
@@ -165,20 +200,29 @@ function bindSettings(root, onLang) {
 }
 
 function settingsModal() {
+  const member = me.sessions?.member;
+  const adminOpen = me.sessions?.admin;
   openModal(`${modalHead(t('Ajustos'))}
     <div class="me-card">
-      <span class="avatar lg">${esc(initial(me))}</span>
-      <div><div class="nm">${esc(fullName(me))}</div>
-        <div class="small muted">${isAdmin() ? t('Has entrat com a administrador/a') : t('Has entrat com a membre')}</div></div>
+      <span class="avatar lg ${isAdmin() ? 'admin' : ''}">${esc(initial(me))}</span>
+      <div><div class="nm">${esc(isAdmin() ? me.name : shortName(me))}</div>
+        <div class="small muted">${isAdmin() ? t("Compte d'administració · per editar") : t('Has entrat com a membre')}</div></div>
     </div>
     <div class="stack">
       ${isAdmin()
-        ? `<button class="btn block" id="switch-person">${icon.logout}${t('Tanca la sessió d\'administrador/a')}</button>`
+        ? `${member
+            ? `<button class="btn primary block" data-mode="member">${icon.user}${t('Respon com a {name}', { name: esc(shortName(member)) })}</button>`
+            : `<a class="btn primary block" href="#/login">${icon.user}${t('Entra com a membre per respondre')}</a>`}
+           <button class="btn block" id="admin-logout">${icon.logout}${t("Tanca el compte d'administració")}</button>`
         : `<button class="btn primary block" id="switch-person">${icon.swap}${t('No sóc jo · Canvia de persona')}</button>
-           <a class="btn ghost block" href="#/admin">${t('Entrar com a administrador/a')}</a>`}
+           ${adminOpen
+             ? `<button class="btn block" data-mode="admin">${icon.lock}${t('Passa al mode administració')}</button>`
+             : `<a class="btn ghost block" href="#/admin">${t('Entrar com a administrador/a')}</a>`}`}
     </div>
     ${settingsControls()}`, (m) => {
-    qs('#switch-person', m).onclick = switchPerson;
+    qs('#switch-person', m)?.addEventListener('click', switchPerson);
+    qs('#admin-logout', m)?.addEventListener('click', adminLogout);
+    qsa('[data-mode]', m).forEach((b) => (b.onclick = () => switchMode(b.dataset.mode)));
     bindSettings(m, () => { closeModal(); render({ keepScroll: true }); settingsModal(); });
   });
 }
@@ -196,12 +240,15 @@ function renderNav() {
     link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')),
     isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones')) : '',
     link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques')),
-    link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
+    isAdmin() ? link('#/comptes', 'lock', t('Comptes'), path.startsWith('#/comptes')) : link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
   ].join('');
+  document.body.classList.toggle('admin-mode', isAdmin());
   const chip = document.getElementById('me-chip');
   chip.title = t('Ajustos i canvi de persona');
   chip.setAttribute('aria-label', chip.title);
-  chip.innerHTML = `<span class="avatar">${esc(initial(me))}</span><span class="nm">${esc(shortName(me))}</span>${isAdmin() ? '<span class="badge">Admin</span>' : ''}${icon.chevron}`;
+  chip.innerHTML = isAdmin()
+    ? `<span class="avatar admin">${icon.lock}</span><span class="nm">${t('Administració')}</span>${icon.chevron}`
+    : `<span class="avatar">${esc(initial(me))}</span><span class="nm">${esc(shortName(me))}</span>${icon.chevron}`;
 }
 document.getElementById('me-chip').onclick = () => settingsModal();
 
@@ -214,6 +261,7 @@ const routes = [
   [/^#\/castell\/(\d+)$/, pageCastell],
   [/^#\/persones$/, pagePeople],
   [/^#\/perfil$/, pageProfile],
+  [/^#\/comptes$/, pageAccounts],
   [/^#\/calendari(?:\/(\d{4}-\d{2}))?$/, pageCalendar],
   [/^#\/estadistiques$/, pageStats],
   [/^#\/estadistiques\/persona\/(\d+)$/, pagePersonStats],
@@ -310,6 +358,7 @@ async function pageAdminLogin() {
       <label class="field">${t('Contrasenya')}<input name="password" type="password" autocomplete="current-password" required></label>
       <div class="error" id="login-error"></div>
       <button class="btn primary" style="width:100%">${t('Entra')}</button>
+      <p class="small muted" style="text-align:center;margin:0">${t("El compte d'administració només serveix per editar. Per dir si vens a les sessions, entra com a membre amb el teu nom.")}</p>
       <a href="${me ? '#/' : '#/login'}" class="small" style="display:block;text-align:center">${me ? t("Tornar a l'aplicació") : t('Tornar a «Qui ets?»')}</a>
     </form></div>`;
   qs('#login-form').onsubmit = async (e) => {
@@ -317,6 +366,7 @@ async function pageAdminLogin() {
     try {
       me = await api('POST', '/login', formData(e.target));
       location.hash = '#/';
+      toast(t('Mode administració'));
     } catch (err) {
       qs('#login-error').textContent = err.message;
     }
@@ -357,15 +407,18 @@ async function pageHome() {
   const types = ['tots', ...TYPES.filter((x) => x !== 'musics' || showMusics)];
   if (!types.includes(homeType)) homeType = 'tots';
   const list = events.filter((e) => homeType === 'tots' || e.type === homeType);
-  const pending = homeScope === 'upcoming' ? list.filter((e) => !e.my_status).length : 0;
+  // Els comptes d'administració no responen: només els membres veuen què tenen pendent.
+  const answering = homeScope === 'upcoming' && !isAdmin();
+  const pending = answering ? list.filter((e) => !e.my_status && e.rsvp_open).length : 0;
   let lastMonth = '';
   const items = list.map((e) => {
     const month = fmt(e.date, { month: 'long', year: 'numeric' });
     const header = month !== lastMonth ? `<div class="month">${month}</div>` : '';
     lastMonth = month;
     // A les properes, es veu d'un cop d'ull què has respost: franja de color i, si encara no has dit res, un avís.
-    const answer = homeScope === 'upcoming' ? `ans-${e.my_status || 'none'}` : '';
-    return `${header}<a class="card event-card ${e.type} ${answer}" href="#/sessio/${e.id}" ${!e.my_status && homeScope === 'upcoming' ? 'data-pending' : ''}>
+    const waiting = answering && !e.my_status && e.rsvp_open;
+    const answer = answering && (e.my_status || waiting) ? `ans-${e.my_status || 'none'}` : '';
+    return `${header}<a class="card event-card ${e.type} ${answer}" href="#/sessio/${e.id}" ${waiting ? 'data-pending' : ''}>
       <div class="date-block"><div class="d">${day(e.date).getDate()}</div><div class="w">${fmt(e.date, { weekday: 'short' })}</div></div>
       <div class="event-main">
         ${typeBadge(e.type)}${e.escoleta ? ` <span class="badge escoleta">${t('Escoleta')}</span>` : ''}
@@ -376,8 +429,9 @@ async function pageHome() {
         </div>
         ${e.castells ? `<div class="event-castells">${castellTags(e.castells)}</div>` : ''}
       </div>
-      <div class="event-side">${homeScope === 'upcoming' && !e.my_status
-        ? `<span class="status pending">${icon.alert}${t('Respon')}</span>`
+      <div class="event-side">${isAdmin() ? ''
+        : waiting ? `<span class="status pending">${icon.alert}${t('Respon')}</span>`
+        : !e.my_status && answering ? `<span class="status none">${t('Tancat')}</span>`
         : statusPill(e.my_status)}</div>
     </a>`;
   }).join('');
@@ -401,7 +455,7 @@ async function pageHome() {
       </div>
     </div>
     ${pending ? `<button class="pending-banner" id="go-pending">${icon.alert}<span>${tn(pending, 'Tens {n} sessió sense respondre', 'Tens {n} sessions sense respondre')}</span><b>${t('Respon ara')}</b></button>`
-      : homeScope === 'upcoming' && list.length ? `<div class="all-answered">${icon.check}${t('Has respost totes les properes sessions.')}</div>` : ''}
+      : answering && list.length ? `<div class="all-answered">${icon.check}${t('Has respost totes les properes sessions.')}</div>` : ''}
     <div class="events">${items || `<div class="empty card">${homeScope === 'upcoming' ? t('No hi ha sessions programades.') : t('No hi ha sessions passades.')}</div>`}</div>`;
 
   qs('#hello-switch')?.addEventListener('click', switchPerson);
@@ -427,6 +481,8 @@ function eventModal(event, defaults = {}) {
           <label class="field" id="esc-time">${t("Hora de l'escoleta")}<input name="escoleta_time" type="time" value="${esc(e.escoleta_time || '19:00')}"></label>
         </div>
         <label class="field full">${t('Descripció')}<textarea name="description">${esc(e.description)}</textarea></label>
+        <label class="field full">${t('Data límit per respondre (opcional)')}<input name="rsvp_until" type="datetime-local" value="${esc(e.rsvp_until || '')}">
+          <span class="small muted">${t('Després ja no es podrà canviar la resposta. Si no en poses, es pot respondre fins al mateix dia.')}</span></label>
       </div>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${event ? t('Desa') : t('Crea')}</button></div>
     </form>`, (m) => {
@@ -595,13 +651,20 @@ async function pageEvent(id) {
         <h1>${esc(event.title)}</h1>
         <div class="meta"><span>${icon.calendar}${fmtLong(event.date)}</span>${time(event) ? `<span>${icon.clock}${time(event)}</span>` : ''}${event.location ? `<span>${icon.pin}${esc(event.location)}</span>` : ''}${event.escoleta ? `<span class="badge escoleta">${t('Escoleta')}${escTime}</span>` : ''}</div>
       </div>
-      ${admin ? `<div class="actions"><button class="btn sm" id="edit-event">${t('Edita')}</button><button class="btn sm danger" id="del-event">${t('Esborra')}</button></div>` : ''}
+      <div class="actions">
+        ${event.date >= todayIso() ? `<a class="btn sm" href="/api/calendar.ics?event=${event.id}${calendarCode('&')}" download>${icon.calAdd}${t('Al meu calendari')}</a>` : ''}
+        ${admin ? `<button class="btn sm" id="edit-event">${t('Edita')}</button><button class="btn sm danger" id="del-event">${t('Esborra')}</button>` : ''}
+      </div>
     </div>
     ${event.description ? `<div class="card description">${esc(event.description)}</div>` : ''}
     <div class="grid-2" style="margin-top:14px">
       <div class="stack">
-        <form class="card" id="rsvp-form">
+        ${admin ? '' : `<form class="card ${event.rsvp_open ? '' : 'closed'}" id="rsvp-form">
           <h2 style="margin-bottom:12px">${t('La meva assistència')}</h2>
+          ${!event.rsvp_open ? `<div class="rsvp-note closed">${icon.lock}<span>${status
+              ? t('Les respostes ja estan tancades. Si hi ha cap canvi, digues-ho a un administrador.')
+              : t('Les respostes ja estan tancades i no vas respondre. Si véns, digues-ho a un administrador.')}</span></div>`
+            : event.rsvp_until ? `<div class="rsvp-note">${icon.clock}<span>${t('Pots respondre fins al {when}.', { when: `<strong>${fmtDeadline(event.rsvp_until)}</strong>` })}</span></div>` : ''}
           ${isMusics ? `<p class="small muted" style="margin:-6px 0 12px">${me.instrument
             ? t('Hi vas com a: {instrument}', { instrument: `<strong>${INSTRUMENTS[me.instrument]}</strong>` })
             : t('No consta que toquis cap instrument. Demana a un administrador que ho afegeixi a la teva fitxa.')}</p>` : ''}
@@ -617,8 +680,8 @@ async function pageEvent(id) {
             ${fields.map((f) => fieldInput(f, mine?.extra?.[f.id])).join('')}
           </div>
           <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
-          <div class="form-actions"><button class="btn primary" ${status || escoleta !== null ? '' : 'disabled'} id="rsvp-save">${t('Desa')}</button></div>
-        </form>
+          ${event.rsvp_open ? `<div class="form-actions"><button class="btn primary" ${status || escoleta !== null ? '' : 'disabled'} id="rsvp-save">${t('Desa')}</button></div>` : ''}
+        </form>`}
         ${isMusics ? '' : `<div class="card">
           <div class="card-head"><h2>${t('Castells')}</h2>
             ${admin ? `<div class="actions"><button class="btn sm primary" id="add-castell">${icon.plus}${t('Afegeix castell')}</button></div>` : ''}
@@ -627,11 +690,13 @@ async function pageEvent(id) {
         </div>`}
         ${fieldsCard}
       </div>
-      <div class="stack">${adminTable}</div>
+      <div class="stack">${admin ? answersCard(event, attendance) : ''}${adminTable}</div>
     </div>`;
 
   // Confirmació pròpia
   const form = qs('#rsvp-form');
+  if (form && !event.rsvp_open) qsa('input, select, textarea, button', form).forEach((el) => (el.disabled = true));
+  if (form && event.rsvp_open) {
   qsa('#rsvp-main button', form).forEach((b) => (b.onclick = () => {
     status = b.dataset.v;
     qsa('#rsvp-main button', form).forEach((x) => x.classList.toggle('on', x === b));
@@ -653,8 +718,10 @@ async function pageEvent(id) {
       render({ keepScroll: true });
     }
   };
+  }
 
   if (!admin) return;
+  bindAnswersCard(event, attendance);
   const reload = () => render({ keepScroll: true });
   qs('#edit-event').onclick = () => eventModal(event);
   qs('#del-event').onclick = async () => {
@@ -712,6 +779,55 @@ async function pageEvent(id) {
         };
       });
     };
+  });
+}
+
+// ---------- Respostes: data límit i qui falta per contestar (administració) ----------
+function pendingPeople(event, attendance) {
+  return attendance.filter((a) => !a.status && (event.type !== 'musics' || a.instrument))
+    .sort((a, b) => shortName(a).localeCompare(shortName(b)));
+}
+
+// Missatge per enganxar al grup de WhatsApp: només malnoms, com a la resta de l'app.
+function reminderText(event, pending) {
+  const when = `${fmtLong(event.date)}${event.start_time ? ` · ${event.start_time}` : ''}`;
+  return [
+    `📣 ${event.title} · ${when}`,
+    t('Encara no heu contestat: {names}.', { names: pending.map(shortName).join(', ') }),
+    event.rsvp_until ? t('Podeu respondre fins al {when}.', { when: fmtDeadline(event.rsvp_until) }) : null,
+    t("Entreu a {url} i digueu si veniu. Gràcies!", { url: `${location.origin}/#/sessio/${event.id}` }),
+  ].filter(Boolean).join('\n');
+}
+
+function answersCard(event, attendance) {
+  if (event.date < todayIso()) return '';
+  const pending = pendingPeople(event, attendance);
+  const state = !event.rsvp_open ? `<span class="status no">${icon.lock}${t('Tancades')}</span>`
+    : event.rsvp_until ? `<span class="status si">${t('Obertes fins al {when}', { when: fmtDeadline(event.rsvp_until) })}</span>`
+      : `<span class="status si">${t('Obertes fins al dia de la sessió')}</span>`;
+  return `<div class="card answers-card">
+    <div class="card-head"><h2>${t('Respostes')}</h2>
+      <div class="actions"><button class="btn sm" id="toggle-rsvp">${event.rsvp_open ? `${icon.lock}${t('Tanca-les ara')}` : t('Torna-les a obrir')}</button></div></div>
+    <div class="counts" style="margin-bottom:12px">${state}</div>
+    ${pending.length ? `<h3 class="instr-h">${tn(pending.length, 'Falta {n} persona per contestar', 'Falten {n} persones per contestar')}</h3>
+      <div class="names">${pending.map((a) => `<span>${esc(shortName(a))}</span>`).join('')}</div>
+      <div class="share-row">
+        <a class="btn sm primary" id="wa-send" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(reminderText(event, pending))}">${icon.share}${t('Envia per WhatsApp')}</a>
+        <button class="btn sm" id="copy-reminder">${icon.copy}${t('Copia el missatge')}</button>
+      </div>
+      <p class="small muted" style="margin:8px 0 0">${t('El missatge porta la llista de malnoms i l\'enllaç a la sessió, per enviar-lo al grup.')}</p>`
+    : `<div class="all-answered" style="margin:0">${icon.check}${t('Tothom ha contestat.')}</div>`}
+  </div>`;
+}
+
+function bindAnswersCard(event, attendance) {
+  qs('#copy-reminder')?.addEventListener('click', () => copyText(reminderText(event, pendingPeople(event, attendance))));
+  qs('#toggle-rsvp')?.addEventListener('click', async () => {
+    if (event.rsvp_open && !confirm(t('Tancar les respostes? Els membres ja no podran canviar si vénen o no.'))) return;
+    if (await attempt(() => api('POST', `/events/${event.id}/rsvp`, { open: !event.rsvp_open }))) {
+      toast(event.rsvp_open ? t('Respostes tancades') : t('Respostes obertes'));
+      render({ keepScroll: true });
+    }
   });
 }
 
@@ -1024,6 +1140,67 @@ function historyView(s, ctx) {
     ${pinyaSections.map(({ title, items }) => `<h3 style="margin:20px 0 8px">${esc(title)}</h3><div class="hist-grid">${items.map(cell).join('')}</div>`).join('')}`;
 }
 
+// ---------- Revisió de l'alineació (administració) ----------
+// Avisos per detectar errors abans de la sessió: gent col·locada que no ve, forats al tronc,
+// espatlles desiguals en un mateix pis i algú que pesa més que qui el porta.
+const SHOULDER_GAP_CM = 5;
+const WEIGHT_GAP_KG = 3;
+function lineupWarnings(s, byKey, candidates, event) {
+  const out = [];
+  const status = new Map(candidates.map((c) => [c.id, c.status]));
+  const role = (key) => s.positions.get(key)?.role || key;
+  const who = (a) => assignedName(a, true);
+  // Cada avís és una línia amb les posicions afectades com a botons per anar-hi.
+  const chip = (a) => ({ key: a.pos_key, label: `${who(a)} · ${role(a.pos_key)}` });
+  if (event.date >= todayIso()) {
+    const placed = [...byKey.values()].filter((a) => a.person_id);
+    const group = (level, text, list) => { if (list.length) out.push({ level, text, items: list.map(chip) }); };
+    group('bad', t('Han dit que no vénen'), placed.filter((a) => status.get(a.person_id) === 'no'));
+    group('warn', t('Han dit «potser»'), placed.filter((a) => status.get(a.person_id) === 'potser'));
+    group('warn', t('Encara no han contestat'), placed.filter((a) => !status.get(a.person_id)));
+  }
+  const tronc = [...s.positions.values()].filter((p) => ['baixos', 'tronc', 'pom', 'agulla'].includes(p.group));
+  const empty = tronc.filter((p) => !byKey.has(p.key));
+  if (empty.length) out.push({ level: 'bad', text: tn(empty.length, 'Falta {n} posició al tronc', 'Falten {n} posicions al tronc'), items: empty.map((p) => ({ key: p.key, label: p.role })) });
+
+  // Mateix pis: les espatlles han de quedar a la mateixa alçada.
+  const byLevel = new Map();
+  for (const p of tronc) if (p.key.startsWith('t') && p.level > 1) byLevel.set(p.level, [...(byLevel.get(p.level) || []), p]);
+  for (const [level, list] of byLevel) {
+    const people = list.map((p) => byKey.get(p.key)).filter((a) => a?.shoulder_height_cm);
+    if (people.length < 2) continue;
+    const hs = people.map((a) => a.shoulder_height_cm);
+    const gap = Math.round(Math.max(...hs) - Math.min(...hs));
+    if (gap > SHOULDER_GAP_CM) {
+      out.push({ level: 'warn', text: t("{level}: {n} cm de diferència d'alçada d'espatlles", { level: LEVEL_PLURAL[level - 1], n: gap }),
+        items: people.sort((a, b) => b.shoulder_height_cm - a.shoulder_height_cm).map((a) => ({ key: a.pos_key, label: `${who(a)} · ${a.shoulder_height_cm} cm` })) });
+    }
+  }
+  // Qui puja no hauria de pesar més que qui el porta (mateixa columna, un pis més avall).
+  for (const p of tronc) {
+    const m = p.key.match(/^(t|ag)(\d+)(-\d+)?$/);
+    if (!m || Number(m[2]) < 2) continue;
+    const below = `${m[1]}${Number(m[2]) - 1}${m[3] || ''}`;
+    const up = byKey.get(p.key), down = byKey.get(below);
+    if (up?.weight_kg && down?.weight_kg && up.weight_kg - down.weight_kg > WEIGHT_GAP_KG) {
+      out.push({ level: 'warn', text: t('{up} pesa {n} kg més que {down}, que el porta', { up: who(up), n: Math.round(up.weight_kg - down.weight_kg), down: who(down) }),
+        items: [chip(up), chip(down)] });
+    }
+  }
+  const order = { bad: 0, warn: 1 };
+  return out.sort((a, b) => order[a.level] - order[b.level]);
+}
+
+function warningsCard(warnings) {
+  if (!warnings.length) return `<div class="lineup-ok">${icon.check}${t("Revisió de l'alineació: tot correcte")}</div>`;
+  return `<details class="card lineup-warnings" open>
+    <summary>${icon.alert}<strong>${tn(warnings.length, '{n} avís a revisar', '{n} avisos a revisar')}</strong>
+      <span class="small muted">${t('Toca un nom per veure la posició')}</span></summary>
+    <ul>${warnings.map((w) => `<li class="${w.level}"><span class="w-text">${esc(w.text)}</span>
+      <span class="w-items">${w.items.map((i) => `<button data-warn="${i.key}">${esc(i.label)}</button>`).join('')}</span></li>`).join('')}</ul>
+  </details>`;
+}
+
 function focusKey(key, s) {
   const el = qs(`#viewer [data-key="${key}"]`);
   if (!el || el.getClientRects().length === 0) {
@@ -1092,6 +1269,7 @@ async function pageCastell(id) {
   const unplaced = confirmed.filter((c) => !keyByPerson.has(c.id));
   const guests = [...saved.values()].filter((p) => p.guest_name);
   const canZoom = castellView !== 'llista';
+  const warnings = admin ? lineupWarnings(s, byKey, candidates, event) : [];
 
   $app.innerHTML = `
     <a class="back" href="#/sessio/${event.id}">${icon.back}${esc(event.title)} · ${fmt(event.date, { day: 'numeric', month: 'short' })}</a>
@@ -1118,6 +1296,7 @@ async function pageCastell(id) {
       <div class="actions"><button class="btn sm primary" id="prop-apply">${t('Aplica')}</button><button class="btn sm" id="prop-again">${t('Torna a generar')}</button><button class="btn sm ghost" id="prop-discard">${t('Descarta')}</button></div>
     </div>` : ''}
     ${selectedPerson ? `<div class="card" style="margin-bottom:14px;border-color:var(--accent)">${t("{name} seleccionat/da: toca una posició per col·locar-l'hi.", { name: `<strong>${esc(fullName(selectedPerson))}</strong>` })} <button class="btn sm ghost" id="cancel-sel">${t('Cancel·la')}</button></div>` : ''}
+    ${admin ? warningsCard(warnings) : ''}
     <div class="viewer-layout ${admin ? 'with-side' : ''}">
       <div class="card">
         <div class="card-head">
@@ -1177,6 +1356,7 @@ async function pageCastell(id) {
   search.oninput = () => { searchQuery = search.value; applySearch(); };
   search.onkeydown = (e) => { if (e.key === 'Enter') qs('#search-hits [data-hit]')?.click(); };
   qs('#search-hits').onclick = (e) => { const b = e.target.closest('[data-hit]'); if (b) focusKey(b.dataset.hit, s); };
+  qsa('[data-warn]').forEach((b) => (b.onclick = () => focusKey(b.dataset.warn, s)));
   applySearch();
 
   qsa('#views button').forEach((b) => (b.onclick = () => { castellView = b.dataset.v; store.set('castellView', castellView); render({ keepScroll: true }); }));
@@ -1464,14 +1644,7 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
     ${n('weight_kg', t('Pes'), 'kg', '0.1')}
   </div></fieldset>
   <label class="field" style="margin-top:12px">${t('Notes')}<textarea name="notes" placeholder="${t('Posicions habituals, lesions…')}">${esc(p.notes)}</textarea></label>
-  ${admin ? `<fieldset style="margin-top:16px"><legend>${t('Administració')}</legend>
-    <p class="small muted" style="margin:0 0 10px">${t('Els membres entren sense contrasenya triant el seu nom. Només els administradors necessiten usuari i contrasenya.')}</p>
-    <div class="form-grid">
-    <label class="field">${t('Usuari')}<input name="username" autocapitalize="none" value="${esc(p.username)}" placeholder="${t('Només per a administradors')}"></label>
-    <label class="field">${isNew ? t('Contrasenya') : t('Nova contrasenya')}<input name="password" type="password" autocomplete="new-password" minlength="8" placeholder="${isNew ? t('Mínim 8 caràcters') : t('Deixa-ho buit per no canviar')}"></label>
-    <label class="field">${t('Rol')}<select name="role"><option value="member">${t('Membre')}</option><option value="admin" ${p.role === 'admin' ? 'selected' : ''}>${t('Administrador/a')}</option></select></label>
-    ${isNew ? '' : `<label class="check"><input type="checkbox" name="active" ${p.active !== 0 ? 'checked' : ''}> ${t('Activa')}</label>`}
-  </div></fieldset>` : ''}`;
+  ${admin && !isNew ? `<label class="check" style="margin-top:12px"><input type="checkbox" name="active" ${p.active !== 0 ? 'checked' : ''}> ${t('Activa (desmarca-ho si ha deixat la colla)')}</label>` : ''}`;
 }
 
 let peopleSort = store.get('peopleSort', 'name');
@@ -1503,10 +1676,9 @@ async function pagePeople() {
         </select></label>
     </div>
     <div class="card"><div class="table-wrap"><table class="responsive" id="people-table">
-      <thead><tr><th>${t('Malnom · Nom')}</th><th>${t('Rol')}</th><th class="num">${t('Edat')}</th><th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th><th class="num">${t('Assistència')}</th></tr></thead>
+      <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th><th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th><th class="num">${t('Assistència')}</th></tr></thead>
       <tbody>${sorted.map((p) => `<tr class="clickable ${p.active ? '' : 'inactive'}" data-id="${p.id}" data-name="${esc(norm(p.name + ' ' + (p.alias || '')))}">
         <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
-        <td data-l="${t('Rol')}">${p.role === 'admin' ? '<span class="badge">Admin</span>' : t('Membre')}</td>
         <td class="num" data-l="${t('Edat')}">${v(age(p.birthdate))}</td>
         <td class="num" data-l="${t('Alçada')}">${v(p.height_cm, ' cm')}</td>
         <td class="num" data-l="${t('Alç. esp.')}">${v(p.shoulder_height_cm, ' cm')}</td>
@@ -1531,7 +1703,7 @@ async function pagePeople() {
 function personModal(person) {
   openModal(`${modalHead(person ? esc(fullName(person)) : t('Nova persona'))}
     <form id="person-form">${personFields(person, { admin: true, isNew: !person })}
-      <div class="form-actions">${person && person.id !== me.id ? `<button type="button" class="btn danger" id="del-person" style="margin-right:auto">${t('Esborra')}</button>` : ''}
+      <div class="form-actions">${person ? `<button type="button" class="btn danger" id="del-person" style="margin-right:auto">${t('Esborra')}</button>` : ''}
         <button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${person ? t('Desa') : t('Crea')}</button></div>
     </form>
     ${person ? `<fieldset style="margin-top:18px"><legend>${t('Historial de posicions')}</legend><div id="person-history" class="muted small">${t('Carregant…')}</div>
@@ -1544,7 +1716,6 @@ function personModal(person) {
     qs('#person-form', m).onsubmit = async (e) => {
       e.preventDefault();
       const d = formData(e.target);
-      if (!d.password) delete d.password;
       if (await attempt(() => api(person ? 'PUT' : 'POST', person ? `/people/${person.id}` : '/people', d))) {
         closeModal(); toast(person ? t('Desat') : t('Persona creada')); render({ keepScroll: true });
       }
@@ -1558,6 +1729,7 @@ function personModal(person) {
 
 // ---------- Perfil ----------
 async function pageProfile() {
+  if (isAdmin()) { location.hash = '#/comptes'; return; }
   me = await api('GET', '/me');
   const history = await api('GET', `/people/${me.id}/history`);
   const historyCard = `<div class="card">
@@ -1566,53 +1738,83 @@ async function pageProfile() {
         <a class="btn sm" href="#/estadistiques/persona/${me.id}" style="margin-top:12px">${icon.chart}${t('Les meves estadístiques')}</a>
       </div>`;
 
-  if (!isAdmin()) {
-    // Els membres entren sense contrasenya: per privacitat, aquí no hi surt cap dada personal.
-    $app.innerHTML = `
-      <div class="page-head"><h1>${esc(shortName(me))}</h1>
-        <div class="actions"><button class="btn sm" id="not-me">${icon.swap}${t('No sóc jo')}</button></div></div>
-      <div class="grid-2">
-        <div class="card">
-          <h2 style="margin-bottom:12px">${t('El meu perfil')}</h2>
-          <div class="data-row"><span class="muted">${t('Com et veuen els altres')}</span><strong>${esc(shortName(me))}</strong></div>
-          ${me.instrument ? `<div class="data-row"><span class="muted">${t('Músic/a')}</span><strong>${INSTRUMENTS[me.instrument]}</strong></div>` : ''}
-          <p class="small muted" style="margin-bottom:0">${t("Per privacitat, a l'app només es veuen els malnoms. Les dades personals (nom, mides, contacte…) només les veuen els administradors; si cal canviar-ne alguna, demana-ho a un administrador.")}</p>
-        </div>
-        ${historyCard}
-      </div>`;
-    qs('#not-me').onclick = switchPerson;
-    return;
-  }
-
+  // Els membres entren sense contrasenya: per privacitat, aquí no hi surt cap dada personal.
   $app.innerHTML = `
-    <div class="page-head"><h1>${t('El meu perfil')}</h1></div>
+    <div class="page-head"><h1>${esc(shortName(me))}</h1>
+      <div class="actions"><button class="btn sm" id="not-me">${icon.swap}${t('No sóc jo')}</button></div></div>
     <div class="grid-2">
-      <form class="card" id="profile-form">
-        <h2 style="margin-bottom:12px">${t('Dades personals')}</h2>
-        ${personFields(me)}
-        <p class="small muted">${t('Les mides només les veuen els administradors de la colla, per fer les alineacions.')}</p>
-        <div class="form-actions"><button class="btn primary">${t('Desa')}</button></div>
-      </form>
+      <div class="card">
+        <h2 style="margin-bottom:12px">${t('El meu perfil')}</h2>
+        <div class="data-row"><span class="muted">${t('Com et veuen els altres')}</span><strong>${esc(shortName(me))}</strong></div>
+        ${me.instrument ? `<div class="data-row"><span class="muted">${t('Músic/a')}</span><strong>${INSTRUMENTS[me.instrument]}</strong></div>` : ''}
+        <p class="small muted" style="margin-bottom:0">${t("Per privacitat, a l'app només es veuen els malnoms. Les dades personals (nom, mides, contacte…) només les veuen els administradors; si cal canviar-ne alguna, demana-ho a un administrador.")}</p>
+      </div>
+      ${historyCard}
+    </div>`;
+  qs('#not-me').onclick = switchPerson;
+}
+
+// ---------- Comptes d'administració ----------
+// Només serveixen per editar. No són persones de la colla: qui també fa castells respon amb la seva fitxa de membre.
+async function pageAccounts() {
+  if (!isAdmin()) { location.hash = '#/perfil'; return; }
+  const admins = await api('GET', '/admins');
+  $app.innerHTML = `
+    <div class="page-head"><h1>${t("Comptes d'administració")}</h1>
+      <div class="actions"><button class="btn primary" id="new-admin">${icon.plus}${t('Nou compte')}</button></div></div>
+    <p class="muted" style="margin-top:0">${t("Aquests comptes només serveixen per editar: sessions, castells i persones. No surten a les llistes ni responen a les sessions. Qui també fa castells respon amb la seva fitxa de membre (des d'«Ajustos» → «Respon com a…»).")}</p>
+    <div class="grid-2">
+      <div class="card">
+        <h2 style="margin-bottom:12px">${t('Comptes')}</h2>
+        <ul class="account-list">${admins.map((a) => `<li>
+          <span class="avatar admin">${esc(initial(a))}</span>
+          <div class="who"><strong>${esc(a.name)}</strong><span class="small muted">${t('Usuari')}: ${esc(a.username)}${a.id === me.admin_id ? ` · ${t('ets tu')}` : ''}</span></div>
+          <button class="btn sm" data-edit="${a.id}">${t('Edita')}</button></li>`).join('')}</ul>
+      </div>
       <div class="stack">
         <form class="card stack" id="pw-form">
-          <h2>${t('Canvia la contrasenya')}</h2>
+          <h2>${t('Canvia la meva contrasenya')}</h2>
           <p class="small muted" style="margin:0">${t('Usuari')}: <strong>${esc(me.username)}</strong></p>
           <label class="field">${t('Contrasenya actual')}<input name="currentPassword" type="password" autocomplete="current-password" required></label>
           <label class="field">${t('Nova contrasenya')}<input name="newPassword" type="password" autocomplete="new-password" minlength="8" required></label>
           <div class="form-actions"><button class="btn">${t('Canvia')}</button></div>
         </form>
-        ${historyCard}
       </div>
     </div>`;
-  qs('#profile-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const saved = await attempt(() => api('PUT', '/me', formData(e.target)));
-    if (saved) { me = { ...me, ...saved }; toast(t('Perfil desat')); }
-  };
+  qs('#new-admin').onclick = () => adminModal();
+  qsa('[data-edit]').forEach((b) => (b.onclick = () => adminModal(admins.find((a) => String(a.id) === b.dataset.edit))));
   qs('#pw-form').onsubmit = async (e) => {
     e.preventDefault();
     if (await attempt(() => api('PUT', '/me', formData(e.target)))) { e.target.reset(); toast(t('Contrasenya canviada')); }
   };
+}
+
+function adminModal(account) {
+  const self = account?.id === me.admin_id;
+  openModal(`${modalHead(account ? esc(account.name) : t('Nou compte'))}
+    <form id="admin-form" class="stack">
+      <label class="field">${t('Nom')}<input name="name" required value="${esc(account?.name)}" placeholder="${t('p. ex. Junta tècnica, Marta…')}"></label>
+      <label class="field">${t('Usuari')}<input name="username" required autocapitalize="none" autocomplete="off" value="${esc(account?.username)}"></label>
+      <label class="field">${account ? t('Nova contrasenya') : t('Contrasenya')}<input name="password" type="password" autocomplete="new-password" minlength="8" ${account ? '' : 'required'} placeholder="${account ? t('Deixa-ho buit per no canviar') : t('Mínim 8 caràcters')}"></label>
+      <div class="form-actions">${account && !self ? `<button type="button" class="btn danger" id="del-admin" style="margin-right:auto">${t('Esborra')}</button>` : ''}
+        <button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${account ? t('Desa') : t('Crea')}</button></div>
+    </form>`, (m) => {
+    qs('#admin-form', m).onsubmit = async (e) => {
+      e.preventDefault();
+      const d = formData(e.target);
+      if (!d.password) delete d.password;
+      if (await attempt(() => api(account ? 'PUT' : 'POST', account ? `/admins/${account.id}` : '/admins', d))) {
+        closeModal();
+        toast(account ? t('Desat') : t('Compte creat'));
+        if (self) me = await api('GET', '/me');
+        render({ keepScroll: true });
+      }
+    };
+    qs('#del-admin', m)?.addEventListener('click', async () => {
+      if (!confirm(t('Esborrar el compte «{name}»? Ja no podrà entrar com a administrador/a.', { name: account.name }))) return;
+      if (await attempt(() => api('DELETE', `/admins/${account.id}`))) { closeModal(); render(); }
+    });
+  });
 }
 
 // ---------- Calendari (admins) ----------
@@ -1642,7 +1844,7 @@ async function pageCalendar(ym) {
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Calendari')}</h1>
-      <div class="actions">${isAdmin() ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div></div>
+      <div class="actions"><button class="btn" id="cal-subscribe">${icon.calAdd}${t('Al meu calendari')}</button>${isAdmin() ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div></div>
     <div class="cal-head">
       <button class="btn sm" id="cal-prev" aria-label="${t('Mes anterior')}">‹</button>
       <h2 class="cal-title">${esc(title)}</h2>
@@ -1671,28 +1873,49 @@ async function pageCalendar(ym) {
   qs('#cal-prev').onclick = () => { location.hash = `#/calendari/${shiftMonth(calMonth, -1)}`; };
   qs('#cal-next').onclick = () => { location.hash = `#/calendari/${shiftMonth(calMonth, 1)}`; };
   qs('#cal-today').onclick = () => { location.hash = `#/calendari/${today.slice(0, 7)}`; };
+  qs('#cal-subscribe').onclick = calendarModal;
   if (!isAdmin()) return;
   qs('#new-event').onclick = () => eventModal(null, { date: calMonth === today.slice(0, 7) ? today : `${calMonth}-01` });
   qsa('.cal-day').forEach((cell) => (cell.onclick = (e) => { if (!e.target.closest('a')) eventModal(null, { date: cell.dataset.date }); }));
+}
+
+// Subscripció al calendari del mòbil: l'app de calendari llegeix sola les sessions i les manté al dia.
+const calendarCode = (sep) => (config.needsCode && store.get('collaCode', '') ? `${sep}code=${encodeURIComponent(store.get('collaCode', ''))}` : '');
+function calendarModal() {
+  const musics = isAdmin() || me.instrument ? 'musics=1' : '';
+  const query = [musics, calendarCode('').slice(0)].filter(Boolean).join('&');
+  const url = `${location.origin}/api/calendar.ics${query ? `?${query}` : ''}`;
+  const webcal = url.replace(/^https?:/, 'webcal:');
+  const google = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(webcal)}`;
+  openModal(`${modalHead(t('Les sessions al teu calendari'))}
+    <p class="muted" style="margin-top:0">${t("Les sessions de la colla sortiran al calendari del teu mòbil, i s'actualitzaran soles quan se n'afegeixin o canviïn.")}</p>
+    <div class="stack">
+      <a class="btn primary block" href="${esc(webcal)}">${icon.calAdd}${t('iPhone, iPad o Mac')}</a>
+      <a class="btn primary block" href="${esc(google)}" target="_blank" rel="noopener">${icon.calAdd}${t('Android o Google Calendar')}</a>
+      <button class="btn block" id="copy-cal">${icon.copy}${t("Copia l'enllaç (altres calendaris)")}</button>
+    </div>
+    <p class="small muted" style="margin-bottom:0">${t("A l'iPhone, toca «Subscriure't». A Google, toca «Afegeix»: els canvis poden trigar unes hores a arribar-hi.")}</p>`, (m) => {
+    qs('#copy-cal', m).onclick = () => copyText(url);
+  });
 }
 
 // ---------- Estadístiques ----------
 // Per temporades (cada any natural) o de tota la història, i de totes les sessions, només diades o només assajos.
 let statsSeason = String(new Date().getFullYear());
 let statsKind = 'all';
-let statsTab = store.get('statsTab', 'castells');
+let statsTab = store.get('statsTab', 'temporada');
 const RESULT_ORDER = ['descarregat', 'carregat', 'intent', 'intent desfet', 'previst'];
 const resultName = (r) => (r === 'previst' ? t('Sense resultat') : RESULTS[r]);
 const statsQuery = () => `season=${encodeURIComponent(statsSeason)}&kind=${statsKind}`;
 
-function statsFilters(seasons) {
-  const kinds = [['all', t('Tot')], ['diades', t('Diades')], ['assajos', t('Assajos')]];
+function statsFilters(seasons, { kinds: showKinds = true } = {}) {
+  const kinds = showKinds ? [['all', t('Tot')], ['diades', t('Diades')], ['assajos', t('Assajos')]] : [];
   return `<div class="toolbar">
     <select id="st-season" style="width:auto" aria-label="${t('Temporada')}">
       ${seasons.map((y) => `<option value="${y}" ${statsSeason === y ? 'selected' : ''}>${t('Temporada {y}', { y })}</option>`).join('')}
       <option value="all" ${statsSeason === 'all' ? 'selected' : ''}>${t('Totes les temporades')}</option>
     </select>
-    <div class="tabs seg" id="st-kind">${kinds.map(([k, l]) => `<button data-k="${k}" class="${statsKind === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="tabs seg ${kinds.length ? '' : 'hidden'}" id="st-kind">${kinds.map(([k, l]) => `<button data-k="${k}" class="${statsKind === k ? 'on' : ''}">${l}</button>`).join('')}</div>
   </div>`;
 }
 
@@ -1762,18 +1985,27 @@ function personStatsHtml(st) {
     </div>`;
 }
 
+function statsTabs() {
+  const tabs = isAdmin()
+    ? [['temporada', t('Temporada')], ['castells', t('Castells')], ['persones', t('Persones')]]
+    : [['temporada', t('Temporada')], ['meves', t('Les meves')]];
+  if (!tabs.some(([k]) => k === statsTab)) statsTab = 'temporada';
+  return `<div class="tabs" id="st-tab">${tabs.map(([k, l]) => `<button data-t="${k}" class="${statsTab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+}
+const bindStatsTabs = () => qsa('#st-tab button').forEach((b) => (b.onclick = () => { statsTab = b.dataset.t; store.set('statsTab', statsTab); render(); }));
+
 async function pageStats() {
-  if (!isAdmin()) return pagePersonStats(me.id);
+  const tabs = statsTabs();
+  if (statsTab === 'meves') return pagePersonStats(me.id, tabs);
+  if (statsTab === 'temporada') return pageSeason(tabs);
   const people = statsTab === 'persones';
   const data = await api('GET', `/stats/${people ? 'people' : 'castells'}?${statsQuery()}`);
-  const tabs = [['castells', t('Castells')], ['persones', t('Persones')]];
   $app.innerHTML = `
-    <div class="page-head"><h1>${t('Estadístiques')}</h1>
-      <div class="actions"><div class="tabs" id="st-tab">${tabs.map(([k, l]) => `<button data-t="${k}" class="${statsTab === k ? 'on' : ''}">${l}</button>`).join('')}</div></div></div>
+    <div class="page-head"><h1>${t('Estadístiques')}</h1><div class="actions">${tabs}</div></div>
     ${statsFilters(data.seasons)}
     <div class="stats-body">${people ? peopleStatsHtml(data) : castellStatsHtml(data)}</div>`;
   bindStatsFilters();
-  qsa('#st-tab button').forEach((b) => (b.onclick = () => { statsTab = b.dataset.t; store.set('statsTab', statsTab); render(); }));
+  bindStatsTabs();
 
   if (people) {
     qs('#st-q').oninput = (e) => {
@@ -1784,6 +2016,51 @@ async function pageStats() {
   } else {
     qsa('#st-castells tbody tr').forEach((tr) => (tr.onclick = () => attemptsModal(data.castells[Number(tr.dataset.i)])));
   }
+}
+
+// Resum de temporada: el veu tothom, perquè només parla de castells i sessions (cap dada de ningú).
+async function pageSeason(tabs) {
+  const st = await api('GET', `/stats/season?season=${encodeURIComponent(statsSeason)}`);
+  const att = st.attendance;
+  const short = (d) => fmt(d, { day: 'numeric', month: 'short' });
+  const castellLink = (c, cls) => `<li><a href="#/castell/${c.castell_id}"><span class="castell-tag ${cls}">${esc(c.castell)}</span></a>
+    <span class="small muted">${t('Primer cop: {date}', { date: `${short(c.date)} · ${esc(c.title)}` })}</span></li>`;
+  const attTile = (type, label) => att[type].sessions
+    ? statTile(att[type].average, label, '', `${tn(att[type].sessions, '{n} sessió', '{n} sessions')}${att[type].max ? ` · ${t('màx. {n}', { n: att[type].max.n })}` : ''}`)
+    : '';
+  const best = st.descarregats[0];
+  $app.innerHTML = `
+    <div class="page-head"><h1>${t('Estadístiques')}</h1><div class="actions">${tabs}</div></div>
+    ${statsFilters(st.seasons, { kinds: false })}
+    <div class="stats-body">
+      ${best ? `<div class="card season-hero">
+        <span class="small muted">${statsSeason === 'all' ? t('Millor castell de la història') : t('Millor castell de la temporada')}</span>
+        <a href="#/castell/${best.castell_id}" class="big-castell r-descarregat">${esc(best.castell)}</a>
+        <span class="muted">${RESULTS.descarregat} · ${short(best.date)} · ${esc(best.title)}</span>
+      </div>` : ''}
+      ${resultTiles(st.total, st.results)}
+      ${att.assaig.sessions || att.diada.sessions || att.esdeveniment.sessions ? `<div>
+        <h2 class="section-h">${t('Mitjana de gent per sessió')}</h2>
+        <div class="stat-tiles">${attTile('assaig', t('Assajos'))}${attTile('diada', t('Diades'))}${attTile('esdeveniment', t('Esdeveniments'))}</div>
+      </div>` : ''}
+      ${st.total ? `<div class="grid-2">
+        <div class="card">
+          <h2 style="margin-bottom:12px">${t('Castells descarregats')} <span class="muted small">${st.descarregats.length}</span></h2>
+          ${st.descarregats.length ? `<ul class="recent">${st.descarregats.map((c) => castellLink(c, 'r-descarregat')).join('')}</ul>` : `<p class="muted small">${t('Encara cap aquesta temporada.')}</p>`}
+          ${st.carregats.filter((c) => !st.descarregats.some((d) => d.castell === c.castell)).length ? `<h3 class="instr-h" style="margin-top:14px">${t('Només carregats')}</h3>
+            <ul class="recent">${st.carregats.filter((c) => !st.descarregats.some((d) => d.castell === c.castell)).map((c) => castellLink(c, 'r-carregat')).join('')}</ul>` : ''}
+        </div>
+        <div class="card">
+          <h2 style="margin-bottom:12px">${t('Diades')}</h2>
+          ${st.diades.length ? `<ul class="diada-list">${st.diades.map((d) => `<li>
+            <a href="#/sessio/${d.id}"><strong>${esc(d.title)}</strong></a><span class="small muted">${fmt(d.date, { day: 'numeric', month: 'long' })}</span>
+            <div class="event-castells">${d.castells.map((c) => `<a href="#/castell/${c.id}" class="castell-tag ${resultClass(c.result)}" title="${esc(resultName(c.result))}">${esc(c.castell)}${c.partial ? '*' : ''}</a>`).join('')}</div>
+          </li>`).join('')}</ul>` : `<p class="muted small">${t('Cap diada amb castells aquesta temporada.')}</p>`}
+        </div>
+      </div>` : `<div class="card"><p class="muted" style="margin:0">${t('No hi ha castells en aquest període.')}</p></div>`}
+    </div>`;
+  bindStatsFilters();
+  bindStatsTabs();
 }
 
 function castellStatsHtml(data) {
@@ -1829,17 +2106,18 @@ function peopleStatsHtml(data) {
     <p class="small muted">${t('Toca una persona per veure les seves estadístiques. «Sessions» compta les sessions on ha vingut.')}</p></div>`;
 }
 
-async function pagePersonStats(id) {
+async function pagePersonStats(id, tabs = '') {
   id = Number(id);
   if (!isAdmin() && id !== me.id) { location.hash = '#/estadistiques'; return; }
   const st = await api('GET', `/stats/people/${id}?${statsQuery()}`);
   const own = id === me.id;
   $app.innerHTML = `
     ${isAdmin() ? `<a class="back" href="#/estadistiques">${icon.back}${t('Estadístiques')}</a>` : ''}
-    <div class="page-head"><h1>${own ? t('Les meves estadístiques') : esc(fullName(st.person))}</h1></div>
+    <div class="page-head"><h1>${tabs ? t('Estadístiques') : own ? t('Les meves estadístiques') : esc(fullName(st.person))}</h1>${tabs ? `<div class="actions">${tabs}</div>` : ''}</div>
     ${statsFilters(st.seasons)}
     <div class="stats-body">${personStatsHtml(st)}</div>`;
   bindStatsFilters();
+  bindStatsTabs();
 }
 
 // ---------- Inici ----------

@@ -164,6 +164,42 @@ if (addColumn('attendance', 'came', 'INTEGER')) {
 }
 addColumn('attendance', 'escoleta', 'INTEGER');
 
+// Data i hora límit per respondre (AAAA-MM-DDTHH:MM). Sense límit, es pot respondre fins al mateix dia de la sessió.
+addColumn('events', 'rsvp_until', 'TEXT');
+
+// Comptes d'administració: separats de les persones de la colla. Només serveixen per editar;
+// qui és administrador i també fa castells té, a més, la seva fitxa de membre com tothom.
+db.exec(`
+CREATE TABLE IF NOT EXISTS admins (
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS admin_tokens (
+  token TEXT PRIMARY KEY,
+  admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+);
+`);
+// Abans, els administradors eren persones amb usuari i contrasenya: es passen a comptes d'administració
+// i la persona queda com a membre. La fitxa «Administrador» que es creava sola, si no s'ha fet servir, s'esborra.
+const oldAdmins = db.prepare("SELECT * FROM people WHERE role = 'admin' OR username IS NOT NULL").all();
+if (oldAdmins.length) {
+  transaction(() => {
+    for (const p of oldAdmins) {
+      if (p.username && p.password_hash) {
+        db.prepare('INSERT OR IGNORE INTO admins (username, password_hash, name) VALUES (?, ?, ?)').run(p.username, p.password_hash, p.name);
+      }
+      const used = db.prepare(`SELECT (SELECT COUNT(*) FROM attendance WHERE person_id = ?) + (SELECT COUNT(*) FROM castell_positions WHERE person_id = ?) AS n`).get(p.id, p.id).n;
+      if (p.name === 'Administrador' && !used) db.prepare('DELETE FROM people WHERE id = ?').run(p.id);
+      else db.prepare("UPDATE people SET role = 'member', username = NULL, password_hash = NULL WHERE id = ?").run(p.id);
+    }
+    db.exec("DELETE FROM auth_tokens WHERE mode = 'admin'");
+  });
+}
+
 db.exec(`CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_castells_event ON castells(event_id);`);
 

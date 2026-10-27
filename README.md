@@ -7,6 +7,15 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   es mostra agrupada per instrument (gralles i timbals).
 - **Calendari** (tothom): vista mensual amb les sessions, de colors segons el tipus (les diades es veuen d'un cop d'ull).
   Toca una sessió per obrir-la; els admins també poden tocar un dia buit per crear-n'hi una amb aquella data. Al mòbil, cada sessió és un punt i la llista del mes surt a sota.
+- **Al meu calendari**: el botó del calendari permet subscriure's a les sessions des de l'iPhone/Mac o Google Calendar
+  (Android); s'actualitzen soles. A cada sessió també es pot afegir només aquella. L'enllaç (`/api/calendar.ics`) és
+  públic perquè les apps de calendari no poden identificar-se: només hi surten les sessions, cap persona.
+- **Data límit per respondre** (opcional, a cada sessió): després ja no es pot canviar la resposta. Sense data límit,
+  es pot respondre fins al mateix dia. L'admin també pot tancar-les o tornar-les a obrir amb un botó.
+- **Qui falta per contestar** (admins): a cada sessió, la llista de malnoms que encara no han respost, amb un botó per
+  **enviar-la per WhatsApp** o copiar el missatge (porta l'enllaç a la sessió).
+- **Sessions pendents**: a l'inici, cada sessió porta una franja de color segons la teva resposta, i un avís si en tens
+  sense respondre.
 - **Assistència**: cada persona confirma *Vinc / Potser / No vinc* i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
   Els administradors veuen la taula completa amb totals i exporten a CSV.
@@ -46,6 +55,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     per moure't. Al mòbil, tocar la pinya l'obre directament ampliada, centrada on ets tu si hi surts.
 - **Estadístiques** per temporades (cada any natural: 2025, 2026…) o de tota la història, i de totes les sessions,
   només diades o només assajos. Només compten les sessions passades.
+  - *Resum de temporada* (tothom): millor castell, resultats, mitjana de gent per assaig i per diada, castells
+    descarregats (i els només carregats) i les diades amb els seus castells. No hi surt cap persona.
   - *Cada membre* veu les seves: castells fets, com han acabat (descarregat, carregat, intent, intent desfet),
     sessions on ha vingut, i el detall **per castell** (vegades, posicions i resultats) i **per posició**.
   - *Els administradors* veuen, a més, una taula **per castell** (vegades, resultats, diades/assajos, proves parcials
@@ -53,6 +64,9 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     estadístiques de cadascú.
 - **Historial de posicions** de cada persona (fitxa i perfil): quantes vegades ha fet cada posició i els últims castells.
   Es calcula sol a partir de les alineacions dels castells de sessions passades (fins avui inclòs).
+- **Revisió de l'alineació** (admins): a cada castell, avisos de gent col·locada que ha dit que no ve, «potser» o
+  que no ha contestat; posicions buides al tronc; pisos amb més de 5 cm de diferència d'alçada d'espatlles; i algú que
+  pesa més de 3 kg més que qui el porta. Tocant un nom es va a la seva posició.
 - **Muntador automàtic** (admins): proposa una alineació amb qui ha confirmat (opcionalment també «Potser»), tenint en
   compte l'historial (la mateixa posició i la categoria, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
   (la canalla només al pom de dalt). Pots muntar només el tronc, només la pinya o tot, i mantenir el que ja hi ha.
@@ -62,7 +76,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   i dupliquen castells (amb l'alineació) a una altra sessió. Truc ràpid: toca un nom a «Confirmats sense posició»
   i després una posició.
 - **Fitxa de cada persona**: alçada, alçada i amplada d'espatlles, pes, data de naixement (edat), contacte i notes.
-  Les mides només les veuen els administradors i la mateixa persona.
+  Només la veuen els administradors.
 - **Malnoms**: cada persona pot tenir un malnom únic; és el que surt a la pinya, al tronc i a les llistes.
   Sense malnom, es mostra «Nom I.» (nom i inicial del cognom).
 - **Persones temporals**: gent que no és a l'aplicació (d'una altra colla, de prova…) es pot col·locar en un castell
@@ -77,24 +91,32 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   (sense registre ni contrasenya; ho recorda durant un any en aquell dispositiu). El teu nom surt sempre a dalt a la
   dreta: tocant-lo s'obren els ajustos amb **«No sóc jo · Canvia de persona»**, l'idioma i el tema. A l'inici també
   hi ha un accés directe per canviar de persona.
-- **Administradors**: entren per «Entrar com a administrador/a» amb usuari i contrasenya. Només les persones amb rol
-  d'administrador i usuari poden entrar així; si un admin entra per «Qui ets?», només té permisos de membre.
+- **Comptes d'administració**: són **a part de les persones** i només serveixen per editar. S'entra per «Entrar com a
+  administrador/a» amb usuari i contrasenya, i es gestionen a la pàgina «Comptes». En mode administració la barra de
+  dalt té una franja taronja i no hi ha res per respondre.
+  Qui és administrador i també fa castells té la seva fitxa de membre com tothom: al mateix mòbil pot tenir les dues
+  entrades obertes i passar d'una a l'altra des dels ajustos («Respon com a…» / «Passa al mode administració»),
+  sense tornar a posar la contrasenya.
 
 | | Membre | Administrador/a |
 |---|---|---|
 | Veure sessions i castells (tronc, pinya, llista), cercador i «On sóc?» | ✓ | ✓ |
-| Confirmar la pròpia assistència (i l'escoleta) i respondre els camps extra | ✓ | ✓ |
+| Confirmar la pròpia assistència (i l'escoleta) i respondre els camps extra | ✓ | |
 | Veure qui ha confirmat que hi va (només noms) | ✓ | ✓ |
-| Perfil: el propi malnom i el propi historial de posicions (només lectura) | ✓ | ✓ |
+| Perfil: el propi malnom i el propi historial de posicions (només lectura) | ✓ | |
 | Calendari mensual de sessions | ✓ | ✓ |
-| Les pròpies estadístiques (per temporada o de tota la història) | ✓ | ✓ |
+| Les pròpies estadístiques (per temporada o de tota la història) | ✓ | |
+| Resum de temporada i subscripció al calendari | ✓ | ✓ |
 | Pestanya «Historial» dels castells i historial dels altres | | ✓ |
 | Estadístiques per castell i de cada persona | | ✓ |
 | Editar dades i mides de qualsevol persona | | ✓ |
 | Crear/editar/esborrar sessions, camps extra i castells | | ✓ |
 | Col·locar persones (també temporals), muntador automàtic, duplicar castells | | ✓ |
 | Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV | | ✓ |
-| Pàgina «Persones»: donar d'alta gent, fer administradors, desactivar | | ✓ |
+| Pàgina «Persones»: donar d'alta gent, desactivar | | ✓ |
+| Pàgina «Comptes»: crear, editar i esborrar comptes d'administració | | ✓ |
+| Data límit de respostes, llista de qui falta per contestar i missatge per WhatsApp | | ✓ |
+| Revisió de l'alineació (avisos) | | ✓ |
 | Veure noms complets i dades personals (edat, mides, contacte…) | | ✓ |
 | Crear sessions des del calendari | | ✓ |
 
@@ -102,6 +124,16 @@ Com que els membres no tenen contrasenya, qualsevol persona que tingui l'enllaç
 no envia mai als membres cap dada personal: només el malnom (o «Nom I.» si no en té), ni tan sols la pròpia. Les dades
 personals només les veuen els administradors, que entren amb contrasenya. Si voleu una mica
 de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi (el mateix per a tota la colla).
+
+### Seguretat
+
+- Contrasenyes d'administració guardades amb scrypt; després de 10 intents fallits des d'un mateix lloc cal esperar 15 minuts.
+- Sessions en cookies `HttpOnly` i `SameSite=Lax` (i `Secure` amb HTTPS). Les peticions que canvien dades han de venir
+  de la mateixa web.
+- Capçaleres de seguretat: només es carreguen scripts de la mateixa app (CSP), no es pot posar dins d'un marc d'una
+  altra web, i amb HTTPS s'activa HSTS.
+- L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula.
+- Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
 
 ## Requisits
 
@@ -114,8 +146,10 @@ cd colla-castellera
 node server.js
 ```
 
-Obre <http://localhost:3000>. La primera vegada es crea l'usuari `admin` amb una contrasenya aleatòria que
-apareix a la consola (o la que posis a `ADMIN_PASSWORD`).
+Obre <http://localhost:3000>. La primera vegada es crea el compte d'administració `admin` amb una contrasenya aleatòria
+que apareix a la consola (o la que posis a `ADMIN_PASSWORD`). Si la base de dades és d'una versió anterior, els
+administradors d'abans passen sols a comptes d'administració (amb el mateix usuari i contrasenya) i la seva fitxa
+queda com a membre.
 
 Per provar-la amb dades d'exemple (**esborra les dades existents**):
 
@@ -135,6 +169,7 @@ malnoms de la demostració són inventats (els malnoms són noms de fruites i ve
 | `DB_PATH` | `data/colla.db` | Fitxer de la base de dades SQLite |
 | `ADMIN_PASSWORD` | aleatòria | Contrasenya de l'`admin` inicial (només si encara no n'hi ha cap) |
 | `COLLA_CODE` | (cap) | Codi compartit que es demana als membres abans de «Qui ets?» |
+| `TZ` | `Europe/Madrid` | Zona horària de les sessions i de les dates límit |
 
 ## Versió de prova gratuïta (Render)
 
@@ -161,6 +196,7 @@ server.js          API REST i servidor de fitxers
 db.js              Esquema SQLite i contrasenyes (scrypt)
 seed.js            Dades de demostració
 public/index.html  Pàgina única
+public/theme.js    Aplica el tema i l'idioma abans de pintar la pàgina
 public/app.js      Interfície (sessions, assistència, persones, perfil, visualitzador)
 public/castell.js  Generador de l'estructura de cada castell (posicions i planta de la pinya)
 public/muntador.js Muntador automàtic d'alineacions

@@ -6,6 +6,8 @@ import { db, hashPassword, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, levelRange, positionOf } from './public/castell.js';
 import { translate } from './public/i18n.js';
 
+// Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
+process.env.TZ ||= 'Europe/Madrid';
 const PORT = Number(process.env.PORT) || 3000;
 const COLLA_NAME = process.env.COLLA_NAME || 'La meva colla';
 const PUBLIC_DIR = path.join(import.meta.dirname, 'public');
@@ -15,14 +17,14 @@ const DEMO = process.env.DEMO === '1';
 const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;
 const MEMBER_TTL_MS = 365 * 24 * 3600 * 1000;
 
-// ---------- Primer arrencada: crear un administrador si no n'hi ha cap ----------
-if (!db.prepare("SELECT 1 FROM people WHERE role = 'admin'").get()) {
+// ---------- Primer arrencada: crear un compte d'administració si no n'hi ha cap ----------
+if (!db.prepare('SELECT 1 FROM admins').get()) {
   const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(6).toString('base64url');
-  db.prepare("INSERT INTO people (username, password_hash, role, name) VALUES ('admin', ?, 'admin', 'Administrador')")
-    .run(hashPassword(password));
-  console.log(`\n  Usuari administrador creat → usuari: admin · contrasenya: ${password}\n  (canvia-la des del teu perfil)\n`);
+  db.prepare("INSERT INTO admins (username, password_hash, name) VALUES ('admin', ?, 'Administració')").run(hashPassword(password));
+  console.log(`\n  Compte d'administració creat → usuari: admin · contrasenya: ${password}\n  (canvia-la des de «Comptes»)\n`);
 }
 db.prepare('DELETE FROM auth_tokens WHERE expires_at < ?').run(Date.now());
+db.prepare('DELETE FROM admin_tokens WHERE expires_at < ?').run(Date.now());
 
 // ---------- Utilitats ----------
 // Els missatges d'error es tradueixen a l'idioma de l'usuari (capçalera X-Lang).
@@ -59,17 +61,22 @@ function int(value, min, max, fallback) {
 const bool = (v) => (v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0);
 const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const isTime = (v) => v == null || v === '' || (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v));
+const pad = (n) => String(n).padStart(2, '0');
+const localStamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const nowLocal = () => localStamp(new Date());
+// Es pot respondre fins a la data límit o, si la sessió no en té, fins al mateix dia de la sessió.
+const rsvpOpen = (e) => (e.rsvp_until ? nowLocal() < e.rsvp_until : nowLocal().slice(0, 10) <= e.date);
 
 // Els membres entren sense contrasenya (qualsevol pot triar qualsevol nom), així que de la gent només veuen
 // el malnom; si algú no en té, «Nom I.». Les dades personals només les veuen els administradors.
 const publicName = (p) => p.alias || String(p.name || '').replace(/^(\S+)\s+(\S).*$/, '$1 $2.');
 const publicPerson = (p) => ({ id: p.id, name: publicName(p), alias: null });
 
-function personRow(p, { full }) {
+function personRow(p) {
   if (!p) return null;
-  const { password_hash, ...rest } = p;
-  if (full) return rest;
-  return { id: p.id, name: p.name, alias: p.alias };
+  // username, password_hash i role són d'una versió anterior (ara els comptes d'administració són a part).
+  const { password_hash, username, role, ...rest } = p;
+  return rest;
 }
 
 function pickPersonFields(body, fields) {
@@ -81,17 +88,11 @@ function pickPersonFields(body, fields) {
       const v = str(body[f], 10);
       if (v && !isDate(v)) fail(400, 'Data de naixement no vàlida');
       out[f] = v;
-    } else if (f === 'role') {
-      if (!['member', 'admin'].includes(body.role)) fail(400, 'Rol no vàlid');
-      out.role = body.role;
     } else if (f === 'instrument') {
       if (body.instrument && !INSTRUMENTS.includes(body.instrument)) fail(400, 'Instrument no vàlid');
       out.instrument = body.instrument || null;
     } else if (f === 'active') out.active = bool(body.active);
-    else if (f === 'username') {
-      const v = str(body.username, 60);
-      out.username = v ? v.toLowerCase() : null;
-    } else out[f] = str(body[f], f === 'notes' ? 2000 : 200);
+    else out[f] = str(body[f], f === 'notes' ? 2000 : 200);
   }
   if ('name' in out && !out.name) fail(400, 'El nom és obligatori');
   return out;
@@ -193,21 +194,66 @@ function route(method, pattern, handler, auth = 'user') {
   routes.push({ method, re, keys, handler, auth });
 }
 
-function currentUser(req) {
-  const cookie = req.headers.cookie || '';
-  const token = cookie.split(/;\s*/).find((c) => c.startsWith('token='))?.slice(6);
-  if (!token) return null;
-  const row = db.prepare(`SELECT p.*, t.mode FROM auth_tokens t JOIN people p ON p.id = t.person_id
-    WHERE t.token = ? AND t.expires_at > ? AND p.active = 1`).get(token, Date.now());
-  if (!row) return null;
-  // Els permisos d'administració només s'obtenen entrant amb credencials.
-  return { ...row, role: row.mode === 'admin' && row.role === 'admin' ? 'admin' : 'member', token };
+function cookies(req) {
+  const out = {};
+  for (const part of (req.headers.cookie || '').split(/;\s*/)) {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i)] = part.slice(i + 1);
+  }
+  return out;
 }
 
-function cookieHeader(req, token, maxAgeSec) {
-  const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
-  return `token=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSec}${secure}`;
+function memberSession(token) {
+  if (!token) return null;
+  const row = db.prepare(`SELECT p.* FROM auth_tokens t JOIN people p ON p.id = t.person_id
+    WHERE t.token = ? AND t.mode = 'member' AND t.expires_at > ? AND p.active = 1`).get(token, Date.now());
+  return row ? { ...row, role: 'member', mode: 'member', token } : null;
 }
+
+function adminSession(token) {
+  if (!token) return null;
+  const row = db.prepare(`SELECT a.* FROM admin_tokens t JOIN admins a ON a.id = t.admin_id
+    WHERE t.token = ? AND t.expires_at > ?`).get(token, Date.now());
+  // Un compte d'administració no és cap persona de la colla: no té assistència ni posicions (id null).
+  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', mode: 'admin', token } : null;
+}
+
+// Al mateix mòbil hi pot haver oberta l'entrada de membre i la d'administració alhora;
+// la cookie «mode» diu amb quina s'està treballant ara (es canvia des dels ajustos).
+function currentUser(req) {
+  const c = cookies(req);
+  const member = memberSession(c.token);
+  const admin = adminSession(c.atoken);
+  const user = (c.mode === 'admin' && admin) || member || admin;
+  if (user) user.sessions = { member: member ? publicPerson(member) : null, admin: !!admin };
+  return user;
+}
+
+function cookieHeader(req, name, value, maxAgeSec) {
+  const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
+  return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSec}${secure}`;
+}
+const modeCookie = (req, mode) => cookieHeader(req, 'mode', mode, MEMBER_TTL_MS / 1000);
+
+// Massa intents fallits d'entrar com a administrador des d'un mateix lloc: s'ha d'esperar una estona.
+const loginFailures = new Map();
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+function clientIp(req) {
+  // Darrere del proxy (Render), l'última adreça és la que hi afegeix el proxy: les anteriors les pot inventar el client.
+  return String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress || '';
+}
+function checkLoginRate(ip) {
+  const f = loginFailures.get(ip);
+  if (f && f.until > Date.now() && f.n >= 10) fail(429, "Massa intents. Torna-ho a provar d'aquí a una estona.");
+}
+function loginFailed(ip) {
+  const f = loginFailures.get(ip);
+  loginFailures.set(ip, f && f.until > Date.now() ? { n: f.n + 1, until: f.until } : { n: 1, until: Date.now() + LOGIN_WINDOW_MS });
+}
+
+const meResponse = (user) => (user.mode === 'admin'
+  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions }
+  : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member', sessions: user.sessions });
 
 // ---------- Rutes: autenticació i perfil ----------
 route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO }), 'public');
@@ -228,44 +274,104 @@ route('POST', '/api/identify', ({ body, req, res }) => {
   const person = db.prepare('SELECT * FROM people WHERE id = ? AND active = 1').get(Number(body.person_id)) || fail(404, 'Persona no trobada');
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare("INSERT INTO auth_tokens (token, person_id, expires_at, mode) VALUES (?, ?, ?, 'member')").run(token, person.id, Date.now() + MEMBER_TTL_MS);
-  res.setHeader('Set-Cookie', cookieHeader(req, token, MEMBER_TTL_MS / 1000));
-  return { ...publicPerson(person), alias: person.alias, instrument: person.instrument, role: 'member', mode: 'member' };
+  res.setHeader('Set-Cookie', [cookieHeader(req, 'token', token, MEMBER_TTL_MS / 1000), modeCookie(req, 'member')]);
+  const admin = adminSession(cookies(req).atoken);
+  return meResponse({ ...person, role: 'member', mode: 'member', sessions: { member: publicPerson(person), admin: !!admin } });
 }, 'public');
 
 route('POST', '/api/login', ({ body, req, res }) => {
+  const ip = clientIp(req);
+  checkLoginRate(ip);
   const username = String(body.username || '').trim().toLowerCase();
-  const person = db.prepare('SELECT * FROM people WHERE username = ? AND active = 1').get(username);
-  if (!person || !verifyPassword(String(body.password || ''), person.password_hash)) fail(401, 'Usuari o contrasenya incorrectes');
-  if (person.role !== 'admin') fail(401, 'Aquest usuari no és administrador');
+  const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username);
+  if (!admin || !verifyPassword(String(body.password || ''), admin.password_hash)) {
+    loginFailed(ip);
+    fail(401, 'Usuari o contrasenya incorrectes');
+  }
+  loginFailures.delete(ip);
   const token = crypto.randomBytes(32).toString('hex');
-  db.prepare("INSERT INTO auth_tokens (token, person_id, expires_at, mode) VALUES (?, ?, ?, 'admin')").run(token, person.id, Date.now() + TOKEN_TTL_MS);
-  res.setHeader('Set-Cookie', cookieHeader(req, token, TOKEN_TTL_MS / 1000));
-  return { ...personRow(person, { full: true }), mode: 'admin' };
+  db.prepare('INSERT INTO admin_tokens (token, admin_id, expires_at) VALUES (?, ?, ?)').run(token, admin.id, Date.now() + TOKEN_TTL_MS);
+  res.setHeader('Set-Cookie', [cookieHeader(req, 'atoken', token, TOKEN_TTL_MS / 1000), modeCookie(req, 'admin')]);
+  const member = memberSession(cookies(req).token);
+  return meResponse({ ...adminSession(token), sessions: { member: member ? publicPerson(member) : null, admin: true } });
 }, 'public');
 
+// Surt de l'entrada que s'està fent servir ara (la de membre o la d'administració); l'altra, si n'hi ha, es manté.
 route('POST', '/api/logout', ({ user, req, res }) => {
-  db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(user.token);
-  res.setHeader('Set-Cookie', cookieHeader(req, '', 0));
+  if (user.mode === 'admin') {
+    db.prepare('DELETE FROM admin_tokens WHERE token = ?').run(user.token);
+    res.setHeader('Set-Cookie', [cookieHeader(req, 'atoken', '', 0), modeCookie(req, 'member')]);
+  } else {
+    db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(user.token);
+    res.setHeader('Set-Cookie', cookieHeader(req, 'token', '', 0));
+  }
   return { ok: true };
 });
 
-route('GET', '/api/me', ({ user }) => {
-  if (user.role !== 'admin') return { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member' };
-  const { token, ...rest } = personRow(user, { full: true });
-  return rest;
+// Canvia entre «membre» i «administració» sense tornar a entrar.
+route('POST', '/api/mode', ({ user, body, req, res }) => {
+  const mode = body.mode === 'admin' ? 'admin' : 'member';
+  if (mode === 'admin' ? !user.sessions.admin : !user.sessions.member) fail(400, 'Primer has d\'entrar-hi');
+  res.setHeader('Set-Cookie', modeCookie(req, mode));
+  return { ok: true };
 });
 
+route('GET', '/api/me', ({ user }) => meResponse(user));
+
+// Els administradors poden canviar el nom i la contrasenya del seu compte.
 route('PUT', '/api/me', ({ user, body }) => {
-  const data = pickPersonFields(body, PROFILE_FIELDS);
-  checkAliasUnique(data.alias, user.id);
-  updateRow('people', user.id, data);
+  const name = 'name' in body ? str(body.name, 100) : user.name;
+  if (!name) fail(400, 'El nom és obligatori');
+  db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, user.admin_id);
   if (body.newPassword) {
     if (!verifyPassword(String(body.currentPassword || ''), user.password_hash)) fail(400, 'La contrasenya actual no és correcta');
     if (String(body.newPassword).length < 8) fail(400, 'La nova contrasenya ha de tenir almenys 8 caràcters');
-    db.prepare('UPDATE people SET password_hash = ? WHERE id = ?').run(hashPassword(String(body.newPassword)), user.id);
-    db.prepare('DELETE FROM auth_tokens WHERE person_id = ? AND token != ?').run(user.id, user.token);
+    db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hashPassword(String(body.newPassword)), user.admin_id);
+    db.prepare('DELETE FROM admin_tokens WHERE admin_id = ? AND token != ?').run(user.admin_id, user.token);
   }
-  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(user.id), { full: true });
+  return { ok: true, name };
+}, 'admin');
+
+// ---------- Rutes: comptes d'administració ----------
+const adminRow = (a) => ({ id: a.id, username: a.username, name: a.name, created_at: a.created_at });
+function adminInput(body, existing = null) {
+  const out = {};
+  if ('name' in body || !existing) {
+    out.name = str(body.name, 100);
+    if (!out.name) fail(400, 'El nom és obligatori');
+  }
+  if ('username' in body || !existing) {
+    out.username = String(str(body.username, 60) || '').toLowerCase();
+    if (!/^[a-z0-9._-]{3,}$/.test(out.username)) fail(400, "L'usuari ha de tenir almenys 3 lletres o números, sense espais");
+    if (db.prepare('SELECT 1 FROM admins WHERE username = ? AND id != ?').get(out.username, existing?.id ?? 0)) fail(400, "Aquest nom d'usuari ja existeix");
+  }
+  if (body.password || !existing) {
+    if (String(body.password || '').length < 8) fail(400, 'La contrasenya ha de tenir almenys 8 caràcters');
+    out.password_hash = hashPassword(String(body.password));
+  }
+  return out;
+}
+
+route('GET', '/api/admins', () => db.prepare('SELECT * FROM admins ORDER BY name COLLATE NOCASE').all().map(adminRow), 'admin');
+
+route('POST', '/api/admins', ({ body }) => {
+  const id = insertRow('admins', adminInput(body));
+  return adminRow(db.prepare('SELECT * FROM admins WHERE id = ?').get(id));
+}, 'admin');
+
+route('PUT', '/api/admins/:id', ({ params, body }) => {
+  const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(params.id) || fail(404, 'Compte no trobat');
+  const data = adminInput(body, admin);
+  updateRow('admins', admin.id, data);
+  if (data.password_hash) db.prepare('DELETE FROM admin_tokens WHERE admin_id = ?').run(admin.id);
+  return adminRow(db.prepare('SELECT * FROM admins WHERE id = ?').get(admin.id));
+}, 'admin');
+
+route('DELETE', '/api/admins/:id', ({ params, user }) => {
+  if (Number(params.id) === user.admin_id) fail(400, 'No pots esborrar el compte amb què has entrat');
+  if (db.prepare('SELECT COUNT(*) AS n FROM admins').get().n <= 1) fail(400, "Ha de quedar almenys un compte d'administració");
+  db.prepare('DELETE FROM admins WHERE id = ?').run(params.id);
+  return { ok: true };
 }, 'admin');
 
 // Qui ha vingut de debò: el que hagi marcat l'admin o, si no ha marcat res, qui havia dit «Vinc».
@@ -282,43 +388,27 @@ route('GET', '/api/people', () => {
         WHERE a.person_id = p.id AND a.status = 'si' AND e.date <= date('now','localtime')) AS confirmed
     FROM people p ORDER BY p.active DESC, p.name COLLATE NOCASE`).all();
   const pastEvents = db.prepare("SELECT COUNT(*) AS n FROM events WHERE date <= date('now','localtime')").get().n;
-  return { people: people.map((p) => personRow(p, { full: true })), pastEvents };
+  return { people: people.map(personRow), pastEvents };
 }, 'admin');
 
 route('POST', '/api/people', ({ body }) => {
-  const data = pickPersonFields(body, [...PROFILE_FIELDS, 'username', 'role']);
+  const data = pickPersonFields(body, PROFILE_FIELDS);
   if (!data.name) fail(400, 'El nom és obligatori');
   checkAliasUnique(data.alias);
-  if (data.role === 'admin' && !data.username) fail(400, 'Un administrador necessita usuari i contrasenya');
-  if (data.username) {
-    if (db.prepare('SELECT 1 FROM people WHERE username = ?').get(data.username)) fail(400, "Aquest nom d'usuari ja existeix");
-    if (!body.password || String(body.password).length < 8) fail(400, 'La contrasenya ha de tenir almenys 8 caràcters');
-    data.password_hash = hashPassword(String(body.password));
-  }
   const id = insertRow('people', data);
-  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(id), { full: true });
+  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(id));
 }, 'admin');
 
-route('PUT', '/api/people/:id', ({ params, body, user }) => {
+route('PUT', '/api/people/:id', ({ params, body }) => {
   const person = db.prepare('SELECT * FROM people WHERE id = ?').get(params.id) || fail(404, 'Persona no trobada');
-  const data = pickPersonFields(body, [...PROFILE_FIELDS, 'username', 'role', 'active']);
-  if (person.id === user.id && (data.role === 'member' || data.active === 0)) fail(400, 'No et pots treure els permisos a tu mateix');
+  const data = pickPersonFields(body, [...PROFILE_FIELDS, 'active']);
   checkAliasUnique(data.alias, person.id);
-  if ((data.role ?? person.role) === 'admin' && !(data.username ?? person.username)) fail(400, 'Un administrador necessita usuari i contrasenya');
-  if (data.username && data.username !== person.username &&
-      db.prepare('SELECT 1 FROM people WHERE username = ?').get(data.username)) fail(400, "Aquest nom d'usuari ja existeix");
-  if (body.password) {
-    if (String(body.password).length < 8) fail(400, 'La contrasenya ha de tenir almenys 8 caràcters');
-    data.password_hash = hashPassword(String(body.password));
-  }
-  if ((data.username ?? person.username) && !(data.password_hash || person.password_hash)) fail(400, 'Cal una contrasenya per poder entrar');
   updateRow('people', person.id, data);
-  if (data.active === 0 || data.password_hash) db.prepare('DELETE FROM auth_tokens WHERE person_id = ?').run(person.id);
-  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(person.id), { full: true });
+  if (data.active === 0) db.prepare('DELETE FROM auth_tokens WHERE person_id = ?').run(person.id);
+  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(person.id));
 }, 'admin');
 
-route('DELETE', '/api/people/:id', ({ params, user }) => {
-  if (Number(params.id) === user.id) fail(400, 'No et pots esborrar a tu mateix');
+route('DELETE', '/api/people/:id', ({ params }) => {
   db.prepare('DELETE FROM people WHERE id = ?').run(params.id);
   return { ok: true };
 }, 'admin');
@@ -342,7 +432,7 @@ route('GET', '/api/events', ({ user, query }) => {
     FROM events e LEFT JOIN attendance a ON a.event_id = e.id AND a.person_id = ?
     WHERE ${when}${hideMusics ? " AND e.type != 'musics'" : ''}
     ORDER BY e.date ${past && !range ? 'DESC' : 'ASC'}, e.start_time ${past && !range ? 'DESC' : 'ASC'}
-    LIMIT 200`).all(user.id, ...(range ? [from, to] : []));
+    LIMIT 200`).all(user.id, ...(range ? [from, to] : [])).map((e) => ({ ...e, rsvp_open: rsvpOpen(e) }));
 });
 
 function eventInput(body) {
@@ -353,7 +443,10 @@ function eventInput(body) {
   if (!title) fail(400, 'El títol és obligatori');
   if (!isTime(body.escoleta_time)) fail(400, 'Hora no vàlida');
   const escoleta = bool(body.escoleta);
+  const until = body.rsvp_until ? String(body.rsvp_until).slice(0, 16) : null;
+  if (until && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(until)) fail(400, 'Data límit no vàlida');
   return {
+    rsvp_until: until,
     type: body.type, title, date: body.date,
     start_time: str(body.start_time, 5), end_time: str(body.end_time, 5),
     location: str(body.location, 200), description: str(body.description, 4000),
@@ -373,6 +466,14 @@ route('PUT', '/api/events/:id', ({ params, body }) => {
   }
   updateRow('events', params.id, eventInput(body));
   return getEvent(params.id);
+}, 'admin');
+
+// Tancar les respostes ara mateix (o tornar-les a obrir, sense data límit).
+route('POST', '/api/events/:id/rsvp', ({ params, body }) => {
+  getEvent(params.id);
+  db.prepare('UPDATE events SET rsvp_until = ? WHERE id = ?').run(body.open ? null : nowLocal(), params.id);
+  const event = getEvent(params.id);
+  return { ...event, rsvp_open: rsvpOpen(event) };
 }, 'admin');
 
 route('DELETE', '/api/events/:id', ({ params }) => {
@@ -401,7 +502,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   counts.absent = rows.filter((r) => r.came === 0 && r.status === 'si').length;
   counts.escoleta = rows.filter((r) => r.escoleta === 1).length;
   return {
-    event, fields, castells, counts,
+    event: { ...event, rsvp_open: rsvpOpen(event) }, fields, castells, counts,
     mine: mine ? { ...mine, came: flag(mine.came), escoleta: flag(mine.escoleta), extra: parseJSON(mine.extra, {}) } : null,
     attendance: isAdmin ? attendance : attendance.filter((a) => a.present),
   };
@@ -438,6 +539,8 @@ function attendancePatch(event, body, { admin }) {
 
 route('PUT', '/api/events/:id/attendance', ({ params, body, user }) => {
   const event = getEvent(params.id);
+  if (user.mode === 'admin') fail(403, 'Per respondre, canvia a la teva fitxa de membre');
+  if (!rsvpOpen(event)) fail(400, "Ja no es pot respondre a aquesta sessió. Si hi ha cap canvi, digues-ho a un administrador.");
   upsertAttendance(event.id, user.id, attendancePatch(event, body, { admin: false }));
   return { ok: true };
 });
@@ -454,7 +557,8 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
   const fields = loadFields(event.id);
   const rows = db.prepare(`SELECT p.name, p.alias, a.status, a.escoleta, a.extra, a.comment, ${CAME_SQL} AS present
     FROM attendance a JOIN people p ON p.id = a.person_id WHERE a.event_id = ? ORDER BY p.name COLLATE NOCASE`).all(event.id);
-  const cell = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+  // Els comentaris els escriu qualsevol: es neutralitza el que un full de càlcul llegiria com a fórmula.
+  const cell = (v) => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
   const yesNo = (v) => (v ? 'sí' : v === 0 ? 'no' : '');
   const lines = [['Nom', 'Malnom', 'Estat', 'Ha vingut', ...(event.escoleta ? ['Escoleta'] : []), ...fields.map((f) => f.label), 'Comentari'].map(cell).join(';')];
   for (const r of rows) {
@@ -794,7 +898,124 @@ route('GET', '/api/stats/castells', ({ query }) => {
   return { seasons: seasons(), total: rows.length, results: totals, castells: [...types.values()].sort(byCount) };
 }, 'admin');
 
+// Resum de temporada: castells i sessions, sense dades de ningú (el veu tothom).
+// Dificultat aproximada per trobar el millor castell: mana l'alçada; a igual alçada, com més estret, més difícil.
+const WIDTH_DIFFICULTY = { 1: 6, 2: 5, 9: 4, 7: 3.5, 5: 3, 3: 2, 4: 1 };
+const difficulty = (c) => c.height * 10 + (WIDTH_DIFFICULTY[c.width] || 0) + (c.agulla ? 0.5 : 0) + (c.net ? 0.3 : 0);
+
+route('GET', '/api/stats/season', ({ query }) => {
+  const { where, args } = statsFilter(query);
+  const rows = db.prepare(`SELECT c.id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.net, c.from_level, c.to_level,
+      c.result, e.id AS event_id, e.date, e.title, e.type
+    FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')} ORDER BY e.date, c.position`).all(...args);
+  const sessions = db.prepare(`SELECT e.id, e.type, e.date, e.title,
+      (SELECT COUNT(*) FROM attendance a WHERE a.event_id = e.id AND ${CAME_SQL}) AS came
+    FROM events e WHERE ${where.join(' AND ')} AND e.type != 'musics' ORDER BY e.date`).all(...args);
+
+  const results = emptyResults();
+  const best = { descarregat: new Map(), carregat: new Map() };
+  const diades = new Map();
+  for (const r of rows) {
+    const res = resultOf(r);
+    results[res]++;
+    const partial = levelRange(r).partial;
+    const name = castellName(r);
+    // Les proves parcials no compten per al millor castell.
+    if (!partial && best[res] && !best[res].has(name)) best[res].set(name, { castell: name, castell_id: r.id, date: r.date, title: r.title, score: difficulty(r) });
+    if (r.type !== 'assaig') {
+      const d = diades.get(r.event_id) || { id: r.event_id, date: r.date, title: r.title, castells: [] };
+      d.castells.push({ id: r.id, castell: name, result: r.result, partial });
+      diades.set(r.event_id, d);
+    }
+  }
+  const top = (m) => [...m.values()].sort((a, b) => b.score - a.score || a.date.localeCompare(b.date)).map(({ score, ...c }) => c);
+  const attendance = {};
+  for (const type of ['assaig', 'diada', 'esdeveniment']) {
+    const list = sessions.filter((x) => x.type === type);
+    const withPeople = list.filter((x) => x.came > 0);
+    const max = withPeople.reduce((m, x) => (x.came > (m?.came ?? -1) ? x : m), null);
+    attendance[type] = {
+      sessions: list.length,
+      average: withPeople.length ? Math.round(withPeople.reduce((sum, x) => sum + x.came, 0) / withPeople.length) : 0,
+      max: max ? { n: max.came, date: max.date, title: max.title, id: max.id } : null,
+    };
+  }
+  return {
+    seasons: seasons(), total: rows.length, results, attendance,
+    descarregats: top(best.descarregat), carregats: top(best.carregat),
+    diades: [...diades.values()].reverse(),
+  };
+});
+
+// ---------- Calendari per subscriure-s'hi (Google Calendar, iPhone…) ----------
+// És públic perquè les apps de calendari no poden identificar-se: només hi surten les sessions, cap persona.
+const ICS_TYPES = { assaig: 'Assaig', diada: 'Diada', esdeveniment: 'Esdeveniment', musics: 'Assaig de músics' };
+const ICS_TZ = ['BEGIN:VTIMEZONE', 'TZID:Europe/Madrid',
+  'BEGIN:DAYLIGHT', 'TZOFFSETFROM:+0100', 'TZOFFSETTO:+0200', 'TZNAME:CEST', 'DTSTART:19700329T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', 'END:DAYLIGHT',
+  'BEGIN:STANDARD', 'TZOFFSETFROM:+0200', 'TZOFFSETTO:+0100', 'TZNAME:CET', 'DTSTART:19701025T030000', 'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU', 'END:STANDARD',
+  'END:VTIMEZONE'];
+const icsText = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/[,;]/g, '\\$&');
+// Les línies d'un .ics no poden passar de 75 bytes: les llargues es parteixen.
+function icsFold(line) {
+  const out = [];
+  let cur = '', bytes = 0;
+  for (const ch of line) {
+    const b = Buffer.byteLength(ch);
+    if (bytes + b > 74) { out.push(cur); cur = ' '; bytes = 1; }
+    cur += ch;
+    bytes += b;
+  }
+  out.push(cur);
+  return out.join('\r\n');
+}
+const icsStamp = (local) => local.replace(/[-:]/g, '') + '00';
+function icsEvent(e, origin) {
+  const lines = ['BEGIN:VEVENT', `UID:sessio-${e.id}@${new URL(origin).host}`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`];
+  if (e.start_time) {
+    const start = new Date(`${e.date}T${e.start_time}:00`);
+    let end = e.end_time ? new Date(`${e.date}T${e.end_time}:00`) : null;
+    if (!end || end <= start) end = new Date(start.getTime() + 2 * 3600 * 1000);
+    lines.push(`DTSTART;TZID=Europe/Madrid:${icsStamp(localStamp(start))}`, `DTEND;TZID=Europe/Madrid:${icsStamp(localStamp(end))}`);
+  } else {
+    const next = new Date(`${e.date}T12:00:00`);
+    next.setDate(next.getDate() + 1);
+    lines.push(`DTSTART;VALUE=DATE:${e.date.replaceAll('-', '')}`, `DTEND;VALUE=DATE:${localStamp(next).slice(0, 10).replaceAll('-', '')}`);
+  }
+  const notes = [ICS_TYPES[e.type], e.escoleta ? `Escoleta${e.escoleta_time ? ` a les ${e.escoleta_time}` : ''}` : null, e.description, `${origin}/#/sessio/${e.id}`];
+  lines.push(`SUMMARY:${icsText(e.title)}`, `CATEGORIES:${icsText(ICS_TYPES[e.type])}`, `DESCRIPTION:${icsText(notes.filter(Boolean).join('\n'))}`,
+    `URL:${origin}/#/sessio/${e.id}`);
+  if (e.location) lines.push(`LOCATION:${icsText(e.location)}`);
+  lines.push('END:VEVENT');
+  return lines;
+}
+
+route('GET', '/api/calendar.ics', ({ req, res, query }) => {
+  checkCollaCode(query.get('code'));
+  const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const origin = `${proto}://${req.headers.host}`;
+  const one = Number(query.get('event')) || null;
+  const events = one ? [getEvent(one)]
+    : db.prepare(`SELECT * FROM events WHERE date >= date('now','localtime','-90 days')${query.get('musics') === '1' ? '' : " AND type != 'musics'"}
+        ORDER BY date, start_time`).all();
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Colla castellera//CA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    `X-WR-CALNAME:${icsText(COLLA_NAME)}`, 'X-WR-TIMEZONE:Europe/Madrid', ...ICS_TZ, ...events.flatMap((e) => icsEvent(e, origin)), 'END:VCALENDAR'];
+  res.writeHead(200, {
+    'Content-Type': 'text/calendar; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    ...(one ? { 'Content-Disposition': `attachment; filename="sessio-${events[0].date}.ics"` } : {}),
+  });
+  res.end(lines.map(icsFold).join('\r\n') + '\r\n');
+}, 'public');
+
 // ---------- Servidor HTTP ----------
+// Capçaleres de seguretat per a totes les respostes: res de fora, ni scripts ni marcs d'altres webs.
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'same-origin',
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+    "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+};
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
@@ -833,6 +1054,8 @@ function readBody(req) {
 }
 
 const server = http.createServer(async (req, res) => {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   const url = new URL(req.url, 'http://localhost');
   if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, decodeURIComponent(url.pathname));
 
@@ -843,6 +1066,12 @@ const server = http.createServer(async (req, res) => {
   try {
     const match = routes.find((r) => r.method === req.method && r.re.test(url.pathname));
     if (!match) fail(404, 'Ruta no trobada');
+    // Les peticions que canvien dades només poden venir de la mateixa app (no d'una altra web).
+    if (req.method !== 'GET' && req.headers.origin) {
+      let host = '';
+      try { host = new URL(req.headers.origin).host; } catch { /* origen no vàlid */ }
+      if (host !== req.headers.host) fail(403, 'Petició no permesa');
+    }
     const values = url.pathname.match(match.re).slice(1);
     const params = Object.fromEntries(match.keys.map((k, i) => [k, values[i]]));
     const user = currentUser(req);
