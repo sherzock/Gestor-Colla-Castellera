@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import net from 'node:net';
+import zlib from 'node:zlib';
 import { db, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, levelNames, levelRange, positionOf } from './public/castell.js';
 import { translate } from './public/i18n.js';
@@ -868,24 +869,53 @@ function historyRows({ personId, excludeCastell, query } = {}) {
     WHERE ${where.join(' AND ')} ORDER BY e.date DESC, c.position`).all(...args);
 }
 
-route('GET', '/api/castells/:id/history', ({ params, user }) => {
-  const castell = getCastell(params.id);
-  const rows = historyRows({ excludeCastell: castell.id });
-  const exact = new Map();
-  const byCat = {};
-  // Una mateixa posició no és igual en castells diferents: només compta el mateix castell (un 3d7 amb altres 3d7).
-  const name = castellName(castell);
-  const same = new Set();
-  for (const r of rows) {
-    if (r.result !== 'previst' && castellName(r) === name) {
-      same.add(r.castell_id);
-      const k = `${r.pos_key}|${r.person_id}`;
-      const e = exact.get(k) || { pos_key: r.pos_key, person_id: r.person_id, n: 0, last: r.date };
-      e.n++;
-      exact.set(k, e);
+// Índex de totes les posicions dels castells passats, per a l'historial i la preparació de cada castell.
+// Llegir-les totes (milers de files) és el que fa lenta la pàgina d'un castell: es llegeixen un sol cop i es
+// reaprofiten fins que algú canvia qualsevol dada (dataVersion puja amb cada petició que no és GET) o canvia el dia.
+// Només és una memòria del servidor: cada ruta continua comprovant qui pot veure què.
+let dataVersion = 0;
+let historyCache = null;
+function historyIndex() {
+  const key = `${dataVersion}|${nowLocal().slice(0, 10)}`;
+  if (historyCache?.key === key) return historyCache;
+  const byName = new Map();     // «3d7» → files de castells fets (no previstos)
+  const byCat = {};             // persona → { categoria de posició: vegades }
+  const catsByCastell = new Map(); // castell → [[persona, categoria]], per poder-ne treure un
+  for (const r of historyRows()) {
+    if (r.result !== 'previst') {
+      const name = castellName(r);
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push({ castell_id: r.castell_id, pos_key: r.pos_key, person_id: r.person_id, date: r.date, type: r.type });
     }
     const cat = positionOf(r, r.pos_key)?.cat;
-    if (cat) (byCat[r.person_id] ??= {})[cat] = (byCat[r.person_id][cat] || 0) + 1;
+    if (!cat) continue;
+    (byCat[r.person_id] ??= {})[cat] = (byCat[r.person_id][cat] || 0) + 1;
+    if (!catsByCastell.has(r.castell_id)) catsByCastell.set(r.castell_id, []);
+    catsByCastell.get(r.castell_id).push([r.person_id, cat]);
+  }
+  historyCache = { key, byName, byCat, catsByCastell };
+  return historyCache;
+}
+
+route('GET', '/api/castells/:id/history', ({ params, user }) => {
+  const castell = getCastell(params.id);
+  const index = historyIndex();
+  const exact = new Map();
+  // Una mateixa posició no és igual en castells diferents: només compta el mateix castell (un 3d7 amb altres 3d7).
+  const same = new Set();
+  for (const r of index.byName.get(castellName(castell)) || []) {
+    if (r.castell_id === castell.id) continue;
+    same.add(r.castell_id);
+    const k = `${r.pos_key}|${r.person_id}`;
+    const e = exact.get(k) || { pos_key: r.pos_key, person_id: r.person_id, n: 0, last: r.date };
+    e.n++;
+    exact.set(k, e);
+  }
+  // L'experiència per tipus de posició, sense comptar aquest mateix castell.
+  const byCat = structuredClone(index.byCat);
+  for (const [person, cat] of index.catsByCastell.get(castell.id) || []) {
+    if (--byCat[person][cat] === 0) delete byCat[person][cat];
+    if (!Object.keys(byCat[person]).length) delete byCat[person];
   }
   const people = new Map(db.prepare('SELECT id, name, alias FROM people').all().map((p) => [p.id, p]));
   return {
@@ -1164,11 +1194,7 @@ function troncPrep(castell) {
   const date = castell.date || db.prepare('SELECT date FROM events WHERE id = ?').get(castell.event_id)?.date;
   const since = new Date(`${date}T12:00:00`); since.setDate(since.getDate() - PREP_DAYS);
   const sinceIso = since.toISOString().slice(0, 10);
-  const name = castellName(castell);
-  const past = db.prepare(`SELECT c.*, e.date, e.type, cp.pos_key, cp.person_id FROM castell_positions cp
-      JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
-    WHERE cp.person_id IS NOT NULL AND c.id != ? AND c.result != 'previst' AND e.date < ? AND e.date <= date('now','localtime')`)
-    .all(castell.id, date).filter((r) => castellName(r) === name);
+  const past = (historyIndex().byName.get(castellName(castell)) || []).filter((r) => r.castell_id !== castell.id && r.date < date);
   return keys.map((p) => {
     const r = placedRows.get(p.key);
     const mine = r?.person_id ? past.filter((x) => x.pos_key === p.key && x.person_id === r.person_id) : [];
@@ -1338,10 +1364,20 @@ const SECURITY_HEADERS = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
     "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
+const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
 };
+
+// Comprimeix les respostes de text si el navegador ho accepta (l'historial d'un castell passa de ~200 KB a ~20 KB).
+// No hi ha secrets dins les respostes que puguin barrejar-se amb text d'un atacant (BREACH): les sessions van en cookies.
+function sendBody(req, res, status, headers, body) {
+  const data = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  if (data.length > 1024 && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+    res.writeHead(status, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }).end(zlib.gzipSync(data));
+  } else res.writeHead(status, headers).end(data);
+}
 
 function serveStatic(req, res, pathname) {
   let decoded;
@@ -1350,16 +1386,19 @@ function serveStatic(req, res, pathname) {
   const file = path.normalize(path.join(PUBLIC_DIR, decoded === '/' ? 'index.html' : decoded));
   // Ha de quedar dins de public/ (amb la barra: «public-altra/» no hi compta) i no es serveixen fitxers ocults.
   if (!file.startsWith(PUBLIC_DIR + path.sep) || file.includes(`${path.sep}.`)) { res.writeHead(403).end(); return; }
-  fs.readFile(file, (err, data) => {
-    if (err) {
-      fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, html) => {
-        if (e2) { res.writeHead(404).end('No trobat'); return; }
-        res.writeHead(200, { 'Content-Type': MIME['.html'] }).end(html);
-      });
+  const send = (f) => fs.stat(f, (err, st) => {
+    if (err || !st.isFile()) {
+      // Les adreces de l'app (#/…) i les que no existeixen tornen la pàgina principal.
+      if (f !== INDEX_FILE) send(INDEX_FILE); else res.writeHead(404).end('No trobat');
       return;
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }).end(data);
+    // «no-cache» vol dir que el navegador el guarda però pregunta si ha canviat: si no, respon 304 sense tornar-lo a enviar.
+    const etag = `"${st.size.toString(36)}-${st.mtimeMs.toString(36)}"`;
+    const headers = { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag };
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers).end(); return; }
+    fs.readFile(f, (e2, data) => (e2 ? res.writeHead(404).end('No trobat') : sendBody(req, res, 200, headers, data)));
   });
+  send(file);
 }
 
 function readBody(req) {
@@ -1391,10 +1430,7 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
   try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400).end(); return; }
   if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
 
-  const send = (status, data) => {
-    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify(data));
-  };
+  const send = (status, data) => sendBody(req, res, status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, JSON.stringify(data));
   try {
     const match = routes.find((r) => r.method === req.method && r.re.test(url.pathname));
     if (!match) fail(404, 'Ruta no trobada');
@@ -1416,7 +1452,9 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     if (match.auth !== 'public' && !user) fail(401, 'Cal iniciar sessió');
     if (match.auth === 'admin' && user.role !== 'admin') fail(403, 'Només per a administradors');
     const body = req.method === 'GET' ? {} : await readBody(req);
-    const result = await match.handler({ req, res, params, body, user, query: url.searchParams });
+    let result;
+    try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }
+    finally { if (req.method !== 'GET') dataVersion++; }
     if (result !== undefined) send(200, result);
   } catch (err) {
     const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
