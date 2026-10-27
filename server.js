@@ -2,7 +2,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { db, hashPassword, verifyPassword, transaction } from './db.js';
+import net from 'node:net';
+import { db, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, levelNames, levelRange, positionOf } from './public/castell.js';
 import { translate } from './public/i18n.js';
 
@@ -18,6 +19,7 @@ const DEMO = process.env.DEMO === '1';
 const TRUST_PROXY = process.env.TRUST_PROXY === '1' || !!process.env.RENDER;
 const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;
 const MEMBER_TTL_MS = 365 * 24 * 3600 * 1000;
+const DEVICE_TTL_MS = 365 * 24 * 3600 * 1000;
 
 // ---------- Primer arrencada: crear un compte d'administració si no n'hi ha cap ----------
 if (!db.prepare('SELECT 1 FROM admins').get()) {
@@ -28,6 +30,7 @@ if (!db.prepare('SELECT 1 FROM admins').get()) {
 const purgeTokens = () => {
   db.prepare('DELETE FROM auth_tokens WHERE expires_at < ?').run(Date.now());
   db.prepare('DELETE FROM admin_tokens WHERE expires_at < ?').run(Date.now());
+  db.prepare('DELETE FROM admin_devices WHERE expires_at < ?').run(Date.now());
 };
 purgeTokens();
 setInterval(purgeTokens, 6 * 3600 * 1000).unref();
@@ -210,19 +213,32 @@ function cookies(req) {
   return out;
 }
 
+// A la base de dades només hi ha el resum de cada sessió (hashToken): el valor de la cookie no es guarda enlloc.
 function memberSession(token) {
   if (!token) return null;
+  const tokenHash = hashToken(token);
   const row = db.prepare(`SELECT p.* FROM auth_tokens t JOIN people p ON p.id = t.person_id
-    WHERE t.token = ? AND t.mode = 'member' AND t.expires_at > ? AND p.active = 1`).get(token, Date.now());
-  return row ? { ...row, role: 'member', mode: 'member', token } : null;
+    WHERE t.token = ? AND t.mode = 'member' AND t.expires_at > ? AND p.active = 1`).get(tokenHash, Date.now());
+  return row ? { ...row, role: 'member', mode: 'member', tokenHash } : null;
 }
 
 function adminSession(token) {
   if (!token) return null;
+  const tokenHash = hashToken(token);
   const row = db.prepare(`SELECT a.* FROM admin_tokens t JOIN admins a ON a.id = t.admin_id
-    WHERE t.token = ? AND t.expires_at > ?`).get(token, Date.now());
+    WHERE t.token = ? AND t.expires_at > ?`).get(tokenHash, Date.now());
   // Un compte d'administració no és cap persona de la colla: no té assistència ni posicions (id null).
-  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', mode: 'admin', token } : null;
+  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', mode: 'admin', tokenHash } : null;
+}
+
+// Crea una sessió (o una marca de mòbil conegut) i en torna el valor per a la cookie.
+// Com a molt 20 per persona o compte: que no es pugui omplir la base de dades.
+function newToken(table, owner, id, ttlMs, extra = {}) {
+  const token = crypto.randomBytes(32).toString('hex');
+  insertRow(table, { token: hashToken(token), [owner]: id, expires_at: Date.now() + ttlMs, ...extra });
+  db.prepare(`DELETE FROM ${table} WHERE ${owner} = ? AND token NOT IN
+    (SELECT token FROM ${table} WHERE ${owner} = ? ORDER BY expires_at DESC LIMIT 20)`).run(id, id);
+  return token;
 }
 
 // Al mateix mòbil hi pot haver oberta l'entrada de membre i la d'administració alhora;
@@ -242,10 +258,18 @@ function cookieHeader(req, name, value, maxAgeSec) {
 }
 const modeCookie = (req, mode) => cookieHeader(req, 'mode', mode, MEMBER_TTL_MS / 1000);
 
+// D'on ve la petició, per comptar-ne els intents.
 function clientIp(req) {
   // Darrere del proxy (Render), l'última adreça és la que hi afegeix el proxy: les anteriors les pot inventar el client.
   const forwarded = TRUST_PROXY ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
-  return forwarded || req.socket.remoteAddress || '';
+  const ip = forwarded || req.socket.remoteAddress || '';
+  if (ip.startsWith('::ffff:')) return ip.slice(7);
+  if (net.isIP(ip) !== 6) return ip;
+  // Amb IPv6, cada casa o mòbil té milions d'adreces (un bloc /64): es compta el bloc sencer, o canviar d'adreça saltaria el límit.
+  const [head, tail = ''] = ip.split('%')[0].split('::');
+  const a = head ? head.split(':') : [], b = tail ? tail.split(':') : [];
+  const groups = [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill('0'), ...b];
+  return `${groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(':')}::/64`;
 }
 
 // Comptadors per finestra de temps (en memòria): intents fallits d'entrar, entrades de membres…
@@ -255,8 +279,11 @@ class RateLimit {
   add(key) {
     const h = this.hits.get(key);
     this.hits.set(key, h && h.until > Date.now() ? { n: h.n + 1, until: h.until } : { n: 1, until: Date.now() + this.windowMs });
-    // Que no creixi sense límit si algú prova des de moltes adreces.
-    if (this.hits.size > 10000) for (const [k, v] of this.hits) if (v.until <= Date.now()) this.hits.delete(k);
+    // Que no creixi sense límit si algú prova des de moltes adreces: fora els caducats i, si encara n'hi ha massa, els més antics.
+    if (this.hits.size > 10000) {
+      for (const [k, v] of this.hits) if (v.until <= Date.now()) this.hits.delete(k);
+      for (const k of this.hits.keys()) { if (this.hits.size <= 9000) break; this.hits.delete(k); }
+    }
   }
   reset(key) { this.hits.delete(key); }
 }
@@ -266,8 +293,51 @@ const loginByIp = new RateLimit(10, 15 * 60 * 1000);
 const loginByUser = new RateLimit(50, 15 * 60 * 1000);
 // Entrar com a membre és lliure, però sense inundar la base de dades de sessions (tota la colla pot ser a la mateixa wifi).
 const identifyByIp = new RateLimit(150, 10 * 60 * 1000);
+// Codi de la colla: 20 errors per adreça cada 15 minuts (que no es pugui endevinar provant).
+const codeByIp = new RateLimit(20, 15 * 60 * 1000);
 // Per comparar el mateix temps tant si l'usuari existeix com si no (que no es pugui endevinar qui és administrador).
 const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
+
+// Un mòbil on aquest compte ja ha entrat bé abans.
+function knownDevice(req, adminId) {
+  const token = cookies(req).adev;
+  return !!token && !!db.prepare('SELECT 1 FROM admin_devices WHERE token = ? AND admin_id = ? AND expires_at > ?')
+    .get(hashToken(token), adminId, Date.now());
+}
+const deviceCookie = (req, adminId) => (knownDevice(req, adminId) ? []
+  : [cookieHeader(req, 'adev', newToken('admin_devices', 'admin_id', adminId, DEVICE_TTL_MS), DEVICE_TTL_MS / 1000)]);
+
+// Comprova la contrasenya d'un compte (per entrar o per confirmar un canvi), comptant-ne els errors.
+// Des d'un mòbil conegut del compte no hi ha bloqueig per compte: si no, qualsevol podria deixar fora l'administració
+// provant contrasenyes dolentes; el límit per adreça sí que hi és sempre.
+async function checkPassword(req, username, admin, password) {
+  const ip = clientIp(req);
+  const trusted = knownDevice(req, admin?.id ?? 0);
+  if (loginByIp.blocked(ip) || (!trusted && loginByUser.blocked(username))) fail(429, TOO_MANY);
+  const valid = await verifyPassword(String(password || '').slice(0, 200), admin?.password_hash ?? DUMMY_HASH);
+  if (admin && valid) { loginByIp.reset(ip); return true; }
+  loginByIp.add(ip);
+  if (!trusted) loginByUser.add(username);
+  return false;
+}
+// Amb una sessió d'administració oberta (o robada) no es pot canviar cap contrasenya ni cap compte sense saber la pròpia.
+async function confirmPassword(req, user, password) {
+  if (!(await checkPassword(req, user.username, { id: user.admin_id, password_hash: user.password_hash }, password))) {
+    fail(400, 'La contrasenya actual no és correcta');
+  }
+}
+
+const COMMON_PASSWORDS = new Set(['12345678', '123456789', '1234567890', '87654321', '12341234', '11223344', 'abcd1234', 'abc12345',
+  'password', 'password1', 'contrasenya', 'contraseña', 'qwertyui', 'qwertyuiop', 'qwerty123', 'admin123', 'admin1234', 'administrador',
+  'iloveyou', 'castells', 'castellers', 'castellera']);
+function newPassword(password, username) {
+  const p = String(password || '');
+  if (p.length < 8) fail(400, 'La contrasenya ha de tenir almenys 8 caràcters');
+  if (p.length > 200) fail(400, 'La contrasenya pot tenir com a molt 200 caràcters');
+  const low = p.toLowerCase();
+  if (low === username || /^(.)\1*$/.test(p) || COMMON_PASSWORDS.has(low)) fail(400, "Aquesta contrasenya és massa fàcil d'endevinar");
+  return hashPassword(p);
+}
 
 const meResponse = (user) => (user.mode === 'admin'
   ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions }
@@ -276,13 +346,20 @@ const meResponse = (user) => (user.mode === 'admin'
 // ---------- Rutes: autenticació i perfil ----------
 route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO }), 'public');
 
-function checkCollaCode(code) {
-  if (COLLA_CODE && String(code || '').trim() !== COLLA_CODE) fail(401, 'El codi de la colla no és correcte');
+// Es compara en temps constant (pels resums, que tenen la mateixa llargada) i amb límit d'errors.
+function checkCollaCode(req, code) {
+  if (!COLLA_CODE) return;
+  const ip = clientIp(req);
+  if (codeByIp.blocked(ip)) fail(429, TOO_MANY);
+  if (!crypto.timingSafeEqual(Buffer.from(hashToken(String(code || '').trim())), Buffer.from(hashToken(COLLA_CODE)))) {
+    codeByIp.add(ip);
+    fail(401, 'El codi de la colla no és correcte');
+  }
 }
 
 // Entrada de membres: sense contrasenya, només triant qui ets.
-route('POST', '/api/directory', ({ body }) => {
-  checkCollaCode(body.code);
+route('POST', '/api/directory', ({ body, req }) => {
+  checkCollaCode(req, body.code);
   return db.prepare('SELECT id, name, alias FROM people WHERE active = 1').all().map(publicPerson)
     .sort((a, b) => a.name.localeCompare(b.name, 'ca'));
 }, 'public');
@@ -291,33 +368,25 @@ route('POST', '/api/identify', ({ body, req, res }) => {
   const ip = clientIp(req);
   if (identifyByIp.blocked(ip)) fail(429, TOO_MANY);
   identifyByIp.add(ip);
-  checkCollaCode(body.code);
+  checkCollaCode(req, body.code);
   const person = db.prepare('SELECT * FROM people WHERE id = ? AND active = 1').get(Number(body.person_id)) || fail(404, 'Persona no trobada');
   // Si en aquest mòbil ja hi havia algú, la seva sessió s'acaba (no en queden de penjades).
   const old = cookies(req).token;
-  if (old) db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(old);
-  const token = crypto.randomBytes(32).toString('hex');
-  db.prepare("INSERT INTO auth_tokens (token, person_id, expires_at, mode) VALUES (?, ?, ?, 'member')").run(token, person.id, Date.now() + MEMBER_TTL_MS);
+  if (old) db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(hashToken(old));
+  const token = newToken('auth_tokens', 'person_id', person.id, MEMBER_TTL_MS, { mode: 'member' });
   res.setHeader('Set-Cookie', [cookieHeader(req, 'token', token, MEMBER_TTL_MS / 1000), modeCookie(req, 'member')]);
   const admin = adminSession(cookies(req).atoken);
   return meResponse({ ...person, role: 'member', mode: 'member', sessions: { member: publicPerson(person), admin: !!admin } });
 }, 'public');
 
-route('POST', '/api/login', ({ body, req, res }) => {
-  const ip = clientIp(req);
+route('POST', '/api/login', async ({ body, req, res }) => {
   const username = String(body.username || '').trim().toLowerCase().slice(0, 60);
-  if (loginByIp.blocked(ip) || loginByUser.blocked(username)) fail(429, TOO_MANY);
   const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username);
-  const valid = verifyPassword(String(body.password || '').slice(0, 200), admin?.password_hash ?? DUMMY_HASH);
-  if (!admin || !valid) {
-    loginByIp.add(ip);
-    loginByUser.add(username);
-    fail(401, 'Usuari o contrasenya incorrectes');
-  }
-  loginByIp.reset(ip);
-  const token = crypto.randomBytes(32).toString('hex');
-  db.prepare('INSERT INTO admin_tokens (token, admin_id, expires_at) VALUES (?, ?, ?)').run(token, admin.id, Date.now() + TOKEN_TTL_MS);
-  res.setHeader('Set-Cookie', [cookieHeader(req, 'atoken', token, TOKEN_TTL_MS / 1000), modeCookie(req, 'admin')]);
+  if (!(await checkPassword(req, username, admin, body.password))) fail(401, 'Usuari o contrasenya incorrectes');
+  const old = cookies(req).atoken;
+  if (old) db.prepare('DELETE FROM admin_tokens WHERE token = ?').run(hashToken(old));
+  const token = newToken('admin_tokens', 'admin_id', admin.id, TOKEN_TTL_MS);
+  res.setHeader('Set-Cookie', [cookieHeader(req, 'atoken', token, TOKEN_TTL_MS / 1000), modeCookie(req, 'admin'), ...deviceCookie(req, admin.id)]);
   const member = memberSession(cookies(req).token);
   return meResponse({ ...adminSession(token), sessions: { member: member ? publicPerson(member) : null, admin: true } });
 }, 'public');
@@ -325,10 +394,10 @@ route('POST', '/api/login', ({ body, req, res }) => {
 // Surt de l'entrada que s'està fent servir ara (la de membre o la d'administració); l'altra, si n'hi ha, es manté.
 route('POST', '/api/logout', ({ user, req, res }) => {
   if (user.mode === 'admin') {
-    db.prepare('DELETE FROM admin_tokens WHERE token = ?').run(user.token);
+    db.prepare('DELETE FROM admin_tokens WHERE token = ?').run(user.tokenHash);
     res.setHeader('Set-Cookie', [cookieHeader(req, 'atoken', '', 0), modeCookie(req, 'member')]);
   } else {
-    db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(user.token);
+    db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(user.tokenHash);
     res.setHeader('Set-Cookie', cookieHeader(req, 'token', '', 0));
   }
   return { ok: true };
@@ -342,19 +411,22 @@ route('POST', '/api/mode', ({ user, body, req, res }) => {
   return { ok: true };
 });
 
-route('GET', '/api/me', ({ user }) => meResponse(user));
+route('GET', '/api/me', ({ user, req, res }) => {
+  // Els administradors que ja tenien la sessió oberta d'abans també queden com a mòbil conegut.
+  if (user.mode === 'admin') res.setHeader('Set-Cookie', deviceCookie(req, user.admin_id));
+  return meResponse(user);
+});
 
 // Els administradors poden canviar el nom i la contrasenya del seu compte.
-route('PUT', '/api/me', ({ user, body }) => {
+route('PUT', '/api/me', async ({ user, body, req }) => {
   const name = 'name' in body ? str(body.name, 100) : user.name;
   if (!name) fail(400, 'El nom és obligatori');
-  db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, user.admin_id);
   if (body.newPassword) {
-    if (!verifyPassword(String(body.currentPassword || ''), user.password_hash)) fail(400, 'La contrasenya actual no és correcta');
-    if (String(body.newPassword).length < 8) fail(400, 'La nova contrasenya ha de tenir almenys 8 caràcters');
-    db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(hashPassword(String(body.newPassword)), user.admin_id);
-    db.prepare('DELETE FROM admin_tokens WHERE admin_id = ? AND token != ?').run(user.admin_id, user.token);
+    await confirmPassword(req, user, body.currentPassword);
+    db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(newPassword(body.newPassword, user.username), user.admin_id);
+    db.prepare('DELETE FROM admin_tokens WHERE admin_id = ? AND token != ?').run(user.admin_id, user.tokenHash);
   }
+  db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, user.admin_id);
   return { ok: true, name };
 }, 'admin');
 
@@ -371,30 +443,36 @@ function adminInput(body, existing = null) {
     if (!/^[a-z0-9._-]{3,}$/.test(out.username)) fail(400, "L'usuari ha de tenir almenys 3 lletres o números, sense espais");
     if (db.prepare('SELECT 1 FROM admins WHERE username = ? AND id != ?').get(out.username, existing?.id ?? 0)) fail(400, "Aquest nom d'usuari ja existeix");
   }
-  if (body.password || !existing) {
-    if (String(body.password || '').length < 8) fail(400, 'La contrasenya ha de tenir almenys 8 caràcters');
-    out.password_hash = hashPassword(String(body.password));
-  }
+  if (body.password || !existing) out.password_hash = newPassword(body.password, out.username ?? existing.username);
   return out;
 }
 
 route('GET', '/api/admins', () => db.prepare('SELECT * FROM admins ORDER BY name COLLATE NOCASE').all().map(adminRow), 'admin');
 
-route('POST', '/api/admins', ({ body }) => {
-  const id = insertRow('admins', adminInput(body));
+// Crear, canviar o esborrar comptes d'administració demana la contrasenya de qui ho fa.
+route('POST', '/api/admins', async ({ body, user, req }) => {
+  await confirmPassword(req, user, body.currentPassword);
+  const data = adminInput(body);
+  const id = insertRow('admins', data);
   return adminRow(db.prepare('SELECT * FROM admins WHERE id = ?').get(id));
 }, 'admin');
 
-route('PUT', '/api/admins/:id', ({ params, body }) => {
+route('PUT', '/api/admins/:id', async ({ params, body, user, req }) => {
   const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(params.id) || fail(404, 'Compte no trobat');
+  await confirmPassword(req, user, body.currentPassword);
   const data = adminInput(body, admin);
   updateRow('admins', admin.id, data);
-  if (data.password_hash) db.prepare('DELETE FROM admin_tokens WHERE admin_id = ?').run(admin.id);
+  // Amb una contrasenya nova, totes les sessions i mòbils coneguts d'aquell compte s'han de tornar a fer.
+  if (data.password_hash) {
+    db.prepare('DELETE FROM admin_tokens WHERE admin_id = ? AND token != ?').run(admin.id, user.tokenHash);
+    db.prepare('DELETE FROM admin_devices WHERE admin_id = ?').run(admin.id);
+  }
   return adminRow(db.prepare('SELECT * FROM admins WHERE id = ?').get(admin.id));
 }, 'admin');
 
-route('DELETE', '/api/admins/:id', ({ params, user }) => {
+route('DELETE', '/api/admins/:id', async ({ params, user, body, req }) => {
   if (Number(params.id) === user.admin_id) fail(400, 'No pots esborrar el compte amb què has entrat');
+  await confirmPassword(req, user, body.currentPassword);
   if (db.prepare('SELECT COUNT(*) AS n FROM admins').get().n <= 1) fail(400, "Ha de quedar almenys un compte d'administració");
   db.prepare('DELETE FROM admins WHERE id = ?').run(params.id);
   return { ok: true };
@@ -600,6 +678,7 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
   res.writeHead(200, {
     'Content-Type': 'text/csv; charset=utf-8',
     'Content-Disposition': `attachment; filename="assistencia-${event.date}.csv"`,
+    'Cache-Control': 'no-store',
   });
   res.end('﻿' + lines.join('\r\n'));
   return undefined;
@@ -733,7 +812,8 @@ route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
 
 route('PUT', '/api/castells/:id/positions/:key', ({ params, body }) => {
   const castell = getCastell(params.id);
-  const key = decodeURIComponent(params.key);
+  let key = '';
+  try { key = decodeURIComponent(params.key); } catch { /* mal codificada: no és cap posició */ }
   if (!/^[\w-]{1,40}$/.test(key)) fail(400, 'Posició no vàlida');
   const personId = body.person_id ? Number(body.person_id) : null;
   const guestId = !personId && body.guest_id ? Number(body.guest_id) : null;
@@ -1193,7 +1273,7 @@ const ICS_TZ = ['BEGIN:VTIMEZONE', 'TZID:Europe/Madrid',
   'BEGIN:DAYLIGHT', 'TZOFFSETFROM:+0100', 'TZOFFSETTO:+0200', 'TZNAME:CEST', 'DTSTART:19700329T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', 'END:DAYLIGHT',
   'BEGIN:STANDARD', 'TZOFFSETFROM:+0200', 'TZOFFSETTO:+0100', 'TZNAME:CET', 'DTSTART:19701025T030000', 'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU', 'END:STANDARD',
   'END:VTIMEZONE'];
-const icsText = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/[,;]/g, '\\$&');
+const icsText = (v) => String(v ?? '').replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/[,;]/g, '\\$&');
 // Les línies d'un .ics no poden passar de 75 bytes: les llargues es parteixen.
 function icsFold(line) {
   const out = [];
@@ -1229,7 +1309,7 @@ function icsEvent(e, origin) {
 }
 
 route('GET', '/api/calendar.ics', ({ req, res, query }) => {
-  checkCollaCode(query.get('code'));
+  checkCollaCode(req, query.get('code'));
   const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   const origin = `${proto}://${req.headers.host}`;
   const one = Number(query.get('event')) || null;
@@ -1293,13 +1373,18 @@ function readBody(req) {
     });
     req.on('end', () => {
       if (!chunks.length) return resolve({});
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new HttpError(400, 'JSON no vàlid')); }
+      let body;
+      try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* es rebutja a sota */ }
+      // L'app sempre envia un objecte: res de llistes, textos ni «null» (petarien les rutes).
+      if (body && typeof body === 'object' && !Array.isArray(body)) resolve(body);
+      else reject(new HttpError(400, 'JSON no vàlid'));
     });
     req.on('error', reject);
   });
 }
 
-const server = http.createServer(async (req, res) => {
+// Una connexió que envia la petició a poc a poc no pot quedar oberta indefinidament.
+const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_000, connectionsCheckingInterval: 5_000 }, async (req, res) => {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   let url;
@@ -1330,11 +1415,11 @@ const server = http.createServer(async (req, res) => {
     const user = currentUser(req);
     if (match.auth !== 'public' && !user) fail(401, 'Cal iniciar sessió');
     if (match.auth === 'admin' && user.role !== 'admin') fail(403, 'Només per a administradors');
-    const body = ['POST', 'PUT'].includes(req.method) ? await readBody(req) : {};
+    const body = req.method === 'GET' ? {} : await readBody(req);
     const result = await match.handler({ req, res, params, body, user, query: url.searchParams });
     if (result !== undefined) send(200, result);
   } catch (err) {
-    const lang = String(req.headers['x-lang'] || 'ca');
+    const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
     if (err instanceof HttpError) send(err.status, { error: translate(lang, err.message, err.params) });
     else if (String(err.message).includes('constraint')) send(400, { error: translate(lang, 'Dades no vàlides') });
     else { console.error(err); send(500, { error: translate(lang, 'Error intern del servidor') }); }

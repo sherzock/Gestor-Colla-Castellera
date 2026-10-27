@@ -2,12 +2,15 @@ import { DatabaseSync } from 'node:sqlite';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 const DB_PATH = process.env.DB_PATH || path.join(import.meta.dirname, 'data', 'colla.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 export const db = new DatabaseSync(DB_PATH);
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+// Hi ha dades personals: només l'usuari que fa anar el servidor pot llegir la base de dades.
+for (const f of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`]) try { fs.chmodSync(f, 0o600); } catch { /* no existeix o no es pot */ }
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS people (
@@ -219,6 +222,23 @@ addColumn('castells', 'tech_notes', 'TEXT');
 // Una versió anterior guardava «on ha fallat»: es va treure perquè sovint no es pot saber.
 if (columns('castells').includes('fail_point')) db.exec('ALTER TABLE castells DROP COLUMN fail_point');
 
+// Mòbils on un compte d'administració ha entrat bé: no queden bloquejats si algú altre prova contrasenyes del compte.
+db.exec(`CREATE TABLE IF NOT EXISTS admin_devices (
+  token TEXT PRIMARY KEY,
+  admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+)`);
+// Les sessions es guarden com a resum (SHA-256) i no tal com són: amb una còpia de la base de dades no es pot entrar.
+if (db.prepare('PRAGMA user_version').get().user_version < 1) {
+  transaction(() => {
+    for (const table of ['auth_tokens', 'admin_tokens']) {
+      const update = db.prepare(`UPDATE ${table} SET token = ? WHERE token = ?`);
+      for (const { token } of db.prepare(`SELECT token FROM ${table}`).all()) update.run(hashToken(token), token);
+    }
+    db.exec('PRAGMA user_version = 1');
+  });
+}
+
 db.exec(`CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
 CREATE INDEX IF NOT EXISTS idx_castells_event ON castells(event_id);`);
 
@@ -228,12 +248,18 @@ export function hashPassword(password) {
   return `${salt.toString('hex')}:${hash.toString('hex')}`;
 }
 
-export function verifyPassword(password, stored) {
+// Sense bloquejar el servidor mentre es comprova (scrypt triga uns quants mil·lisegons).
+const scrypt = promisify(crypto.scrypt);
+export async function verifyPassword(password, stored) {
   if (!stored) return false;
   const [saltHex, hashHex] = stored.split(':');
   const expected = Buffer.from(hashHex, 'hex');
-  const actual = crypto.scryptSync(password, Buffer.from(saltHex, 'hex'), expected.length);
+  const actual = await scrypt(password, Buffer.from(saltHex, 'hex'), expected.length);
   return crypto.timingSafeEqual(expected, actual);
+}
+
+export function hashToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
 export function transaction(fn) {

@@ -146,20 +146,32 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
 
 ### Seguretat
 
-- Contrasenyes d'administració guardades amb scrypt. Després de 10 intents fallits des d'un mateix lloc cal esperar
-  15 minuts, i un mateix compte no admet més de 50 intents fallits cada 15 minuts encara que vinguin de molts llocs.
-  La resposta triga el mateix tant si l'usuari existeix com si no (no es pot endevinar qui és administrador).
-- L'entrada de membres (sense contrasenya) té un límit de 150 entrades cada 10 minuts per adreça, perquè ningú pugui
-  omplir la base de dades de sessions; quan algú canvia de persona al mateix mòbil, la sessió anterior s'esborra, i
-  les sessions caducades es netegen soles.
-- Sessions en cookies `HttpOnly` i `SameSite=Lax` (i `Secure` amb HTTPS). Les peticions que canvien dades han de venir
-  de la mateixa web (es comprova `Origin` i `Sec-Fetch-Site`) i en format JSON, cosa que un formulari d'una altra web
-  no pot enviar.
+- Contrasenyes d'administració guardades amb scrypt (mínim 8 caràcters; no s'accepten les més típiques ni la que
+  és igual que l'usuari). Després de 10 intents fallits des d'un mateix lloc cal esperar 15 minuts, i un mateix compte
+  no admet més de 50 intents fallits cada 15 minuts encara que vinguin de molts llocs. Amb IPv6 es compta tot el bloc
+  `/64` (si no, canviar d'adreça saltaria el límit). La resposta triga el mateix tant si l'usuari existeix com si no.
+- Perquè ningú pugui deixar fora l'administració provant contrasenyes dolentes a propòsit, als mòbils on un compte ja
+  ha entrat bé no se'ls aplica el bloqueig per compte (sí el de cada lloc).
+- Crear, canviar o esborrar comptes d'administració i canviar la contrasenya demana la contrasenya de qui ho fa, i els
+  errors compten com a intents d'entrar: amb una sessió oberta en un mòbil aliè no es pot prendre el control dels
+  comptes ni anar provant contrasenyes. En canviar la contrasenya d'un compte, se'n tanquen les altres sessions.
+- El codi de la colla (`COLLA_CODE`) es compara sempre en el mateix temps i, després de 20 errors des d'un mateix lloc,
+  cal esperar 15 minuts.
+- L'entrada de membres (sense contrasenya) té un límit de 150 entrades cada 10 minuts per adreça i com a molt 20
+  sessions obertes per persona, perquè ningú pugui omplir la base de dades; quan algú canvia de persona al mateix mòbil,
+  la sessió anterior s'esborra, i les sessions caducades es netegen soles.
+- Sessions en cookies `HttpOnly` i `SameSite=Lax` (i `Secure` amb HTTPS). A la base de dades només se'n guarda un resum
+  (SHA-256): amb una còpia de la base de dades no es pot entrar a l'app. El fitxer de la base de dades només el pot llegir
+  l'usuari que fa anar el servidor.
+- Les peticions que canvien dades han de venir de la mateixa web (es comprova `Origin` i `Sec-Fetch-Site`) i en format
+  JSON (un objecte), cosa que un formulari d'una altra web no pot enviar.
+- Les connexions que envien la petició a poc a poc es tallen (15 s per a les capçaleres, 30 s per a tota la petició).
 - Capçaleres de seguretat: només es carreguen scripts de la mateixa app (CSP), no es pot posar dins d'un marc d'una
   altra web, la càmera, el micròfon i la ubicació queden desactivats (`Permissions-Policy`), i amb HTTPS s'activa HSTS.
 - Només se serveixen els fitxers de `public/` (ni la base de dades, ni el codi del servidor, ni fitxers ocults), i
   una adreça mal formada no pot aturar el servidor.
-- L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula.
+- L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula i no es guarda a la memòria
+  cau del navegador. Al calendari (`.ics`), el text de les sessions no pot afegir línies.
 - Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
 - Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
   dir qui va a l'escoleta, sense comentaris ni respostes als camps extra dels altres, i sense les
@@ -225,7 +237,8 @@ segons a tornar a arrencar; aleshores les dades es reinicien. **No ho feu servir
 
 Qualsevol servidor amb Node (un VPS, Railway, Fly.io, Render amb disc persistent…) serveix. Posa-hi HTTPS
 davant (Caddy, Nginx o el del proveïdor) amb `TRUST_PROXY=1` i assegura't que el fitxer `DB_PATH` està en un disc que no s'esborri.
-Fes còpies de seguretat del fitxer `.db` periòdicament.
+Fes còpies de seguretat del fitxer `.db` periòdicament i guarda-les en un lloc privat: hi ha les dades personals de la
+colla (les sessions i les contrasenyes no hi són tal com són, però la resta sí).
 
 ## Estructura
 

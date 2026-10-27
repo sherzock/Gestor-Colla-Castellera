@@ -1834,7 +1834,7 @@ async function pageAccounts() {
           <h2>${t('Canvia la meva contrasenya')}</h2>
           <p class="small muted" style="margin:0">${t('Usuari')}: <strong>${esc(me.username)}</strong></p>
           <label class="field">${t('Contrasenya actual')}<input name="currentPassword" type="password" autocomplete="current-password" required></label>
-          <label class="field">${t('Nova contrasenya')}<input name="newPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label class="field">${t('Nova contrasenya')}<input name="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></label>
           <div class="form-actions"><button class="btn">${t('Canvia')}</button></div>
         </form>
       </div>
@@ -1853,7 +1853,9 @@ function adminModal(account) {
     <form id="admin-form" class="stack">
       <label class="field">${t('Nom')}<input name="name" required value="${esc(account?.name)}" placeholder="${t('p. ex. Junta tècnica, Marta…')}"></label>
       <label class="field">${t('Usuari')}<input name="username" required autocapitalize="none" autocomplete="off" value="${esc(account?.username)}"></label>
-      <label class="field">${account ? t('Nova contrasenya') : t('Contrasenya')}<input name="password" type="password" autocomplete="new-password" minlength="8" ${account ? '' : 'required'} placeholder="${account ? t('Deixa-ho buit per no canviar') : t('Mínim 8 caràcters')}"></label>
+      <label class="field">${account ? t('Nova contrasenya') : t('Contrasenya')}<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" ${account ? '' : 'required'} placeholder="${account ? t('Deixa-ho buit per no canviar') : t('Mínim 8 caràcters')}"></label>
+      <label class="field">${t('La teva contrasenya')}<input name="currentPassword" type="password" autocomplete="current-password" required>
+        <span class="small muted">${t('Per seguretat, crear, canviar o esborrar comptes demana la teva contrasenya.')}</span></label>
       <div class="form-actions">${account && !self ? `<button type="button" class="btn danger" id="del-admin" style="margin-right:auto">${t('Esborra')}</button>` : ''}
         <button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${account ? t('Desa') : t('Crea')}</button></div>
     </form>`, (m) => {
@@ -1869,8 +1871,10 @@ function adminModal(account) {
       }
     };
     qs('#del-admin', m)?.addEventListener('click', async () => {
+      const current = qs('#admin-form', m).elements.currentPassword;
+      if (!current.reportValidity()) return;
       if (!confirm(t('Esborrar el compte «{name}»? Ja no podrà entrar com a administrador/a.', { name: account.name }))) return;
-      if (await attempt(() => api('DELETE', `/admins/${account.id}`))) { closeModal(); render(); }
+      if (await attempt(() => api('DELETE', `/admins/${account.id}`, { currentPassword: current.value }))) { closeModal(); render(); }
     });
   });
 }
