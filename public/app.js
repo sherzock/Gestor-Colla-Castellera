@@ -2084,6 +2084,7 @@ const outcomeBar = (b) => resultsBar({ descarregat: b.descarregat, carregat: b.c
 const FEW_ATTEMPTS = 5;
 
 let reserveCastell = null;
+let progressCastell = null;
 async function pageTecnica(tabs) {
   const st = await api('GET', `/stats/tecnica?${statsQuery()}`);
   const pct = (b) => (b.n ? `${Math.round((b.descarregat / b.n) * 100)}%` : '—');
@@ -2107,8 +2108,7 @@ async function pageTecnica(tabs) {
     </div>`;
   }).join('');
 
-  // Amb molts intents, en lloc d'un quadre per intent es fa una columna per mes amb quants n'hi ha de cada resultat.
-  const MAX_DOTS = 18;
+  // Una columna per mes amb quants intents n'hi ha de cada resultat.
   const monthColumns = (attempts) => {
     const months = new Map();
     for (const a of attempts) {
@@ -2119,7 +2119,7 @@ async function pageTecnica(tabs) {
       months.set(a.date.slice(0, 7), m);
     }
     // Petit gràfic de columnes: totes comparteixen la base i els anys van agrupats a sobre.
-    const BAR_H = 84;
+    const BAR_H = 150;
     const max = Math.max(...[...months.values()].map((m) => m.ok + m.warn + m.bad));
     const byYear = new Map();
     for (const [k, m] of months) byYear.set(k.slice(0, 4), [...(byYear.get(k.slice(0, 4)) || []), [k, m]]);
@@ -2144,17 +2144,30 @@ async function pageTecnica(tabs) {
     return `<div class="tl-chart">${[...byYear].map(([y, list]) => `<div class="tl-year" style="flex:${list.length}">
       ${byYear.size > 1 ? `<div class="tl-year-label">${y}</div>` : ''}<div class="tl-cols">${list.map(col).join('')}</div></div>`).join('')}</div>`;
   };
-  const dot = (a) => `<a href="#/castell/${a.castell_id}" class="dot ${resultClass(a.result)} ${a.partial ? 'partial' : ''} ${a.type === 'assaig' ? '' : 'diada'}"
-    title="${esc([fmt(a.date, { day: 'numeric', month: 'short' }), a.title, resultName(a.result), a.range, a.notes].filter(Boolean).join(' · '))}"></a>`;
-  const castellRows = st.castells.map((c) => `<li>
-    <div class="prog-head"><span class="castell-tag">${esc(c.castell)}</span>
-      <span class="small muted">${[tn(c.full, '{n} sencer', '{n} sencers'), c.partials ? tn(c.partials, '{n} parcial', '{n} parcials') : null,
-        c.tilFirst ? tn(c.tilFirst, 'descarregat al primer intent', '{n} intents fins al primer descarregat') : c.full ? t('encara sense descarregar') : null].filter(Boolean).join(' · ')}</span></div>
-    ${c.attempts.length > MAX_DOTS ? monthColumns(c.attempts) : `<div class="timeline">${c.attempts.map(dot).join('')}</div>`}
-    <div class="small muted">${[c.assajos != null ? t('Assajos: {n}% descarregats', { n: c.assajos }) : null, c.diades != null ? t('Diades: {n}% descarregats', { n: c.diades }) : null,
-].filter(Boolean).join(' · ')}</div>
-    ${c.notes.length ? `<ul class="tech-note-list">${c.notes.map((a) => `<li><a href="#/castell/${a.castell_id}" class="muted">${fmt(a.date, { day: 'numeric', month: 'short' })}</a> ${esc(a.notes)}</li>`).join('')}</ul>` : ''}
-  </li>`).join('');
+  // Com avança un castell concret (es tria al desplegable).
+  if (!st.castells.some((c) => c.castell === progressCastell)) progressCastell = st.castells[0]?.castell;
+  const prog = st.castells.find((c) => c.castell === progressCastell);
+  const pctOrDash = (n) => (n != null ? `${n}%` : '—');
+  // Els últims intents ja porten la seva nota; a sota només les notes d'intents més antics.
+  const recent = prog ? prog.attempts.slice(-6).reverse() : [];
+  const olderNotes = prog ? prog.notes.filter((n) => !recent.some((a) => a.castell_id === n.castell_id)).slice(0, 3) : [];
+  const progressBody = prog ? `
+    <select id="progress-castell" style="margin-bottom:12px">${st.castells.map((c) => `<option value="${esc(c.castell)}" ${c.castell === progressCastell ? 'selected' : ''}>${esc(c.castell)} · ${tn(c.attempts.length, '{n} intent', '{n} intents')}</option>`).join('')}</select>
+    <div class="stat-tiles prog-tiles">
+      ${statTile(prog.full, t('Intents sencers'), '', prog.partials ? tn(prog.partials, '+ {n} prova parcial', '+ {n} proves parcials') : '')}
+      ${statTile(prog.tilFirst ?? '—', t('Fins al primer descarregat'), '', !prog.tilFirst && prog.full ? t('encara sense descarregar') : '')}
+      ${statTile(pctOrDash(prog.assajos), t('Descarregats a assajos'), 'r-descarregat')}
+      ${statTile(pctOrDash(prog.diades), t('Descarregats a diades'), 'r-descarregat')}
+    </div>
+    ${monthColumns(prog.attempts)}
+    <div class="legend"><span><i style="background:var(--ok)"></i>${t('Descarregat')}</span><span><i style="background:var(--warn)"></i>${t('Carregat')}</span><span><i style="background:var(--bad)"></i>${t('Caigut')}</span><span><i style="background:transparent;outline:2px solid var(--ink-2);outline-offset:1px"></i>${t('Mes amb diada')}</span></div>
+    <h3 style="margin:16px 0 6px">${t('Últims intents')}</h3>
+    <ul class="recent-attempts">${recent.map((a) => `<li><a href="#/castell/${a.castell_id}">
+      <span class="small muted">${fmt(a.date, a.date.slice(0, 4) === todayIso().slice(0, 4) ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: '2-digit' })}</span>
+      <span>${esc(a.title)}${a.range ? ` <span class="small muted">· ${esc(a.range)}</span>` : ''}</span>${resultPill(a.result)}</a>
+      ${a.notes ? `<div class="small muted">${esc(a.notes)}</div>` : ''}</li>`).join('')}</ul>
+    ${olderNotes.length ? `<h3 style="margin:16px 0 6px">${t('Notes anteriors')}</h3>
+      <ul class="tech-note-list">${olderNotes.map((a) => `<li><a href="#/castell/${a.castell_id}" class="muted">${fmt(a.date, { day: 'numeric', month: 'short' })}</a> ${esc(a.notes)}</li>`).join('')}</ul>` : ''}` : '';
 
   // Recanvis d'un castell concret: la mateixa posició no és igual en castells diferents.
   if (!st.reserves.some((r) => r.castell === reserveCastell)) reserveCastell = st.reserves[0]?.castell;
@@ -2196,8 +2209,8 @@ async function pageTecnica(tabs) {
       <div class="grid-2">
         <div class="card">
           <h2 style="margin-bottom:6px">${t('Com avança cada castell')}</h2>
-          <p class="small muted" style="margin:0 0 12px">${t('Cada quadre és un intent, per ordre. Buit: prova parcial. Gran: diada. Toca\'l per obrir el castell.')} ${t("Si n'hi ha molts, s'agrupen per mesos: cada columna diu quants n'hi ha de cada resultat, i les que tenen vora són mesos amb diada.")}</p>
-          ${castellRows ? `<ul class="prog-list">${castellRows}</ul>` : `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
+          <p class="small muted" style="margin:0 0 12px">${t("Tria un castell. Cada columna és un mes i diu quants intents n'hi ha hagut de cada resultat.")}</p>
+          ${progressBody || `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
         </div>
         <div class="card">
           <h2 style="margin-bottom:6px">${t('Recanvis per a cada castell')}</h2>
@@ -2211,6 +2224,7 @@ async function pageTecnica(tabs) {
   bindStatsTabs();
   // Si el gràfic per mesos no hi cap (mòbil), comença pels mesos més recents.
   qsa('.tl-chart').forEach((el) => { el.scrollLeft = el.scrollWidth; });
+  qs('#progress-castell')?.addEventListener('change', (e) => { progressCastell = e.target.value; render({ keepScroll: true }); });
   qs('#reserve-castell')?.addEventListener('change', (e) => { reserveCastell = e.target.value; render({ keepScroll: true }); });
 }
 

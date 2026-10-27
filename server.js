@@ -1141,7 +1141,7 @@ route('GET', '/api/stats/tecnica', ({ query }) => {
       tilFirst: first >= 0 ? first + 1 : null,
       assajos: rate(full.filter((a) => a.type === 'assaig')),
       diades: rate(full.filter((a) => a.type !== 'assaig')),
-      notes: t.attempts.filter((a) => a.notes).slice(-3).reverse(),
+      notes: t.attempts.filter((a) => a.notes).slice(-9).reverse(),
     };
   }).sort((a, b) => b.attempts.length - a.attempts.length);
 

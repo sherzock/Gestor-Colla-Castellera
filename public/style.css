@@ -641,13 +641,6 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .prog-list .names { margin-top: 0; }
 .prog-list .names a { text-decoration: none; color: var(--ink); background: var(--surface-2); border-radius: 99px; padding: 3px 9px; font-size: .82rem; }
 .prog-list li.risk .prog-head strong { color: var(--bad); }
-.timeline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.timeline .dot { width: 14px; height: 14px; border-radius: 4px; background: var(--ink-3); border: 2px solid transparent; }
-.timeline .dot.diada { width: 20px; height: 20px; }
-.timeline .dot.r-descarregat { background: var(--ok); border-color: var(--ok); }
-.timeline .dot.r-carregat { background: var(--warn); border-color: var(--warn); }
-.timeline .dot.r-intent, .timeline .dot.r-intent-desfet { background: var(--bad); border-color: var(--bad); }
-.timeline .dot.partial { background: transparent; }
 
 /* Pestanyes d'estadístiques: al mòbil ocupen tota l'amplada i, si no hi caben, es poden fer lliscar */
 #st-tab { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -715,13 +708,23 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .tl-year + .tl-year { border-left: 1px dashed var(--line); margin-left: 6px; padding-left: 6px; }
 .tl-year-label { font-size: .72rem; font-weight: 700; color: var(--ink-2); margin-bottom: 2px; }
 .tl-cols { display: flex; gap: 4px; border-bottom: 1.5px solid var(--line); }
-.tl-col { flex: 1 1 0; min-width: 28px; max-width: 46px; display: flex; flex-direction: column; align-items: stretch; }
+.tl-col { flex: 1 1 0; min-width: 30px; max-width: 64px; display: flex; flex-direction: column; align-items: stretch; }
 .tl-bar-area { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; }
 .tl-total { font-size: .72rem; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 14px; }
 .tl-bar { display: flex; flex-direction: column; width: 100%; border-radius: 5px 5px 0 0; overflow: hidden; }
 .tl-bar i { display: flex; align-items: center; justify-content: center; min-height: 3px; font-style: normal;
   font-size: .66rem; font-weight: 800; color: rgb(0 0 0 / .7); font-variant-numeric: tabular-nums; }
 .tl-bar i.ok { background: var(--ok); } .tl-bar i.warn { background: var(--warn); } .tl-bar i.bad { background: var(--bad); }
-.tl-col.has-diada .tl-bar { box-shadow: inset 0 0 0 2px var(--ink); }
+.tl-col.has-diada .tl-bar { outline: 2px solid var(--ink-2); outline-offset: 2px; }
 .tl-m { font-size: .66rem; color: var(--ink-3); text-align: center; line-height: 1.6; white-space: nowrap; }
 .tl-col.has-diada .tl-m { color: var(--ink); font-weight: 700; }
+
+/* Com avança un castell */
+.prog-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 14px; }
+.prog-tiles .stat-tile { background: var(--surface-2); border: 0; }
+.prog-tiles .stat-tile strong { font-size: 1.4rem; }
+.prog-tiles .stat-tile span { font-size: .8rem; }
+.recent-attempts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.recent-attempts li { border-radius: 8px; background: var(--surface-2); padding: 7px 10px; }
+.recent-attempts a { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; text-decoration: none; color: var(--ink); }
+.recent-attempts li .small { margin-top: 2px; }

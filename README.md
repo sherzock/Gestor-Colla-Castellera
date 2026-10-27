@@ -58,10 +58,9 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   - *Tècnica* (admins): un castell és de tota la colla, així que no es mira qui ha fallat sinó:
     - **què acompanya els castells descarregats**: tronc repetit respecte a l'últim cop o amb canvis, tronc amb
       experiència a cada posició o amb gent nova, i pinya plena (≥90 %) o incompleta;
-    - **com avança cada castell**: tots els intents per ordre (parcials, assajos i diades), quants intents ha calgut
-      fins al primer descarregat i el percentatge de descarregats a assajos i a diades (quan n'hi ha molts, els
-      intents s'agrupen en un gràfic de columnes per mes, separat per anys, amb quants n'hi ha de cada resultat);
-      amb les últimes **notes de la tècnica** de cada castell;
+    - **com avança cada castell**: es tria un castell i es veu un gràfic de columnes per mes (separat per anys) amb
+      quants intents n'hi ha de cada resultat, quants intents sencers i parcials s'han fet, quants han calgut fins al
+      primer descarregat, el percentatge de descarregats a assajos i a diades, els últims intents i les notes de la tècnica;
     - **preparació de les properes diades**: per a cada castell, quanta gent del tronc ha assajat la seva posició
       d'aquell castell les últimes 6 setmanes;
     - **recanvis per a cada castell** (es tria el castell, perquè una mateixa posició no és igual en un 3de7 que en un
