@@ -2107,13 +2107,43 @@ async function pageTecnica(tabs) {
     </div>`;
   }).join('');
 
+  // Amb molts intents, en lloc d'un quadre per intent es fa una columna per mes amb quants n'hi ha de cada resultat.
+  const MAX_DOTS = 18;
+  const monthColumns = (attempts) => {
+    const months = new Map();
+    for (const a of attempts) {
+      const m = months.get(a.date.slice(0, 7)) || { ok: 0, warn: 0, bad: 0, partial: 0, diades: 0 };
+      m[a.result === 'descarregat' ? 'ok' : a.result === 'carregat' ? 'warn' : 'bad']++;
+      if (a.partial) m.partial++;
+      if (a.type !== 'assaig') m.diades++;
+      months.set(a.date.slice(0, 7), m);
+    }
+    const years = new Set([...months.keys()].map((k) => k.slice(0, 4)));
+    let lastYear = null;
+    const max = Math.max(...[...months.values()].map((m) => m.ok + m.warn + m.bad));
+    return `<div class="tl-months">${[...months].map(([k, m]) => {
+      const n = m.ok + m.warn + m.bad;
+      const date = `${k}-15`;
+      // Si hi ha més d'un any, l'any surt només al primer mes de cada any.
+      const year = years.size > 1 && k.slice(0, 4) !== lastYear ? k.slice(0, 4) : null;
+      lastYear = k.slice(0, 4);
+      const label = fmt(date, { month: 'short' }) + (year ? `<span class="y">${year}</span>` : '');
+      const tip = [fmt(date, { month: 'long', year: 'numeric' }), tn(n, '{n} intent', '{n} intents'),
+        m.ok ? tn(m.ok, '{n} descarregat', '{n} descarregats') : null, m.warn ? tn(m.warn, '{n} carregat', '{n} carregats') : null,
+        m.bad ? tn(m.bad, '{n} caigut', '{n} caiguts') : null, m.partial ? tn(m.partial, '{n} parcial', '{n} parcials') : null,
+        m.diades ? tn(m.diades, '{n} a diada', '{n} a diades') : null].filter(Boolean).join(' · ');
+      return `<div class="tl-month" title="${esc(tip)}"><span class="n">${n}</span>
+        <span class="col" style="height:${Math.max(12, (n / max) * 56)}px">${m.bad ? `<i class="bad" style="flex:${m.bad}"></i>` : ''}${m.warn ? `<i class="warn" style="flex:${m.warn}"></i>` : ''}${m.ok ? `<i class="ok" style="flex:${m.ok}"></i>` : ''}</span>
+        <span class="m">${label}${m.diades ? '<b class="d"></b>' : ''}</span></div>`;
+    }).join('')}</div>`;
+  };
   const dot = (a) => `<a href="#/castell/${a.castell_id}" class="dot ${resultClass(a.result)} ${a.partial ? 'partial' : ''} ${a.type === 'assaig' ? '' : 'diada'}"
     title="${esc([fmt(a.date, { day: 'numeric', month: 'short' }), a.title, resultName(a.result), a.range, a.notes].filter(Boolean).join(' · '))}"></a>`;
   const castellRows = st.castells.map((c) => `<li>
     <div class="prog-head"><span class="castell-tag">${esc(c.castell)}</span>
       <span class="small muted">${[tn(c.full, '{n} sencer', '{n} sencers'), c.partials ? tn(c.partials, '{n} parcial', '{n} parcials') : null,
         c.tilFirst ? tn(c.tilFirst, 'descarregat al primer intent', '{n} intents fins al primer descarregat') : c.full ? t('encara sense descarregar') : null].filter(Boolean).join(' · ')}</span></div>
-    <div class="timeline">${c.attempts.map(dot).join('')}</div>
+    ${c.attempts.length > MAX_DOTS ? monthColumns(c.attempts) : `<div class="timeline">${c.attempts.map(dot).join('')}</div>`}
     <div class="small muted">${[c.assajos != null ? t('Assajos: {n}% descarregats', { n: c.assajos }) : null, c.diades != null ? t('Diades: {n}% descarregats', { n: c.diades }) : null,
 ].filter(Boolean).join(' · ')}</div>
     ${c.notes.length ? `<ul class="tech-note-list">${c.notes.map((a) => `<li><a href="#/castell/${a.castell_id}" class="muted">${fmt(a.date, { day: 'numeric', month: 'short' })}</a> ${esc(a.notes)}</li>`).join('')}</ul>` : ''}
@@ -2159,7 +2189,7 @@ async function pageTecnica(tabs) {
       <div class="grid-2">
         <div class="card">
           <h2 style="margin-bottom:6px">${t('Com avança cada castell')}</h2>
-          <p class="small muted" style="margin:0 0 12px">${t('Cada quadre és un intent, per ordre. Buit: prova parcial. Gran: diada. Toca\'l per obrir el castell.')}</p>
+          <p class="small muted" style="margin:0 0 12px">${t('Cada quadre és un intent, per ordre. Buit: prova parcial. Gran: diada. Toca\'l per obrir el castell.')} ${t("Si n'hi ha molts, s'agrupen per mesos: l'alçada és el nombre d'intents i el punt marca els mesos amb diada.")}</p>
           ${castellRows ? `<ul class="prog-list">${castellRows}</ul>` : `<p class="muted small">${t('No hi ha castells en aquest període.')}</p>`}
         </div>
         <div class="card">

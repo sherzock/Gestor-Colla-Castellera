@@ -709,3 +709,13 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .tech-note-list { list-style: none; margin: 6px 0 0; padding: 0 0 0 10px; border-left: 3px solid var(--line); display: grid; gap: 3px; font-size: .85rem; }
 .tech-note-list a { text-decoration: none; font-size: .78rem; margin-right: 4px; }
 .tech-notes textarea { width: 100%; resize: vertical; }
+/* Intents agrupats per mes (quan n'hi ha molts) */
+.tl-months { display: flex; flex-wrap: wrap; gap: 6px 4px; align-items: flex-end; }
+.tl-month { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 34px; cursor: default; }
+.tl-month .n { font-size: .72rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.tl-month .col { display: flex; flex-direction: column; width: 20px; border-radius: 4px; overflow: hidden; background: var(--line); }
+.tl-month .col i { display: block; min-height: 3px; }
+.tl-month .col i.ok { background: var(--ok); } .tl-month .col i.warn { background: var(--warn); } .tl-month .col i.bad { background: var(--bad); }
+.tl-month .m { font-size: .66rem; color: var(--ink-3); white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tl-month .m .d { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); }
+.tl-month .m .y { font-weight: 700; color: var(--ink-2); }
