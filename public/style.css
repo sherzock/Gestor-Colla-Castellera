@@ -482,7 +482,7 @@ body.no-scroll { overflow: hidden; }
 .counts .status svg { width: 12px; height: 12px; vertical-align: -1px; }
 
 /* ---------- Estadístiques ---------- */
-.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
 .stat-tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .stat-tile strong { font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .stat-tile span { font-weight: 600; color: var(--ink-2); }
@@ -512,7 +512,8 @@ body.no-scroll { overflow: hidden; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-wd { text-align: center; font-size: .75rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; padding: 4px 0; }
 .cal-day { min-height: 96px; border: 1px solid var(--line); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; gap: 3px;
-  cursor: pointer; background: var(--surface); min-width: 0; }
+  background: var(--surface); min-width: 0; }
+.cal-day.add { cursor: pointer; }
 .cal-day:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .cal-day.out { background: var(--surface-2); opacity: .55; }
 .cal-day.past .cal-n { color: var(--ink-3); }
@@ -540,3 +541,34 @@ body.no-scroll { overflow: hidden; }
   .cal-agenda { display: block; }
 }
 .demo-note { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: .88rem; text-align: center; }
+
+/* Estadístiques: cada bloc separat amb el mateix espai */
+.stats-body { display: grid; gap: 18px; margin-top: 16px; }
+.stats-body > *, .stats-body .card + .card { margin: 0; }
+.stats-body .grid-2 { gap: 18px; }
+.stats-body .card h2 { margin-bottom: 14px; }
+
+/* Sessions: què has respost i què no */
+.event-card.ans-si, .event-card.ans-potser, .event-card.ans-no, .event-card.ans-none { border-left-width: 5px; }
+.event-card.ans-si { border-left-color: var(--ok); }
+.event-card.ans-potser { border-left-color: var(--warn); }
+.event-card.ans-no { border-left-color: var(--bad); }
+.event-card.ans-none { border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.status.pending { background: var(--accent); color: var(--accent-ink); font-weight: 800; display: inline-flex; align-items: center; gap: 5px; }
+.status.pending svg, .pending-banner svg, .all-answered svg { width: 16px; height: 16px; flex: none; }
+.pending-banner { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 12px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.pending-banner svg { color: var(--accent); width: 20px; height: 20px; }
+.pending-banner span { flex: 1; }
+.pending-banner b { color: var(--accent); white-space: nowrap; }
+.all-answered { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 14px; border-radius: 12px;
+  background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.cal-ev.pending { box-shadow: inset 0 0 0 1.5px currentColor; }
+.cal-agenda li .status { margin-left: auto; }
+
+.stats-table td.lead .sub { display: block; margin-top: 4px; font-size: .78rem; color: var(--ink-3); white-space: nowrap; }
+.stats-table .pos-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.stats-table .pos-lines li { white-space: nowrap; }
+.stats-table td { padding-top: 10px; padding-bottom: 10px; }

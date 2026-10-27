@@ -92,6 +92,8 @@ const initial = (p) => (shortName(p)[0] || '?').toUpperCase();
 const svg = (path, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 const icon = {
   month: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>'),
+  alert: svg('<circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h.01"/>', 2.2),
+  check: svg('<path d="M20 6 9 17l-5-5"/>', 2.4),
   chart: svg('<path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/>'),
   calendar: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
   users: svg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
@@ -191,7 +193,7 @@ function renderNav() {
   const link = (href, ic, label, match) => `<a href="${href}" class="${match ? 'active' : ''}">${icon[ic]}<span>${label}</span></a>`;
   document.getElementById('nav').innerHTML = [
     link('#/', 'calendar', t('Sessions'), path === '#/' || path.startsWith('#/sessio') || path.startsWith('#/castell')),
-    isAdmin() ? link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')) : '',
+    link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')),
     isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones')) : '',
     link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques')),
     link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
@@ -355,12 +357,15 @@ async function pageHome() {
   const types = ['tots', ...TYPES.filter((x) => x !== 'musics' || showMusics)];
   if (!types.includes(homeType)) homeType = 'tots';
   const list = events.filter((e) => homeType === 'tots' || e.type === homeType);
+  const pending = homeScope === 'upcoming' ? list.filter((e) => !e.my_status).length : 0;
   let lastMonth = '';
   const items = list.map((e) => {
     const month = fmt(e.date, { month: 'long', year: 'numeric' });
     const header = month !== lastMonth ? `<div class="month">${month}</div>` : '';
     lastMonth = month;
-    return `${header}<a class="card event-card ${e.type}" href="#/sessio/${e.id}">
+    // A les properes, es veu d'un cop d'ull què has respost: franja de color i, si encara no has dit res, un avís.
+    const answer = homeScope === 'upcoming' ? `ans-${e.my_status || 'none'}` : '';
+    return `${header}<a class="card event-card ${e.type} ${answer}" href="#/sessio/${e.id}" ${!e.my_status && homeScope === 'upcoming' ? 'data-pending' : ''}>
       <div class="date-block"><div class="d">${day(e.date).getDate()}</div><div class="w">${fmt(e.date, { weekday: 'short' })}</div></div>
       <div class="event-main">
         ${typeBadge(e.type)}${e.escoleta ? ` <span class="badge escoleta">${t('Escoleta')}</span>` : ''}
@@ -371,7 +376,9 @@ async function pageHome() {
         </div>
         ${e.castells ? `<div class="event-castells">${castellTags(e.castells)}</div>` : ''}
       </div>
-      <div class="event-side">${statusPill(e.my_status)}</div>
+      <div class="event-side">${homeScope === 'upcoming' && !e.my_status
+        ? `<span class="status pending">${icon.alert}${t('Respon')}</span>`
+        : statusPill(e.my_status)}</div>
     </a>`;
   }).join('');
 
@@ -393,9 +400,12 @@ async function pageHome() {
         ${types.map((x) => `<button class="chip ${homeType === x ? 'on' : ''}" data-v="${x}">${typePlural(x)}</button>`).join('')}
       </div>
     </div>
+    ${pending ? `<button class="pending-banner" id="go-pending">${icon.alert}<span>${tn(pending, 'Tens {n} sessió sense respondre', 'Tens {n} sessions sense respondre')}</span><b>${t('Respon ara')}</b></button>`
+      : homeScope === 'upcoming' && list.length ? `<div class="all-answered">${icon.check}${t('Has respost totes les properes sessions.')}</div>` : ''}
     <div class="events">${items || `<div class="empty card">${homeScope === 'upcoming' ? t('No hi ha sessions programades.') : t('No hi ha sessions passades.')}</div>`}</div>`;
 
   qs('#hello-switch')?.addEventListener('click', switchPerson);
+  qs('#go-pending')?.addEventListener('click', () => qs('[data-pending]')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   qsa('#scope button').forEach((b) => (b.onclick = () => { homeScope = b.dataset.v; render(); }));
   qsa('#types button').forEach((b) => (b.onclick = () => { homeType = b.dataset.v; store.set('homeType', homeType); render(); }));
   qs('#new-event')?.addEventListener('click', () => eventModal());
@@ -1557,24 +1567,16 @@ async function pageProfile() {
       </div>`;
 
   if (!isAdmin()) {
-    // Els membres no tenen contrasenya: el perfil és només de consulta.
-    const row = (label, value) => `<div class="data-row"><span class="muted">${label}</span><strong>${value ?? '<span class="muted">—</span>'}</strong></div>`;
-    const unit = (v, u) => (v != null ? `${v} ${u}` : null);
+    // Els membres entren sense contrasenya: per privacitat, aquí no hi surt cap dada personal.
     $app.innerHTML = `
       <div class="page-head"><h1>${esc(shortName(me))}</h1>
         <div class="actions"><button class="btn sm" id="not-me">${icon.swap}${t('No sóc jo')}</button></div></div>
       <div class="grid-2">
         <div class="card">
-          <h2 style="margin-bottom:12px">${t('Les meves dades')}</h2>
-          ${row(t('Nom'), esc(me.name))}
-          ${row(t('Malnom'), me.alias ? esc(me.alias) : null)}
-          ${row(t('Edat'), age(me.birthdate) != null ? t('{n} anys', { n: age(me.birthdate) }) : null)}
-          ${row(t('Alçada'), unit(me.height_cm, 'cm'))}
-          ${row(t("Alçada d'espatlles"), unit(me.shoulder_height_cm, 'cm'))}
-          ${row(t("Amplada d'espatlles"), unit(me.shoulder_width_cm, 'cm'))}
-          ${row(t('Pes'), unit(me.weight_kg, 'kg'))}
-          ${me.instrument ? row(t('Músic/a'), INSTRUMENTS[me.instrument]) : ''}
-          <p class="small muted" style="margin-bottom:0">${t('Si alguna dada no és correcta, demana a un administrador que la canviï.')}</p>
+          <h2 style="margin-bottom:12px">${t('El meu perfil')}</h2>
+          <div class="data-row"><span class="muted">${t('Com et veuen els altres')}</span><strong>${esc(shortName(me))}</strong></div>
+          ${me.instrument ? `<div class="data-row"><span class="muted">${t('Músic/a')}</span><strong>${INSTRUMENTS[me.instrument]}</strong></div>` : ''}
+          <p class="small muted" style="margin-bottom:0">${t("Per privacitat, a l'app només es veuen els malnoms. Les dades personals (nom, mides, contacte…) només les veuen els administradors; si cal canviar-ne alguna, demana-ho a un administrador.")}</p>
         </div>
         ${historyCard}
       </div>`;
@@ -1620,7 +1622,6 @@ const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, 
 const shiftMonth = (ym, n) => { const [y, m] = ym.split('-').map(Number); return isoOf(new Date(y, m - 1 + n, 1)).slice(0, 7); };
 
 async function pageCalendar(ym) {
-  if (!isAdmin()) { location.hash = '#/'; return; }
   if (ym) calMonth = ym;
   const [y, m] = calMonth.split('-').map(Number);
   const first = new Date(y, m - 1, 1);
@@ -1641,7 +1642,7 @@ async function pageCalendar(ym) {
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Calendari')}</h1>
-      <div class="actions"><button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button></div></div>
+      <div class="actions">${isAdmin() ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div></div>
     <div class="cal-head">
       <button class="btn sm" id="cal-prev" aria-label="${t('Mes anterior')}">‹</button>
       <h2 class="cal-title">${esc(title)}</h2>
@@ -1652,23 +1653,25 @@ async function pageCalendar(ym) {
     <div class="card cal">
       <div class="cal-grid">
         ${weekdays.map((w) => `<div class="cal-wd">${esc(w)}</div>`).join('')}
-        ${days.map((d) => `<div class="cal-day ${d.startsWith(calMonth) ? '' : 'out'} ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-date="${d}">
+        ${days.map((d) => `<div class="cal-day ${isAdmin() ? 'add' : ''} ${d.startsWith(calMonth) ? '' : 'out'} ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-date="${d}">
           <span class="cal-n">${Number(d.slice(8))}</span>
-          ${(byDay[d] || []).map((e) => `<a class="cal-ev ${e.type}" href="#/sessio/${e.id}" title="${esc(`${e.start_time || ''} ${e.title}`)}">${e.start_time ? `<b>${e.start_time}</b> ` : ''}${esc(e.title)}</a>`).join('')}
+          ${(byDay[d] || []).map((e) => `<a class="cal-ev ${e.type} ${e.date >= today && !e.my_status ? 'pending' : ''}" href="#/sessio/${e.id}" title="${esc(`${e.start_time || ''} ${e.title}`)}">${e.start_time ? `<b>${e.start_time}</b> ` : ''}${esc(e.title)}</a>`).join('')}
         </div>`).join('')}
       </div>
-      <p class="small muted" style="margin:10px 0 0">${t('Toca un dia buit per crear-hi una sessió.')}</p>
+      ${isAdmin() ? `<p class="small muted" style="margin:10px 0 0">${t('Toca un dia buit per crear-hi una sessió.')}</p>` : ''}
     </div>
     <div class="card cal-agenda">
       <h2 style="margin-bottom:10px">${t('Aquest mes')}</h2>
       ${monthEvents.length ? `<ul class="recent">${monthEvents.map((e) => `<li><a href="#/sessio/${e.id}">${typeBadge(e.type)} ${esc(e.title)}</a>
-        <span class="small muted">${fmt(e.date, { weekday: 'short', day: 'numeric', month: 'short' })}${e.start_time ? ` · ${e.start_time}` : ''}${e.location ? ` · ${esc(e.location)}` : ''}</span></li>`).join('')}</ul>`
+        <span class="small muted">${fmt(e.date, { weekday: 'short', day: 'numeric', month: 'short' })}${e.start_time ? ` · ${e.start_time}` : ''}${e.location ? ` · ${esc(e.location)}` : ''}</span>
+        ${e.date >= today ? `<span>${statusPill(e.my_status)}</span>` : ''}</li>`).join('')}</ul>`
         : `<p class="muted" style="margin:0">${t('No hi ha sessions aquest mes.')}</p>`}
     </div>`;
 
   qs('#cal-prev').onclick = () => { location.hash = `#/calendari/${shiftMonth(calMonth, -1)}`; };
   qs('#cal-next').onclick = () => { location.hash = `#/calendari/${shiftMonth(calMonth, 1)}`; };
   qs('#cal-today').onclick = () => { location.hash = `#/calendari/${today.slice(0, 7)}`; };
+  if (!isAdmin()) return;
   qs('#new-event').onclick = () => eventModal(null, { date: calMonth === today.slice(0, 7) ? today : `${calMonth}-01` });
   qsa('.cal-day').forEach((cell) => (cell.onclick = (e) => { if (!e.target.closest('a')) eventModal(null, { date: cell.dataset.date }); }));
 }
@@ -1737,9 +1740,9 @@ function personStatsHtml(st) {
         <div class="table-wrap"><table class="responsive stats-table">
           <thead><tr><th>${t('Castell')}</th><th class="num">${t('Vegades')}</th><th>${t('Posicions')}</th><th>${t('Com han acabat')}</th></tr></thead>
           <tbody>${st.byCastell.map((c) => `<tr>
-            <td class="lead"><span class="castell-tag">${esc(c.castell)}</span>${c.partial ? ` <span class="small muted">${tn(c.partial, '{n} parcial', '{n} parcials')}</span>` : ''}</td>
+            <td class="lead"><span class="castell-tag">${esc(c.castell)}</span>${c.partial ? `<span class="sub">${tn(c.partial, '{n} parcial', '{n} parcials')}</span>` : ''}</td>
             <td class="num" data-l="${t('Vegades')}">${c.n}</td>
-            <td data-l="${t('Posicions')}">${c.positions.map((p) => `${esc(p.cat)} <span class="muted">×${p.n}</span>`).join(' · ')}</td>
+            <td data-l="${t('Posicions')}"><ul class="pos-lines">${c.positions.map((p) => `<li>${esc(p.cat)} <span class="muted">×${p.n}</span></li>`).join('')}</ul></td>
             <td data-l="${t('Com han acabat')}"><div class="pills">${resultsPills(c.results)}</div></td>
           </tr>`).join('')}</tbody>
         </table></div>
@@ -1768,7 +1771,7 @@ async function pageStats() {
     <div class="page-head"><h1>${t('Estadístiques')}</h1>
       <div class="actions"><div class="tabs" id="st-tab">${tabs.map(([k, l]) => `<button data-t="${k}" class="${statsTab === k ? 'on' : ''}">${l}</button>`).join('')}</div></div></div>
     ${statsFilters(data.seasons)}
-    ${people ? peopleStatsHtml(data) : castellStatsHtml(data)}`;
+    <div class="stats-body">${people ? peopleStatsHtml(data) : castellStatsHtml(data)}</div>`;
   bindStatsFilters();
   qsa('#st-tab button').forEach((b) => (b.onclick = () => { statsTab = b.dataset.t; store.set('statsTab', statsTab); render(); }));
 
@@ -1793,7 +1796,7 @@ function castellStatsHtml(data) {
       <thead><tr><th>${t('Castell')}</th><th class="num">${t('Total')}</th>${cols.map((r) => `<th class="num">${esc(resultName(r))}</th>`).join('')}
         <th class="num">${t('Diades')}</th><th class="num">${t('Assajos')}</th><th>${t('Primer descarregat')}</th></tr></thead>
       <tbody>${data.castells.map((c, i) => `<tr class="clickable" data-i="${i}">
-        <td class="lead"><span class="castell-tag">${esc(c.castell)}</span>${c.partial ? ` <span class="small muted">${tn(c.partial, '{n} parcial', '{n} parcials')}</span>` : ''}${resultsBar(c.results)}</td>
+        <td class="lead"><span class="castell-tag">${esc(c.castell)}</span>${c.partial ? `<span class="sub">${tn(c.partial, '{n} parcial', '{n} parcials')}</span>` : ''}${resultsBar(c.results)}</td>
         ${cell(c.n, t('Total'))}${cols.map((r) => cell(c.results[r], esc(resultName(r)))).join('')}
         ${cell(c.diades, t('Diades'))}${cell(c.assajos, t('Assajos'))}
         <td data-l="${t('Primer descarregat')}">${c.firstDescarregat ? fmt(c.firstDescarregat, { day: 'numeric', month: 'short', year: 'numeric' }) : '<span class="muted">—</span>'}</td>
@@ -1835,7 +1838,7 @@ async function pagePersonStats(id) {
     ${isAdmin() ? `<a class="back" href="#/estadistiques">${icon.back}${t('Estadístiques')}</a>` : ''}
     <div class="page-head"><h1>${own ? t('Les meves estadístiques') : esc(fullName(st.person))}</h1></div>
     ${statsFilters(st.seasons)}
-    ${personStatsHtml(st)}`;
+    <div class="stats-body">${personStatsHtml(st)}</div>`;
   bindStatsFilters();
 }
 

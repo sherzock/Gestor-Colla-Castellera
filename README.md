@@ -5,8 +5,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 - **Sessions**: assajos, diades, esdeveniments i **assajos de músics**, amb data, hora, lloc i descripció.
   Els assajos de músics només els veuen els músics (i els administradors); no tenen castells, i l'assistència
   es mostra agrupada per instrument (gralles i timbals).
-- **Calendari** (admins): vista mensual amb totes les sessions, de colors segons el tipus. Toca una sessió per obrir-la
-  o un dia buit per crear-n'hi una amb aquella data. Al mòbil, cada sessió és un punt i la llista del mes surt a sota.
+- **Calendari** (tothom): vista mensual amb les sessions, de colors segons el tipus (les diades es veuen d'un cop d'ull).
+  Toca una sessió per obrir-la; els admins també poden tocar un dia buit per crear-n'hi una amb aquella data. Al mòbil, cada sessió és un punt i la llista del mes surt a sota.
 - **Assistència**: cada persona confirma *Vinc / Potser / No vinc* i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
   Els administradors veuen la taula completa amb totals i exporten a CSV.
@@ -85,7 +85,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 | Veure sessions i castells (tronc, pinya, llista), cercador i «On sóc?» | ✓ | ✓ |
 | Confirmar la pròpia assistència (i l'escoleta) i respondre els camps extra | ✓ | ✓ |
 | Veure qui ha confirmat que hi va (només noms) | ✓ | ✓ |
-| Perfil: veure les pròpies dades i el propi historial de posicions (només lectura) | ✓ | ✓ |
+| Perfil: el propi malnom i el propi historial de posicions (només lectura) | ✓ | ✓ |
+| Calendari mensual de sessions | ✓ | ✓ |
 | Les pròpies estadístiques (per temporada o de tota la història) | ✓ | ✓ |
 | Pestanya «Historial» dels castells i historial dels altres | | ✓ |
 | Estadístiques per castell i de cada persona | | ✓ |
@@ -94,9 +95,12 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 | Col·locar persones (també temporals), muntador automàtic, duplicar castells | | ✓ |
 | Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV | | ✓ |
 | Pàgina «Persones»: donar d'alta gent, fer administradors, desactivar | | ✓ |
-| Calendari mensual de sessions | | ✓ |
+| Veure noms complets i dades personals (edat, mides, contacte…) | | ✓ |
+| Crear sessions des del calendari | | ✓ |
 
-Com que els membres no tenen contrasenya, qualsevol persona que tingui l'enllaç pot triar un nom. Si voleu una mica
+Com que els membres no tenen contrasenya, qualsevol persona que tingui l'enllaç pot triar un nom. Per això, el servidor
+no envia mai als membres cap dada personal: només el malnom (o «Nom I.» si no en té), ni tan sols la pròpia. Les dades
+personals només les veuen els administradors, que entren amb contrasenya. Si voleu una mica
 de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi (el mateix per a tota la colla).
 
 ## Requisits

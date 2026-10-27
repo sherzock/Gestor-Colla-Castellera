@@ -60,6 +60,11 @@ const bool = (v) => (v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0)
 const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const isTime = (v) => v == null || v === '' || (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v));
 
+// Els membres entren sense contrasenya (qualsevol pot triar qualsevol nom), així que de la gent només veuen
+// el malnom; si algú no en té, «Nom I.». Les dades personals només les veuen els administradors.
+const publicName = (p) => p.alias || String(p.name || '').replace(/^(\S+)\s+(\S).*$/, '$1 $2.');
+const publicPerson = (p) => ({ id: p.id, name: publicName(p), alias: null });
+
 function personRow(p, { full }) {
   if (!p) return null;
   const { password_hash, ...rest } = p;
@@ -214,7 +219,8 @@ function checkCollaCode(code) {
 // Entrada de membres: sense contrasenya, només triant qui ets.
 route('POST', '/api/directory', ({ body }) => {
   checkCollaCode(body.code);
-  return db.prepare('SELECT id, name, alias FROM people WHERE active = 1 ORDER BY COALESCE(alias, name) COLLATE NOCASE').all();
+  return db.prepare('SELECT id, name, alias FROM people WHERE active = 1').all().map(publicPerson)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ca'));
 }, 'public');
 
 route('POST', '/api/identify', ({ body, req, res }) => {
@@ -223,7 +229,7 @@ route('POST', '/api/identify', ({ body, req, res }) => {
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare("INSERT INTO auth_tokens (token, person_id, expires_at, mode) VALUES (?, ?, ?, 'member')").run(token, person.id, Date.now() + MEMBER_TTL_MS);
   res.setHeader('Set-Cookie', cookieHeader(req, token, MEMBER_TTL_MS / 1000));
-  return { ...personRow(person, { full: true }), role: 'member', mode: 'member' };
+  return { ...publicPerson(person), alias: person.alias, instrument: person.instrument, role: 'member', mode: 'member' };
 }, 'public');
 
 route('POST', '/api/login', ({ body, req, res }) => {
@@ -243,7 +249,11 @@ route('POST', '/api/logout', ({ user, req, res }) => {
   return { ok: true };
 });
 
-route('GET', '/api/me', ({ user }) => { const { token, ...rest } = personRow(user, { full: true }); return rest; });
+route('GET', '/api/me', ({ user }) => {
+  if (user.role !== 'admin') return { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member' };
+  const { token, ...rest } = personRow(user, { full: true });
+  return rest;
+});
 
 route('PUT', '/api/me', ({ user, body }) => {
   const data = pickPersonFields(body, PROFILE_FIELDS);
@@ -384,7 +394,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   const flag = (v) => (v === null || v === undefined ? null : !!v);
   const attendance = rows.map((r) => isAdmin
     ? { ...r, present: !!r.present, came: flag(r.came), escoleta: flag(r.escoleta), extra: parseJSON(r.extra, {}) }
-    : { id: r.id, name: r.name, alias: r.alias, instrument: r.instrument, status: r.status, present: !!r.present, escoleta: flag(r.escoleta) });
+    : { ...publicPerson(r), instrument: r.instrument, status: r.status, present: !!r.present, escoleta: flag(r.escoleta) });
   const counts = Object.fromEntries(STATUSES.map((s) => [s, rows.filter((r) => r.status === s).length]));
   counts.present = rows.filter((r) => r.present).length;
   counts.walkins = rows.filter((r) => r.came === 1 && r.status !== 'si').length;
@@ -504,7 +514,8 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
   const positions = db.prepare(`SELECT cp.pos_key, cp.person_id, cp.guest_name, p.name, p.alias${isAdmin ? ', ' + measures : ''}
     FROM castell_positions cp LEFT JOIN people p ON p.id = cp.person_id WHERE cp.castell_id = ?`).all(castell.id);
   const siblings = db.prepare('SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level, label, result FROM castells WHERE event_id = ? ORDER BY position, id').all(event.id);
-  const result = { castell, event, positions, siblings };
+  const result = { castell, event, siblings,
+    positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null } : p)) };
   if (isAdmin) {
     result.candidates = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, ${measures}, ${EFFECTIVE_STATUS_SQL} AS status
       FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -729,7 +740,7 @@ route('GET', '/api/stats/people/:id', ({ params, user, query }) => {
   if (user.role !== 'admin' && user.id !== personId) fail(403, 'Només pots veure les teves estadístiques');
   const person = db.prepare('SELECT id, name, alias, instrument FROM people WHERE id = ?').get(personId);
   if (!person) fail(404, 'Persona no trobada');
-  return { person, seasons: seasons(), ...personStats(personId, query) };
+  return { person: user.role === 'admin' ? person : publicPerson(person), seasons: seasons(), ...personStats(personId, query) };
 });
 
 route('GET', '/api/stats/people', ({ query }) => {
