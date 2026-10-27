@@ -14,6 +14,8 @@ const PUBLIC_DIR = path.join(import.meta.dirname, 'public');
 const COLLA_CODE = process.env.COLLA_CODE || '';
 // Mode demostració: la pantalla d'entrada explica com provar l'app (les dades es tornen a crear a cada arrencada amb «npm run demo»).
 const DEMO = process.env.DEMO === '1';
+// Només darrere d'un proxy (Render el posa sol) es pot fer cas de X-Forwarded-For; si no, el client se la pot inventar.
+const TRUST_PROXY = process.env.TRUST_PROXY === '1' || !!process.env.RENDER;
 const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;
 const MEMBER_TTL_MS = 365 * 24 * 3600 * 1000;
 
@@ -23,8 +25,12 @@ if (!db.prepare('SELECT 1 FROM admins').get()) {
   db.prepare("INSERT INTO admins (username, password_hash, name) VALUES ('admin', ?, 'Administració')").run(hashPassword(password));
   console.log(`\n  Compte d'administració creat → usuari: admin · contrasenya: ${password}\n  (canvia-la des de «Comptes»)\n`);
 }
-db.prepare('DELETE FROM auth_tokens WHERE expires_at < ?').run(Date.now());
-db.prepare('DELETE FROM admin_tokens WHERE expires_at < ?').run(Date.now());
+const purgeTokens = () => {
+  db.prepare('DELETE FROM auth_tokens WHERE expires_at < ?').run(Date.now());
+  db.prepare('DELETE FROM admin_tokens WHERE expires_at < ?').run(Date.now());
+};
+purgeTokens();
+setInterval(purgeTokens, 6 * 3600 * 1000).unref();
 
 // ---------- Utilitats ----------
 // Els missatges d'error es tradueixen a l'idioma de l'usuari (capçalera X-Lang).
@@ -236,21 +242,32 @@ function cookieHeader(req, name, value, maxAgeSec) {
 }
 const modeCookie = (req, mode) => cookieHeader(req, 'mode', mode, MEMBER_TTL_MS / 1000);
 
-// Massa intents fallits d'entrar com a administrador des d'un mateix lloc: s'ha d'esperar una estona.
-const loginFailures = new Map();
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 function clientIp(req) {
   // Darrere del proxy (Render), l'última adreça és la que hi afegeix el proxy: les anteriors les pot inventar el client.
-  return String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress || '';
+  const forwarded = TRUST_PROXY ? String(req.headers['x-forwarded-for'] || '').split(',').pop().trim() : '';
+  return forwarded || req.socket.remoteAddress || '';
 }
-function checkLoginRate(ip) {
-  const f = loginFailures.get(ip);
-  if (f && f.until > Date.now() && f.n >= 10) fail(429, "Massa intents. Torna-ho a provar d'aquí a una estona.");
+
+// Comptadors per finestra de temps (en memòria): intents fallits d'entrar, entrades de membres…
+class RateLimit {
+  constructor(max, windowMs) { this.max = max; this.windowMs = windowMs; this.hits = new Map(); }
+  blocked(key) { const h = this.hits.get(key); return !!h && h.until > Date.now() && h.n >= this.max; }
+  add(key) {
+    const h = this.hits.get(key);
+    this.hits.set(key, h && h.until > Date.now() ? { n: h.n + 1, until: h.until } : { n: 1, until: Date.now() + this.windowMs });
+    // Que no creixi sense límit si algú prova des de moltes adreces.
+    if (this.hits.size > 10000) for (const [k, v] of this.hits) if (v.until <= Date.now()) this.hits.delete(k);
+  }
+  reset(key) { this.hits.delete(key); }
 }
-function loginFailed(ip) {
-  const f = loginFailures.get(ip);
-  loginFailures.set(ip, f && f.until > Date.now() ? { n: f.n + 1, until: f.until } : { n: 1, until: Date.now() + LOGIN_WINDOW_MS });
-}
+const TOO_MANY = "Massa intents. Torna-ho a provar d'aquí a una estona.";
+// Contrasenyes d'administració: 10 errors per adreça i, des de qualsevol lloc, 50 per compte cada 15 minuts.
+const loginByIp = new RateLimit(10, 15 * 60 * 1000);
+const loginByUser = new RateLimit(50, 15 * 60 * 1000);
+// Entrar com a membre és lliure, però sense inundar la base de dades de sessions (tota la colla pot ser a la mateixa wifi).
+const identifyByIp = new RateLimit(150, 10 * 60 * 1000);
+// Per comparar el mateix temps tant si l'usuari existeix com si no (que no es pugui endevinar qui és administrador).
+const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
 
 const meResponse = (user) => (user.mode === 'admin'
   ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions }
@@ -271,8 +288,14 @@ route('POST', '/api/directory', ({ body }) => {
 }, 'public');
 
 route('POST', '/api/identify', ({ body, req, res }) => {
+  const ip = clientIp(req);
+  if (identifyByIp.blocked(ip)) fail(429, TOO_MANY);
+  identifyByIp.add(ip);
   checkCollaCode(body.code);
   const person = db.prepare('SELECT * FROM people WHERE id = ? AND active = 1').get(Number(body.person_id)) || fail(404, 'Persona no trobada');
+  // Si en aquest mòbil ja hi havia algú, la seva sessió s'acaba (no en queden de penjades).
+  const old = cookies(req).token;
+  if (old) db.prepare('DELETE FROM auth_tokens WHERE token = ?').run(old);
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare("INSERT INTO auth_tokens (token, person_id, expires_at, mode) VALUES (?, ?, ?, 'member')").run(token, person.id, Date.now() + MEMBER_TTL_MS);
   res.setHeader('Set-Cookie', [cookieHeader(req, 'token', token, MEMBER_TTL_MS / 1000), modeCookie(req, 'member')]);
@@ -282,14 +305,16 @@ route('POST', '/api/identify', ({ body, req, res }) => {
 
 route('POST', '/api/login', ({ body, req, res }) => {
   const ip = clientIp(req);
-  checkLoginRate(ip);
-  const username = String(body.username || '').trim().toLowerCase();
+  const username = String(body.username || '').trim().toLowerCase().slice(0, 60);
+  if (loginByIp.blocked(ip) || loginByUser.blocked(username)) fail(429, TOO_MANY);
   const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username);
-  if (!admin || !verifyPassword(String(body.password || ''), admin.password_hash)) {
-    loginFailed(ip);
+  const valid = verifyPassword(String(body.password || '').slice(0, 200), admin?.password_hash ?? DUMMY_HASH);
+  if (!admin || !valid) {
+    loginByIp.add(ip);
+    loginByUser.add(username);
     fail(401, 'Usuari o contrasenya incorrectes');
   }
-  loginFailures.delete(ip);
+  loginByIp.reset(ip);
   const token = crypto.randomBytes(32).toString('hex');
   db.prepare('INSERT INTO admin_tokens (token, admin_id, expires_at) VALUES (?, ?, ?)').run(token, admin.id, Date.now() + TOKEN_TTL_MS);
   res.setHeader('Set-Cookie', [cookieHeader(req, 'atoken', token, TOKEN_TTL_MS / 1000), modeCookie(req, 'admin')]);
@@ -499,7 +524,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   const flag = (v) => (v === null || v === undefined ? null : !!v);
   const attendance = rows.map((r) => isAdmin
     ? { ...r, present: !!r.present, came: flag(r.came), escoleta: flag(r.escoleta), extra: parseJSON(r.extra, {}) }
-    : { ...publicPerson(r), instrument: r.instrument, status: r.status, present: !!r.present, escoleta: flag(r.escoleta) });
+    : { ...publicPerson(r), instrument: r.instrument, status: r.status, present: !!r.present });
   const counts = Object.fromEntries(STATUSES.map((s) => [s, rows.filter((r) => r.status === s).length]));
   counts.present = rows.filter((r) => r.present).length;
   counts.walkins = rows.filter((r) => r.came === 1 && r.status !== 'si').length;
@@ -657,7 +682,8 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
   const siblings = db.prepare('SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level, label, result FROM castells WHERE event_id = ? ORDER BY position, id').all(event.id);
   // Les notes de la tècnica no les veuen els membres.
   const result = { castell: isAdmin ? castell : { ...castell, tech_notes: undefined }, event, siblings,
-    positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null } : p)) };
+    positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null }
+      : { ...p, guest_name: p.guest_name ? publicName({ name: p.guest_name }) : null })) };
   if (isAdmin) {
     result.candidates = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, ${measures}, ${EFFECTIVE_STATUS_SQL} AS status
       FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -993,8 +1019,8 @@ route('GET', '/api/stats/season', ({ query }) => {
 
 // ---------- Estadístiques per a la tècnica ----------
 // Un castell és cosa de tota la colla: aquí no es mira qui ha fallat, sinó què acompanya els bons resultats
-// (tronc estable, experiència a cada posició, pinya plena), com progressa cada castell, on falla
-// i quanta gent sap fer cada posició del tronc.
+// (tronc estable, experiència a cada posició, pinya plena), com progressa cada castell, qui pot fer de recanvi
+// i com està preparat el tronc de les properes diades.
 const TRONC_GROUPS = ['baixos', 'tronc', 'pom', 'agulla'];
 const outcomeOf = (r) => (r === 'descarregat' ? 'descarregat' : r === 'carregat' ? 'carregat' : 'caigut');
 const emptyOutcome = () => ({ n: 0, descarregat: 0, carregat: 0, caigut: 0 });
@@ -1226,6 +1252,9 @@ const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'same-origin',
   'X-Frame-Options': 'DENY',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
     "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
@@ -1235,8 +1264,12 @@ const MIME = {
 };
 
 function serveStatic(req, res, pathname) {
-  const file = path.normalize(path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname));
-  if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403).end(); return; }
+  let decoded;
+  // Una adreça mal codificada (p. ex. «/%E0%A4%A») no pot tombar el servidor.
+  try { decoded = decodeURIComponent(pathname); } catch { res.writeHead(400).end(); return; }
+  const file = path.normalize(path.join(PUBLIC_DIR, decoded === '/' ? 'index.html' : decoded));
+  // Ha de quedar dins de public/ (amb la barra: «public-altra/» no hi compta) i no es serveixen fitxers ocults.
+  if (!file.startsWith(PUBLIC_DIR + path.sep) || file.includes(`${path.sep}.`)) { res.writeHead(403).end(); return; }
   fs.readFile(file, (err, data) => {
     if (err) {
       fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, html) => {
@@ -1269,8 +1302,9 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
-  const url = new URL(req.url, 'http://localhost');
-  if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, decodeURIComponent(url.pathname));
+  let url;
+  try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400).end(); return; }
+  if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
 
   const send = (status, data) => {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -1280,10 +1314,16 @@ const server = http.createServer(async (req, res) => {
     const match = routes.find((r) => r.method === req.method && r.re.test(url.pathname));
     if (!match) fail(404, 'Ruta no trobada');
     // Les peticions que canvien dades només poden venir de la mateixa app (no d'una altra web).
-    if (req.method !== 'GET' && req.headers.origin) {
-      let host = '';
-      try { host = new URL(req.headers.origin).host; } catch { /* origen no vàlid */ }
-      if (host !== req.headers.host) fail(403, 'Petició no permesa');
+    if (req.method !== 'GET') {
+      if (req.headers.origin) {
+        let host = '';
+        try { host = new URL(req.headers.origin).host; } catch { /* origen no vàlid */ }
+        if (host !== req.headers.host) fail(403, 'Petició no permesa');
+      }
+      // Els navegadors diuen d'on ve la petició; i l'app sempre envia JSON (un formulari d'una altra web no pot).
+      if (req.headers['sec-fetch-site'] === 'cross-site') fail(403, 'Petició no permesa');
+      if (req.headers['content-length'] !== '0' && (req.headers['content-length'] || req.headers['transfer-encoding'])
+        && !String(req.headers['content-type'] || '').startsWith('application/json')) fail(415, 'Petició no permesa');
     }
     const values = url.pathname.match(match.re).slice(1);
     const params = Object.fromEntries(match.keys.map((k, i) => [k, values[i]]));

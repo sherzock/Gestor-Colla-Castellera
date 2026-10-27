@@ -145,13 +145,28 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
 
 ### Seguretat
 
-- Contrasenyes d'administració guardades amb scrypt; després de 10 intents fallits des d'un mateix lloc cal esperar 15 minuts.
+- Contrasenyes d'administració guardades amb scrypt. Després de 10 intents fallits des d'un mateix lloc cal esperar
+  15 minuts, i un mateix compte no admet més de 50 intents fallits cada 15 minuts encara que vinguin de molts llocs.
+  La resposta triga el mateix tant si l'usuari existeix com si no (no es pot endevinar qui és administrador).
+- L'entrada de membres (sense contrasenya) té un límit de 150 entrades cada 10 minuts per adreça, perquè ningú pugui
+  omplir la base de dades de sessions; quan algú canvia de persona al mateix mòbil, la sessió anterior s'esborra, i
+  les sessions caducades es netegen soles.
 - Sessions en cookies `HttpOnly` i `SameSite=Lax` (i `Secure` amb HTTPS). Les peticions que canvien dades han de venir
-  de la mateixa web.
+  de la mateixa web (es comprova `Origin` i `Sec-Fetch-Site`) i en format JSON, cosa que un formulari d'una altra web
+  no pot enviar.
 - Capçaleres de seguretat: només es carreguen scripts de la mateixa app (CSP), no es pot posar dins d'un marc d'una
-  altra web, i amb HTTPS s'activa HSTS.
+  altra web, la càmera, el micròfon i la ubicació queden desactivats (`Permissions-Policy`), i amb HTTPS s'activa HSTS.
+- Només se serveixen els fitxers de `public/` (ni la base de dades, ni el codi del servidor, ni fitxers ocults), i
+  una adreça mal formada no pot aturar el servidor.
 - L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula.
 - Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
+- Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
+  qui va a l'escoleta (que diria qui és menor), sense comentaris ni respostes als camps extra dels altres, i sense les
+  notes de la tècnica. Les persones temporals també surten com a «Nom I.».
+
+Una limitació que ve del disseny (entrar sense codis): qualsevol persona amb l'enllaç pot triar un nom i contestar
+l'assistència en nom d'aquella persona. No pot veure cap dada personal ni canviar res més; si es vol posar una mica més
+difícil, feu servir `COLLA_CODE`.
 
 ## Requisits
 
@@ -191,6 +206,7 @@ substitucions quan algú falta.
 | `ADMIN_PASSWORD` | aleatòria | Contrasenya de l'`admin` inicial (només si encara no n'hi ha cap) |
 | `COLLA_CODE` | (cap) | Codi compartit que es demana als membres abans de «Qui ets?» |
 | `TZ` | `Europe/Madrid` | Zona horària de les sessions i de les dates límit |
+| `TRUST_PROXY` | (no; sí a Render) | Posa-ho a `1` si l'app és darrere d'un proxy (Nginx, Caddy…), perquè el límit d'intents sàpiga l'adreça real de cada persona. Sense proxy, deixa-ho buit: si no, qualsevol es podria saltar el límit |
 
 ## Versió de prova gratuïta (Render)
 
@@ -207,7 +223,7 @@ segons a tornar a arrencar; aleshores les dades es reinicien. **No ho feu servir
 ## Publicar-la per a la colla
 
 Qualsevol servidor amb Node (un VPS, Railway, Fly.io, Render amb disc persistent…) serveix. Posa-hi HTTPS
-davant (Caddy, Nginx o el del proveïdor) i assegura't que el fitxer `DB_PATH` està en un disc que no s'esborri.
+davant (Caddy, Nginx o el del proveïdor) amb `TRUST_PROXY=1` i assegura't que el fitxer `DB_PATH` està en un disc que no s'esborri.
 Fes còpies de seguretat del fitxer `.db` periòdicament.
 
 ## Estructura
