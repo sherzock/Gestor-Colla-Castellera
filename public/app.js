@@ -1345,7 +1345,9 @@ async function pageCastell(id) {
     ${siblings.length > 1 ? `<nav class="sibling-nav">${siblings.map((c) => `<a href="#/castell/${c.id}" class="${c.id === castell.id ? 'on' : ''} ${c.hidden ? 'is-hidden' : ''}">${c.hidden ? icon.eyeOff : ''}${castellName(c)}${c.label ? ` · ${esc(c.label)}` : ''}</a>`).join('')}</nav>` : ''}
     <div class="page-head">
       <div>
-        <div class="castell-title">${s.name}${castell.hidden ? ` ${hiddenBadge(t('Ocult'))}` : ''}</div>
+        <div class="castell-title">${s.name}${castell.hidden
+          ? ` <span title="${t('Aquest castell està ocult: els membres no el veuen.')}">${hiddenBadge(t('Ocult'))}</span>`
+          : event.hidden ? ` <span title="${t('La sessió està oculta: els membres no veuen cap dels seus castells.')}">${hiddenBadge(t('Sessió oculta'))}</span>` : ''}</div>
         ${partialLabel(castell) ? `<div class="parts big">${partialLabel(castell)}</div>` : ''}
         <div class="muted">${castell.net ? `<span class="result">${t('Net: sense pinya')}</span> ` : ''}${castell.sota ? '<span class="result">Aixecat per sota</span> ' : ''}${esc(castell.label || '')} ${resultPill(castell.result)}</div>
       </div>
@@ -1354,9 +1356,6 @@ async function pageCastell(id) {
         ${admin ? `<button class="btn sm primary" id="auto-build">${t('Munta automàticament')}</button>${hiddenToggle(castell.hidden, 'hide-castell')}<button class="btn sm" id="edit-castell">${t('Edita')}</button><button class="btn sm" id="dup-castell">${t('Duplica')}</button><button class="btn sm danger" id="del-castell">${t('Esborra')}</button>` : ''}
       </div>
     </div>
-    ${admin && (castell.hidden || event.hidden) ? `<div class="hidden-note">${icon.eyeOff}<span>${castell.hidden
-      ? t('Aquest castell està ocult: els membres no el veuen.')
-      : t('La sessió està oculta: els membres no veuen cap dels seus castells.')}</span></div>` : ''}
     ${admin ? `<div class="result-bar"><span class="small muted">${t('Com ha acabat?')}</span>
       <div class="tabs seg" id="result-seg">${Object.keys(RESULTS).map((r) => `<button type="button" data-v="${r}" class="${resultClass(r)} ${castell.result === r ? 'on' : ''}">${resultLabel(r)}</button>`).join('')}</div>
       <label class="tech-notes"><span class="small muted">${t('Notes de la tècnica')} · ${t('només les veuen els administradors')}</span>
