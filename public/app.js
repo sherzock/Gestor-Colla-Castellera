@@ -588,12 +588,15 @@ async function exportSession(event, castells, button) {
   const label = button.textContent;
   button.textContent = t('Preparant…');
   try {
-    const csv = await fetch(`/api/events/${event.id}/attendance.csv`, { headers: { 'X-Lang': lang } });
+    // L'assistència i les alineacions es demanen alhora; les imatges es dibuixen després, una rere l'altra.
+    const [csv, details] = await Promise.all([
+      fetch(`/api/events/${event.id}/attendance.csv`, { headers: { 'X-Lang': lang } }),
+      Promise.all(castells.map((c) => api('GET', `/castells/${c.id}`))),
+    ]);
     if (!csv.ok) throw new Error(t("No s'ha pogut exportar"));
     const files = [{ name: `assistencia-${event.date}.csv`, data: new Uint8Array(await csv.arrayBuffer()) }];
     const used = new Map();
-    for (const [i, c] of castells.entries()) {
-      const { castell, positions } = await api('GET', `/castells/${c.id}`);
+    for (const [i, { castell, positions }] of details.entries()) {
       const s = buildStructure(castell);
       const byKey = new Map(positions.filter((p) => s.positions.has(p.pos_key)).map((p) => [p.pos_key, p]));
       const extra = [castell.label, partialLabel(castell), resultLabel(castell.result)].filter(Boolean).join(' · ');

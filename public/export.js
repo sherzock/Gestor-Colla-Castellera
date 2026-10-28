@@ -79,6 +79,9 @@ const C = {
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const PLAN_SCALE = 1.7;
 
+// Rectangle arrodonit; en navegadors antics sense roundRect, amb cantonades rectes.
+const box = (ctx, x, y, w, h) => (ctx.roundRect ? ctx.roundRect(x, y, w, h, 6) : ctx.rect(x, y, w, h));
+
 function fit(ctx, text, max) {
   if (ctx.measureText(text).width <= max) return text;
   let s = text;
@@ -130,7 +133,7 @@ export async function castellPng({ s, byKey, nameOf, title, subtitle, labels }) 
     const a = byKey.get(p.key);
     ctx.fillStyle = a ? C.soft : C.bg;
     ctx.strokeStyle = C.line; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(x, cy, CELL_W, CELL_H, 6); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); box(ctx, x, cy, CELL_W, CELL_H); ctx.fill(); ctx.stroke();
     ctx.fillStyle = C[p.group] || C.ink3; ctx.fillRect(x, cy, 4, CELL_H);
     ctx.textAlign = 'left';
     ctx.fillStyle = C.ink3; ctx.font = `600 11px ${FONT}`;
@@ -178,7 +181,7 @@ export async function castellPng({ s, byKey, nameOf, title, subtitle, labels }) 
       ctx.fillStyle = item.off ? C.soft : a ? C.soft : C.bg;
       ctx.strokeStyle = item.off ? C.line : C[kind] || C.ink3; ctx.lineWidth = 2;
       if (!a && !item.off) ctx.setLineDash([5, 3]);
-      ctx.beginPath(); ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 6); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); box(ctx, -bw / 2, -bh / 2, bw, bh); ctx.fill(); ctx.stroke();
       ctx.setLineDash([]);
       let deg = ((((item.rot * 180) / Math.PI) % 360) + 360) % 360;
       if (deg > 90 && deg <= 270) ctx.rotate(Math.PI);

@@ -301,3 +301,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS announcements (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT
 )`);
+
+// Índexs perquè les persones temporals (i els acompanyants) d'una sessió i on estan col·locades es trobin sense
+// recórrer taules senceres. N'hi ha pocs a propòsit: sense estadístiques, SQLite tria un índex per persona encara
+// que sigui més lent (p. ex. l'assistència de tota la colla d'una temporada passa de 5 ms a 140 ms).
+db.exec(`CREATE INDEX IF NOT EXISTS idx_positions_guest ON castell_positions(guest_id);
+CREATE INDEX IF NOT EXISTS idx_guests_event ON event_guests(event_id, companion_of);
+CREATE INDEX IF NOT EXISTS idx_fields_event ON event_fields(event_id);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_person ON auth_tokens(person_id);`);

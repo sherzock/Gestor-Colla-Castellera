@@ -507,12 +507,11 @@ const EFFECTIVE_STATUS_SQL = "CASE WHEN a.came = 0 THEN 'no' WHEN a.came = 1 THE
 // Els assajos de músics no hi compten: la majoria de gent no hi ha d'anar i li baixaria el percentatge.
 const SEASON_SQL = "e.date >= strftime('%Y-01-01','now','localtime') AND e.date <= date('now','localtime') AND e.type != 'musics'";
 route('GET', '/api/people', () => {
-  const people = db.prepare(`SELECT p.*,
-      (SELECT COUNT(*) FROM attendance a JOIN events e ON e.id = a.event_id
-        WHERE a.person_id = p.id AND ${CAME_SQL} AND ${SEASON_SQL}) AS attended,
-      (SELECT COUNT(*) FROM attendance a JOIN events e ON e.id = a.event_id
-        WHERE a.person_id = p.id AND a.status = 'si' AND ${SEASON_SQL}) AS confirmed
-    FROM people p ORDER BY p.active DESC, p.name COLLATE NOCASE`).all();
+  // Es compta d'un sol cop per a tothom (sessions de la temporada → assistència), no persona per persona.
+  const people = db.prepare(`SELECT p.*, COALESCE(s.attended, 0) AS attended, COALESCE(s.confirmed, 0) AS confirmed
+    FROM people p LEFT JOIN (SELECT a.person_id, SUM(${CAME_SQL}) AS attended, SUM(a.status = 'si') AS confirmed
+        FROM events e JOIN attendance a ON a.event_id = e.id WHERE ${SEASON_SQL} GROUP BY a.person_id) s ON s.person_id = p.id
+    ORDER BY p.active DESC, p.name COLLATE NOCASE`).all();
   const pastEvents = db.prepare(`SELECT COUNT(*) AS n FROM events e WHERE ${SEASON_SQL}`).get().n;
   return { people: people.map(personRow), pastEvents, season: String(new Date().getFullYear()) };
 }, 'admin');
@@ -756,7 +755,12 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
   // Els comentaris els escriu qualsevol: es neutralitza el que un full de càlcul llegiria com a fórmula.
   const cell = (v) => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
   const yesNo = (v) => (v ? 'sí' : v === 0 ? 'no' : '');
-  const companions = (id) => (event.ask_companions ? [companionsOf(event.id, id).filter((g) => !g.dropped).map((g) => g.name).join(', ')] : []);
+  const companionsBy = new Map();
+  if (event.ask_companions) {
+    for (const g of db.prepare(`SELECT companion_of, name FROM event_guests WHERE event_id = ? AND companion_of IS NOT NULL AND companion_dropped = 0
+      ORDER BY id`).all(event.id)) companionsBy.set(g.companion_of, [...(companionsBy.get(g.companion_of) || []), g.name]);
+  }
+  const companions = (id) => (event.ask_companions ? [(companionsBy.get(id) || []).join(', ')] : []);
   const lines = [['Nom', 'Malnom', 'Estat', 'Ha vingut', ...(event.escoleta ? ['Escoleta'] : []), ...(event.ask_companions ? ['Acompanyants'] : []),
     ...fields.map((f) => f.label), 'Comentari'].map(cell).join(';')];
   for (const r of rows) {
@@ -838,12 +842,15 @@ const SOURCES_LIMIT = 6;
 route('GET', '/api/events/:id/castell-sources', ({ params, query }) => {
   const event = getEvent(params.id);
   const name = String(query.get('name') || '');
-  if (!configFromName(name)) fail(400, 'Castell no vàlid');
+  const config = configFromName(name);
+  if (!config) fail(400, 'Castell no vàlid');
   const exclude = Number(query.get('exclude')) || 0;
   const placed = db.prepare('SELECT COUNT(*) AS n FROM castell_positions WHERE castell_id = ?');
   const out = [];
+  // L'amplada i l'alçada es filtren a la consulta; la resta del nom (folre, agulla…) es mira amb castellName.
   for (const c of db.prepare(`SELECT c.*, e.title AS event_title, e.date AS event_date, e.type AS event_type FROM castells c
-      JOIN events e ON e.id = c.event_id WHERE e.date <= ? AND c.id != ? ORDER BY e.date DESC, e.start_time DESC, c.position DESC, c.id DESC`).all(event.date, exclude)) {
+      JOIN events e ON e.id = c.event_id WHERE e.date <= ? AND c.id != ? AND c.width = ? AND c.height = ?
+      ORDER BY e.date DESC, e.start_time DESC, c.position DESC, c.id DESC`).all(event.date, exclude, config.width, config.height)) {
     if (castellName(c) !== name) continue;
     const n = placed.get(c.id).n;
     if (!n) continue;
@@ -1081,16 +1088,18 @@ route('GET', '/api/templates/types', () => {
 
 // Quants cops s'ha fet servir cada posició en castells d'aquest tipus (per avisar abans de treure'n una).
 route('GET', '/api/templates/:name/usage', ({ params }) => {
-  if (!configFromName(params.name)) fail(400, 'Castell no vàlid');
-  const list = db.prepare('SELECT * FROM castells').all().filter((c) => castellName(c) === params.name);
+  const config = configFromName(params.name);
+  if (!config) fail(400, 'Castell no vàlid');
+  const list = db.prepare('SELECT * FROM castells WHERE width = ? AND height = ?').all(config.width, config.height)
+    .filter((c) => castellName(c) === params.name);
   const ids = list.map((c) => c.id);
   // Els cordons més habituals d'aquest castell: és la pinya estàndard de partida a l'editor.
   const byCordons = new Map();
   for (const c of list) byCordons.set(c.cordons, (byCordons.get(c.cordons) || 0) + 1);
   const cordons = [...byCordons].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 3;
   const out = {};
-  const count = db.prepare('SELECT pos_key, COUNT(*) AS n FROM castell_positions WHERE castell_id = ? GROUP BY pos_key');
-  for (const id of ids) for (const r of count.all(id)) out[r.pos_key] = (out[r.pos_key] || 0) + r.n;
+  for (const r of db.prepare('SELECT pos_key, COUNT(*) AS n FROM castell_positions WHERE castell_id IN (SELECT value FROM json_each(?)) GROUP BY pos_key')
+    .all(JSON.stringify(ids))) out[r.pos_key] = r.n;
   return { castells: ids.length, cordons, usage: out };
 }, 'admin');
 
@@ -1110,21 +1119,48 @@ route('DELETE', '/api/templates/:name', ({ params }) => {
 
 // ---------- Memòria de càlculs ----------
 // Les estadístiques i els historials llegeixen milers de posicions: es calculen un sol cop i es reaprofiten fins
-// que algú canvia qualsevol dada (dataVersion puja amb cada petició que no és GET) o canvia el dia.
+// que algú canvia alguna dada de la qual depenen (amb cada petició que no és GET) o canvia el dia.
 // És només una memòria del servidor: cada ruta continua comprovant abans qui pot veure què.
-let dataVersion = 0;
-const versionKey = () => `${dataVersion}|${nowLocal().slice(0, 10)}`;
-let responseCache = { key: null, map: new Map() };
-// Per a rutes d'administració que només depenen de les dades i dels filtres (temporada i tipus de sessió).
+// Hi ha tres nivells, perquè el canvi més freqüent (algú respon si ve) no obligui a refer-ho tot:
+//  - dataVersion: qualsevol canvi (el que depèn de l'assistència: estadístiques de persones, resum de temporada);
+//  - castellVersion: canvis que no són només d'assistència (sessions, castells, posicions, persones, plantilles);
+//  - historyVersion: com castellVersion, menys col·locar gent en castells futurs (l'historial només mira el passat).
+let dataVersion = 0, castellVersion = 0, historyVersion = 0;
+const today = () => nowLocal().slice(0, 10);
+const versionKey = () => `${dataVersion}|${today()}`;
+const castellKey = () => `${castellVersion}|${today()}`;
+const historyKey = () => `${historyVersion}|${today()}`;
 // Peticions que no són GET però no toquen cap dada de sessions, castells ni persones.
 const NO_DATA_CHANGE = new Set(['/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me']);
+// Peticions que només toquen l'assistència, els camps extra, l'altaveu o els comptes d'administració.
+const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/attendance(\/\d+)?$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,
+  /^\/api\/fields\/\d+$/, /^\/api\/announcements(\/\d+)?$/, /^\/api\/admins(\/\d+)?$/];
+const POSITIONS_ROUTE = /^\/api\/castells\/(\d+)\/positions(\/[^/]+)?$/;
+function dataChanged(pathname) {
+  dataVersion++;
+  if (ATTENDANCE_ONLY.some((re) => re.test(pathname))) return;
+  castellVersion++;
+  // Col·locar gent en un castell d'una sessió futura no canvia l'historial (que és dels castells fins avui).
+  const m = POSITIONS_ROUTE.exec(pathname);
+  if (m && db.prepare('SELECT e.date FROM castells c JOIN events e ON e.id = c.event_id WHERE c.id = ?').get(m[1])?.date > today()) return;
+  historyVersion++;
+}
+// Per a rutes que només depenen de les dades i dels filtres (temporada i tipus de sessió). keyOf: el nivell de
+// canvis del qual depenen; variant: una altra cosa que canvia la resposta (p. ex. si qui la demana veu els ocults).
 const memoized = new Map();
-const memo = (name, handler) => {
+// Són les respostes més grans i es demanen sovint: el JSON i la versió comprimida també es guarden.
+const encodedMemo = new WeakMap();
+const memo = (name, handler, { keyOf = versionKey, variant = () => '' } = {}) => {
+  let cache = { key: null, map: new Map() };
   const wrapped = (ctx) => {
-    if (responseCache.key !== versionKey()) responseCache = { key: versionKey(), map: new Map() };
-    const key = `${name}|${ctx.query.get('season') || ''}|${ctx.query.get('kind') || ''}`;
-    if (!responseCache.map.has(key)) responseCache.map.set(key, handler(ctx));
-    return responseCache.map.get(key);
+    if (cache.key !== keyOf()) cache = { key: keyOf(), map: new Map() };
+    const key = `${ctx.query.get('season') || ''}|${ctx.query.get('kind') || ''}|${variant(ctx)}`;
+    if (!cache.map.has(key)) {
+      const result = handler(ctx);
+      encodedMemo.set(result, {});
+      cache.map.set(key, result);
+    }
+    return cache.map.get(key);
   };
   memoized.set(name, wrapped);
   return wrapped;
@@ -1147,17 +1183,46 @@ function warmCaches(delayMs = 3000) {
 // ---------- Historial de posicions ----------
 // L'historial surt dels castells de sessions passades (fins avui inclòs). Les files són compartides: no es modifiquen.
 let pastCache = null;
+// Una fila per persona i posició de cada castell passat, amb les dades del castell i de la sessió, i la categoria,
+// el nom i el grup de la posició ja calculats. Es construeixen a mà (no amb un JOIN) perquè amb anys d'historial
+// són més de cent mil files i llegir-les així és molt més ràpid.
+function HistoryRow(c, pos_key, person_id, pos, castell) {
+  this.pos_key = pos_key; this.person_id = person_id; this.cat = pos.cat; this.role = pos.role; this.group = pos.group; this.castell = castell;
+  this.castell_id = c.castell_id; this.width = c.width; this.height = c.height; this.agulla = c.agulla; this.folre = c.folre;
+  this.manilles = c.manilles; this.puntals = c.puntals; this.sota = c.sota; this.gralles = c.gralles; this.timbals = c.timbals; this.net = c.net;
+  this.from_level = c.from_level; this.to_level = c.to_level; this.cordons = c.cordons; this.result = c.result;
+  this.event_id = c.event_id; this.date = c.date; this.title = c.title; this.type = c.type; this.hidden = c.hidden;
+}
 function pastRows() {
-  if (pastCache?.key !== versionKey()) {
-    pastCache = { key: versionKey(), rows: db.prepare(`SELECT cp.pos_key, cp.person_id, c.id AS castell_id, c.width, c.height, c.agulla, c.folre,
-        c.manilles, c.puntals, c.sota, c.gralles, c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result,
-        e.id AS event_id, e.date, e.title, e.type, MAX(c.hidden, e.hidden) AS hidden
-      FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
-      WHERE e.date <= date('now','localtime') AND cp.person_id IS NOT NULL ORDER BY e.date DESC, c.position`).all()
-      // Una posició que la plantilla de la colla ha tret no compta (la fila es conserva per si es torna a posar).
-      .filter((r) => positionOf(r, r.pos_key)) };
+  if (pastCache?.key !== historyKey()) {
+    const castells = db.prepare(`SELECT c.id AS castell_id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.gralles,
+        c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result, e.id AS event_id, e.date, e.title, e.type, MAX(c.hidden, e.hidden) AS hidden
+      FROM castells c JOIN events e ON e.id = c.event_id WHERE e.date <= date('now','localtime') ORDER BY e.date DESC, c.position`).all();
+    const byCastell = new Map();
+    for (const p of db.prepare('SELECT castell_id, pos_key, person_id FROM castell_positions WHERE person_id IS NOT NULL').all()) {
+      let list = byCastell.get(p.castell_id);
+      if (!list) byCastell.set(p.castell_id, (list = []));
+      list.push(p);
+    }
+    const rows = [];
+    const byPerson = new Map();
+    for (const c of castells) {
+      const s = structureOf(c);
+      const name = castellName(c);
+      for (const p of byCastell.get(c.castell_id) || []) {
+        const pos = s.positions.get(p.pos_key);
+        // Una posició que la plantilla de la colla ha tret no compta (la fila es conserva per si es torna a posar).
+        if (!pos) continue;
+        const row = new HistoryRow(c, p.pos_key, p.person_id, pos, name);
+        rows.push(row);
+        let mine = byPerson.get(p.person_id);
+        if (!mine) byPerson.set(p.person_id, (mine = []));
+        mine.push(row);
+      }
+    }
+    pastCache = { key: historyKey(), rows, byPerson };
   }
-  return pastCache.rows;
+  return pastCache;
 }
 // Els mateixos filtres que statsFilter, però sobre les files ja llegides.
 // visibleOnly: el que pot veure un membre (sense sessions ni castells ocults).
@@ -1168,7 +1233,8 @@ function historyRows({ personId, excludeCastell, query, visibleOnly = false } = 
   const types = kind === 'diades' ? ['diada', 'esdeveniment'] : kind === 'assajos' ? ['assaig'] : null;
   const person = personId ? Number(personId) : null;
   const exclude = excludeCastell ? Number(excludeCastell) : null;
-  return pastRows().filter((r) => (!person || r.person_id === person) && (!exclude || r.castell_id !== exclude) && !(visibleOnly && r.hidden)
+  const past = pastRows();
+  return (person ? past.byPerson.get(person) || [] : past.rows).filter((r) => (!exclude || r.castell_id !== exclude) && !(visibleOnly && r.hidden)
     && (!year || r.date.startsWith(year)) && (!types || types.includes(r.type)));
 }
 
@@ -1177,19 +1243,17 @@ function historyRows({ personId, excludeCastell, query, visibleOnly = false } = 
 // reaprofiten fins al següent canvi (vegeu «Memòria de càlculs»).
 let historyCache = null;
 function historyIndex() {
-  const key = versionKey();
+  const key = historyKey();
   if (historyCache?.key === key) return historyCache;
   const byName = new Map();     // «3d7» → files de castells fets (no previstos)
   const byCat = {};             // persona → { categoria de posició: vegades }
   const catsByCastell = new Map(); // castell → [[persona, categoria]], per poder-ne treure un
   for (const r of historyRows()) {
     if (r.result !== 'previst') {
-      const name = castellName(r);
-      if (!byName.has(name)) byName.set(name, []);
-      byName.get(name).push({ castell_id: r.castell_id, pos_key: r.pos_key, person_id: r.person_id, date: r.date, type: r.type });
+      if (!byName.has(r.castell)) byName.set(r.castell, []);
+      byName.get(r.castell).push({ castell_id: r.castell_id, pos_key: r.pos_key, person_id: r.person_id, date: r.date, type: r.type });
     }
-    const cat = positionOf(r, r.pos_key)?.cat;
-    if (!cat) continue;
+    const { cat } = r;
     (byCat[r.person_id] ??= {})[cat] = (byCat[r.person_id][cat] || 0) + 1;
     if (!catsByCastell.has(r.castell_id)) catsByCastell.set(r.castell_id, []);
     catsByCastell.get(r.castell_id).push([r.person_id, cat]);
@@ -1231,10 +1295,8 @@ route('GET', '/api/people/:id/history', ({ params, user }) => {
   if (user.role !== 'admin' && user.id !== personId) fail(403, 'Només pots veure el teu historial');
   const rows = historyRows({ personId, visibleOnly: !seesHidden(user) });
   const cats = new Map();
-  for (const r of rows) {
-    const cat = positionOf(r, r.pos_key)?.cat;
-    if (!cat) continue;
-    const c = cats.get(cat) || { cat, n: 0, last: r.date };
+  for (const { cat, date } of rows) {
+    const c = cats.get(cat) || { cat, n: 0, last: date };
     c.n++;
     cats.set(cat, c);
   }
@@ -1243,7 +1305,7 @@ route('GET', '/api/people/:id/history', ({ params, user }) => {
     byCat: [...cats.values()].sort((a, b) => b.n - a.n),
     recent: rows.slice(0, 20).map((r) => ({
       date: r.date, title: r.title, type: r.type, event_id: r.event_id, castell_id: r.castell_id, result: r.result,
-      castell: castellName(r), role: positionOf(r, r.pos_key)?.role ?? r.pos_key,
+      castell: r.castell, role: r.role,
     })),
   };
 });
@@ -1292,8 +1354,7 @@ function personStats(personId, query, visibleOnly) {
   const byPosition = new Map();
   for (const r of rows) {
     const res = resultOf(r);
-    const cat = positionOf(r, r.pos_key)?.cat ?? r.pos_key;
-    const name = castellName(r);
+    const { cat, castell: name } = r;
     results[res]++;
     const c = byCastell.get(name) || { castell: name, n: 0, partial: 0, results: emptyResults(), positions: new Map() };
     c.n++;
@@ -1316,7 +1377,7 @@ function personStats(personId, query, visibleOnly) {
     byPosition: [...byPosition.values()].sort(byCount),
     recent: rows.slice(0, 15).map((r) => ({
       date: r.date, title: r.title, type: r.type, castell_id: r.castell_id, result: r.result, partial: levelRange(r).partial,
-      castell: castellName(r), role: positionOf(r, r.pos_key)?.role ?? r.pos_key,
+      castell: r.castell, role: r.role,
     })),
   };
 }
@@ -1337,8 +1398,7 @@ route('GET', '/api/stats/people', memo('people', ({ query }) => {
     if (!p) continue;
     p.castells++;
     p.results[resultOf(r)]++;
-    const cat = positionOf(r, r.pos_key)?.cat ?? r.pos_key;
-    p.cats.set(cat, (p.cats.get(cat) || 0) + 1);
+    p.cats.set(r.cat, (p.cats.get(r.cat) || 0) + 1);
   }
   for (const r of sessionsCame(query)) {
     const p = people.get(r.person_id);
@@ -1378,14 +1438,14 @@ route('GET', '/api/stats/castells', memo('castells', ({ query }) => {
     types.set(name, c);
   }
   return { seasons: seasons(), total: rows.length, results: totals, castells: [...types.values()].sort(byCount) };
-}), 'admin');
+}, { keyOf: castellKey }), 'admin');
 
 // Resum de temporada: castells i sessions, sense dades de ningú (el veu tothom).
 // Dificultat aproximada per trobar el millor castell: mana l'alçada; a igual alçada, com més estret, més difícil.
 const WIDTH_DIFFICULTY = { 1: 6, 2: 5, 9: 4, 7: 3.5, 5: 3, 3: 2, 4: 1 };
 const difficulty = (c) => c.height * 10 + (WIDTH_DIFFICULTY[c.width] || 0) + (c.agulla ? 0.5 : 0) + (c.net ? 0.3 : 0);
 
-route('GET', '/api/stats/season', ({ query, user }) => {
+route('GET', '/api/stats/season', memo('season', ({ query, user }) => {
   const visibleOnly = !seesHidden(user);
   const { where, args } = statsFilter(query, { visibleOnly });
   const rows = db.prepare(`SELECT c.id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.net, c.from_level, c.to_level,
@@ -1429,7 +1489,7 @@ route('GET', '/api/stats/season', ({ query, user }) => {
     descarregats: top(best.descarregat), carregats: top(best.carregat),
     diades: [...diades.values()].reverse(),
   };
-});
+}, { variant: ({ user }) => (seesHidden(user) ? 'tot' : 'visible') }));
 
 // ---------- Estadístiques per a la tècnica ----------
 // Un castell és cosa de tota la colla: aquí no es mira qui ha fallat, sinó què acompanya els bons resultats
@@ -1451,12 +1511,11 @@ function reserves(query) {
   const types = new Map();
   const catCount = new Map(); // persona → categoria (Baixos, Segons…) → vegades, en qualsevol castell
   for (const r of rows) {
-    const pos = positionOf(r, r.pos_key);
-    if (!pos || !TRONC_GROUPS.includes(pos.group)) continue;
+    if (!TRONC_GROUPS.includes(r.group)) continue;
     const cats = catCount.get(r.person_id) || new Map();
-    cats.set(pos.cat, (cats.get(pos.cat) || 0) + 1);
+    cats.set(r.cat, (cats.get(r.cat) || 0) + 1);
     catCount.set(r.person_id, cats);
-    const name = castellName(r);
+    const name = r.castell;
     const t = types.get(name) || { castell: name, sample: r, attempts: new Set(), pos: new Map() };
     t.attempts.add(r.castell_id);
     const m = t.pos.get(r.pos_key) || new Map();
@@ -1510,6 +1569,19 @@ function troncPrep(castell) {
 
 route('GET', '/api/castells/:id/prep', ({ params }) => ({ days: PREP_DAYS, positions: troncPrep(getCastell(params.id)) }), 'admin');
 
+// Posicions del tronc i de la pinya de cada estructura (les estructures són compartides: es calcula un sol cop).
+const partsCache = new WeakMap();
+function keysByPart(s) {
+  if (!partsCache.has(s)) {
+    const positions = [...s.positions.values()];
+    partsCache.set(s, {
+      troncKeys: positions.filter((p) => TRONC_GROUPS.includes(p.group)).map((p) => p.key),
+      pinyaKeys: positions.filter((p) => !TRONC_GROUPS.includes(p.group) && p.group !== 'musica').map((p) => p.key),
+    });
+  }
+  return partsCache.get(s);
+}
+
 route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
   const { where, args } = statsFilter(query);
   const inFilter = new Set(db.prepare(`SELECT c.id FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')}`)
@@ -1517,13 +1589,17 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
   // L'estabilitat i l'experiència es calculen amb tota la història anterior, encara que es miri una sola temporada.
   const all = db.prepare(`SELECT c.*, e.date, e.title, e.type FROM castells c JOIN events e ON e.id = c.event_id
     WHERE e.date <= date('now','localtime') ORDER BY e.date, e.start_time, c.position, c.id`).all();
+  // Qui hi havia a cada posició: la gent surt de l'historial (ja calculat) i les persones temporals, d'una consulta a part.
   const placed = new Map();
+  const fill = (castellId, key, personId) => {
+    if (!placed.has(castellId)) placed.set(castellId, new Map());
+    placed.get(castellId).set(key, personId);
+  };
+  for (const r of pastRows().rows) fill(r.castell_id, r.pos_key, r.person_id);
   const byId = new Map(all.map((c) => [c.id, c]));
-  for (const r of db.prepare('SELECT castell_id, pos_key, person_id FROM castell_positions').all()) {
+  for (const r of db.prepare('SELECT castell_id, pos_key FROM castell_positions WHERE person_id IS NULL').all()) {
     const c = byId.get(r.castell_id);
-    if (!c || !positionOf(c, r.pos_key)) continue;
-    if (!placed.has(r.castell_id)) placed.set(r.castell_id, new Map());
-    placed.get(r.castell_id).set(r.pos_key, r.person_id);
+    if (c && structureOf(c).positions.has(r.pos_key)) fill(r.castell_id, r.pos_key, null);
   }
 
   const factors = {
@@ -1538,11 +1614,8 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
 
   for (const c of all) {
     if (c.result === 'previst') continue; // no consta que s'hagi fet
-    const s = structureOf(c);
     const filled = placed.get(c.id) || new Map();
-    const positions = [...s.positions.values()];
-    const troncKeys = positions.filter((p) => TRONC_GROUPS.includes(p.group)).map((p) => p.key);
-    const pinyaKeys = positions.filter((p) => !TRONC_GROUPS.includes(p.group) && p.group !== 'musica').map((p) => p.key);
+    const { troncKeys, pinyaKeys } = keysByPart(structureOf(c));
     const troncPeople = troncKeys.filter((k) => filled.get(k));
     const name = castellName(c);
     const { partial } = levelRange(c);
@@ -1679,10 +1752,12 @@ const MIME = {
 
 // Comprimeix les respostes de text si el navegador ho accepta (l'historial d'un castell passa de ~200 KB a ~20 KB).
 // No hi ha secrets dins les respostes que puguin barrejar-se amb text d'un atacant (BREACH): les sessions van en cookies.
-function sendBody(req, res, status, headers, body) {
+// encoded: on es guarda la versió comprimida d'una resposta que es reaprofita.
+function sendBody(req, res, status, headers, body, encoded = null) {
   const data = Buffer.isBuffer(body) ? body : Buffer.from(body);
   if (data.length > 1024 && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
-    res.writeHead(status, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }).end(zlib.gzipSync(data));
+    const gzip = encoded ? (encoded.gzip ??= zlib.gzipSync(data)) : zlib.gzipSync(data);
+    res.writeHead(status, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }).end(gzip);
   } else res.writeHead(status, headers).end(data);
 }
 
@@ -1737,7 +1812,12 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
   try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400).end(); return; }
   if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
 
-  const send = (status, data) => sendBody(req, res, status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, JSON.stringify(data));
+  const send = (status, data) => {
+    const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+    const encoded = encodedMemo.get(data);
+    if (encoded) sendBody(req, res, status, headers, (encoded.json ??= Buffer.from(JSON.stringify(data))), encoded);
+    else sendBody(req, res, status, headers, JSON.stringify(data));
+  };
   try {
     const match = routes.find((r) => r.method === req.method && r.re.test(url.pathname));
     if (!match) fail(404, 'Ruta no trobada');
@@ -1761,7 +1841,7 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     const body = req.method === 'GET' ? {} : await readBody(req);
     let result;
     try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }
-    finally { if (req.method !== 'GET' && !NO_DATA_CHANGE.has(url.pathname)) { dataVersion++; warmCaches(); } }
+    finally { if (req.method !== 'GET' && !NO_DATA_CHANGE.has(url.pathname)) { dataChanged(url.pathname); warmCaches(); } }
     if (result !== undefined) send(200, result);
   } catch (err) {
     const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
