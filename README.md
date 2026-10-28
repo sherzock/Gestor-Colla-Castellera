@@ -250,6 +250,17 @@ Hi ha unes 125 persones (amb mainada i músics) i dues temporades senceres: assa
 cada 3–4 setmanes i castells que van pujant al llarg de la temporada, cadascun amb el seu tronc habitual i
 substitucions quan algú falta.
 
+### Proves
+
+```bash
+npm test
+```
+
+Cada fitxer de `tests/` arrenca el seu propi servidor amb les dades de demostració, en una base de dades temporal i un
+port lliure (no toca `data/colla.db`). Comproven els permisos de totes les rutes, la privadesa del que veuen els
+membres, els límits, les funcionalitats principals i que el servidor no faci servir valors que el SQLite de Node 22
+(el de Render) no accepta.
+
 ### Configuració (variables d'entorn)
 
 | Variable | Per defecte | Descripció |
@@ -297,6 +308,7 @@ public/muntador.js Muntador automàtic d'alineacions
 public/zoom.js     Visor a pantalla completa (pinça, roda, arrossegar)
 public/i18n.js     Traduccions (català, castellà, anglès), també per als errors del servidor
 public/style.css   Estils (clar/fosc, responsive)
+tests/             Proves automàtiques (npm test)
 ```
 
 La pinya es genera de manera automàtica a partir del tipus de castell i del nombre de cordons; és un model genèric.

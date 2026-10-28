@@ -1,0 +1,63 @@
+// Comprovacions generals: les pantalles responen amb les dades de demostració, desar el que ja hi ha no falla, i
+// tots els textos de l'app i del servidor estan traduïts.
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { startServer, sessions } from './helpers.js';
+import { DICTS } from '../public/i18n.js';
+
+let server, s;
+before(async () => { server = await startServer(); s = await sessions(server); });
+after(() => server.stop());
+
+test('totes les rutes de lectura responen 200', async () => {
+  const ev = s.pastEvent.id, c = s.pastCastell.id, pid = s.personId;
+  const admin = ['/events', '/events?scope=past', `/events/${ev}`, `/castells/${c}`, `/castells/${c}/history`, `/castells/${c}/prep`,
+    '/stats/tecnica', '/stats/people', '/stats/castells', '/stats/season?season=all', `/stats/people/${pid}`, '/people', `/people/${pid}/history`,
+    '/templates', '/templates/types', '/templates/3d7/usage', `/events/${ev}/castell-sources?name=3d7`, '/announcements', '/admins', '/me'];
+  const member = ['/events', `/events/${ev}`, `/castells/${c}`, '/stats/season?season=all', `/stats/people/${pid}`, `/people/${pid}/history`,
+    '/announcements', '/templates', '/me'];
+  const bad = [];
+  for (const u of admin) { const r = await s.admin('GET', u); if (r.s !== 200) bad.push(`admin ${u} ${r.s}`); }
+  for (const u of member) { const r = await s.member('GET', u); if (r.s !== 200) bad.push(`membre ${u} ${r.s}`); }
+  assert.deepEqual(bad, []);
+});
+
+test('desar sense canvis el que ja hi ha (com fan els formularis) → 200', async () => {
+  const cd = (await s.admin('GET', `/castells/${s.pastCastell.id}`)).d;
+  assert.equal((await s.admin('PUT', `/castells/${s.pastCastell.id}`, cd.castell)).s, 200, 'castell');
+  const future = (await s.admin('GET', '/events')).d[0];
+  const e0 = (await s.admin('GET', `/events/${future.id}`)).d.event;
+  assert.equal((await s.admin('PUT', `/events/${e0.id}`, e0)).s, 200, 'sessió');
+  const fails = [];
+  for (const p of (await s.admin('GET', '/people')).d.people) {
+    const r = await s.admin('PUT', `/people/${p.id}`, p);
+    if (r.s !== 200) fails.push(`${p.id}: ${r.d.error}`);
+  }
+  assert.deepEqual(fails, [], 'persones');
+  const assignments = cd.positions.filter((p) => p.person_id).map((p) => ({ pos_key: p.pos_key, person_id: p.person_id }));
+  assert.equal((await s.admin('PUT', `/castells/${s.pastCastell.id}/positions`, { assignments })).s, 200, 'alineació sencera');
+});
+
+test('tots els textos tenen traducció al castellà i a l\'anglès', () => {
+  const ROOT = path.join(import.meta.dirname, '..');
+  const keys = new Set();
+  const unq = (str) => str.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+  const STR = String.raw`('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")`;
+  for (const f of ['public/app.js', 'public/editor.js', 'public/castell.js', 'public/export.js']) {
+    const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    for (const m of src.matchAll(new RegExp(String.raw`\bt\(\s*${STR}`, 'g'))) keys.add(unq(m[1]));
+    for (const m of src.matchAll(new RegExp(String.raw`\btn\(\s*[^,]+,\s*${STR}\s*,\s*${STR}`, 'g'))) { keys.add(unq(m[1])); keys.add(unq(m[2])); }
+  }
+  const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  for (const m of server.matchAll(new RegExp(String.raw`fail\(\s*\d+\s*,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
+  for (const m of server.matchAll(new RegExp(String.raw`atMost\([^,]+,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
+  const missing = [...keys].filter((k) => !(k in DICTS.es) || !(k in DICTS.en));
+  assert.ok(keys.size > 300, `${keys.size} textos`);
+  assert.deepEqual(missing, []);
+});
+
+test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
+  assert.ok(!server.log().includes('NODE22'));
+});
