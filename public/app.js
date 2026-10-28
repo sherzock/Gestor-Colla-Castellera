@@ -2597,7 +2597,7 @@ async function pageTecnica(tabs) {
       ${statTile(pctOrDash(prog.diades), t('Descarregats a diades'), 'r-descarregat')}
     </div>
     ${monthColumns(prog.attempts)}
-    <div class="legend"><span><i style="background:var(--ok)"></i>${t('Descarregat')}</span><span><i style="background:var(--warn)"></i>${t('Carregat')}</span><span><i style="background:var(--bad)"></i>${t('Caigut')}</span><span><i style="background:transparent;outline:2px solid var(--ink-2);outline-offset:1px"></i>${t('Mes amb diada')}</span></div>
+    <div class="legend"><span><i style="background:var(--c-ok)"></i>${t('Descarregat')}</span><span><i style="background:var(--c-warn)"></i>${t('Carregat')}</span><span><i style="background:var(--c-bad)"></i>${t('Caigut')}</span><span><i style="background:transparent;outline:2px solid var(--ink-3);outline-offset:1px"></i>${t('Mes amb diada')}</span></div>
     <h3 style="margin:16px 0 6px">${t('Últims intents')}</h3>
     <ul class="recent-attempts">${recent.map((a) => `<li><a href="#/castell/${a.castell_id}">
       <span class="small muted">${fmt(a.date, a.date.slice(0, 4) === todayIso().slice(0, 4) ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: '2-digit' })}</span>
