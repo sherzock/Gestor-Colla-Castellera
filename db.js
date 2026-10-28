@@ -290,3 +290,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS castell_templates (
 addColumn('events', 'ask_companions', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('event_guests', 'companion_of', 'INTEGER REFERENCES people(id) ON DELETE CASCADE');
 addColumn('event_guests', 'companion_dropped', 'INTEGER NOT NULL DEFAULT 0');
+
+// Altaveu: missatges d'informació de l'administració per a tota la colla.
+db.exec(`CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  author TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT
+)`);

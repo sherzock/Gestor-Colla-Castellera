@@ -125,6 +125,7 @@ const icon = {
   calAdd: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/>'),
   logout: svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
   swap: svg('<path d="M17 3l4 4-4 4M21 7H9M7 21l-4-4 4-4M3 17h12"/>'),
+  megaphone: svg('<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 8.5a4 4 0 0 1 0 7M18 5.5a8 8 0 0 1 0 13"/>'),
   pin: svg('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'),
   clock: svg('<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'),
   plus: svg('<path d="M12 5v14M5 12h14"/>', 2.4),
@@ -241,9 +242,10 @@ function renderNav() {
   document.getElementById('brand-name').textContent = config.collaName;
   if (!me) return;
   const path = location.hash || '#/';
-  const link = (href, ic, label, match) => `<a href="${href}" class="${match ? 'active' : ''}">${icon[ic]}<span>${label}</span></a>`;
+  const link = (href, ic, label, match, dot = false) => `<a href="${href}" class="${match ? 'active' : ''}">${icon[ic]}<span>${label}</span>${dot ? `<i class="nav-dot" title="${t('Hi ha missatges nous')}"></i>` : ''}</a>`;
   document.getElementById('nav').innerHTML = [
     link('#/', 'calendar', t('Sessions'), path === '#/' || path.startsWith('#/sessio') || path.startsWith('#/castell')),
+    link('#/altaveu', 'megaphone', t('Altaveu'), path.startsWith('#/altaveu'), !isAdmin() && newsUnread()),
     link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')),
     isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones')) : '',
     link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques')),
@@ -274,6 +276,7 @@ const routes = [
   [/^#\/estadistiques$/, pageStats],
   [/^#\/estadistiques\/persona\/(\d+)$/, pagePersonStats],
   [/^#\/plantilles$/, pageTemplates],
+  [/^#\/altaveu$/, pageNews],
   [/^#\/plantilla\/([a-z0-9]{2,12})$/, pageTemplate],
 ];
 
@@ -456,6 +459,7 @@ async function pageHome() {
       <span>${t('Hola, {name}!', { name: `<strong>${esc(shortName(me))}</strong>` })} <span class="muted">${t('No ets tu?')}</span></span>
       <button class="btn sm" id="hello-switch">${icon.swap}${t('Canvia de persona')}</button>
     </div>`}
+    ${!isAdmin() && newsUnread() ? `<a class="card news-banner" href="#/altaveu">${icon.megaphone}<span>${t("Hi ha missatges nous a l'altaveu")}</span>${icon.chevron}</a>` : ''}
     <div class="page-head"><h1>${t('Sessions')}</h1>
       <div class="actions">${isAdmin() ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div>
     </div>
@@ -1926,6 +1930,64 @@ async function pageProfile() {
 
 // ---------- Comptes d'administració ----------
 // Només serveixen per editar. No són persones de la colla: qui també fa castells respon amb la seva fitxa de membre.
+// ---------- Altaveu ----------
+// Missatges d'informació de l'administració per a tota la colla. Cada mòbil recorda fins on ha llegit (només per
+// marcar la pestanya quan n'hi ha de nous).
+const newsUnread = () => !!me?.latestNews && me.latestNews > store.get('newsSeen', '');
+const newsDate = (at) => new Date(`${at.replace(' ', 'T')}Z`);
+// Text pla amb salts de línia; les adreces web es converteixen en enllaços (només http i https).
+const richText = (text) => esc(text || '').replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+
+async function pageNews() {
+  const list = await api('GET', '/announcements');
+  const admin = isAdmin();
+  const latest = list.reduce((m, a) => (a.created_at > m ? a.created_at : m), '');
+  const seen = store.get('newsSeen', '');
+  if (latest) store.set('newsSeen', latest);
+  if (me) me.latestNews = latest || me.latestNews;
+  renderNav();
+  const when = (a) => newsDate(a.created_at).toLocaleDateString(LOCALE[lang], { day: 'numeric', month: 'long', year: 'numeric' });
+  $app.innerHTML = `
+    <div class="page-head"><h1>${t('Altaveu')}</h1>
+      <div class="actions">${admin ? `<button class="btn primary" id="new-news">${icon.plus}${t('Nou missatge')}</button>` : ''}</div></div>
+    <p class="muted" style="margin-top:0">${admin ? t('Missatges per a tota la colla. Els membres els veuen aquí i la pestanya es marca quan n\'hi ha de nous.') : t("Informació de l'administració per a tota la colla.")}</p>
+    <div class="news-list">${list.map((a) => `<article class="card news ${a.pinned ? 'pinned' : ''} ${!admin && a.created_at > seen && seen ? 'new' : ''}">
+      <div class="news-head">
+        <div><h2>${esc(a.title)}</h2>
+          <div class="small muted">${a.pinned ? `<span class="news-tag">${t('Fixat')}</span> ` : ''}${when(a)}${admin && a.author ? ` · ${esc(a.author)}` : ''}${a.updated_at ? ` · ${t('editat')}` : ''}</div></div>
+        ${admin ? `<div class="actions"><button class="btn sm" data-edit-news="${a.id}">${t('Edita')}</button><button class="btn sm danger" data-del-news="${a.id}">${t('Esborra')}</button></div>` : ''}
+      </div>
+      ${a.body ? `<div class="news-body">${richText(a.body)}</div>` : ''}
+    </article>`).join('') || `<div class="empty">${icon.megaphone}<p>${t('Encara no hi ha cap missatge.')}</p></div>`}</div>`;
+  if (!admin) return;
+  qs('#new-news').onclick = () => newsModal();
+  qsa('[data-edit-news]').forEach((b) => (b.onclick = () => newsModal(list.find((a) => String(a.id) === b.dataset.editNews))));
+  qsa('[data-del-news]').forEach((b) => (b.onclick = async () => {
+    const a = list.find((x) => String(x.id) === b.dataset.delNews);
+    if (!confirm(t('Esborrar el missatge «{title}»?', { title: a.title }))) return;
+    if (await attempt(() => api('DELETE', `/announcements/${a.id}`))) { toast(t('Missatge esborrat')); render({ keepScroll: true }); }
+  }));
+}
+
+function newsModal(a) {
+  openModal(`${modalHead(a ? t('Edita el missatge') : t('Nou missatge'))}
+    <form id="news-form" class="stack">
+      <label class="field">${t('Títol')}<input name="title" required maxlength="150" value="${esc(a?.title)}" placeholder="${t('p. ex. Canvi d\'hora de l\'assaig')}"></label>
+      <label class="field">${t('Missatge')}<textarea name="body" rows="7" maxlength="4000" placeholder="${t('Les adreces web es converteixen en enllaços.')}">${esc(a?.body)}</textarea></label>
+      <label class="check"><input type="checkbox" name="pinned" ${a?.pinned ? 'checked' : ''}> ${t('Fixa-ho a dalt de tot')}</label>
+      <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${a ? t('Desa') : t('Publica')}</button></div>
+    </form>`, (m) => {
+    qs('#news-form', m).onsubmit = async (e) => {
+      e.preventDefault();
+      const saved = await attempt(() => api(a ? 'PUT' : 'POST', a ? `/announcements/${a.id}` : '/announcements', formData(e.target)));
+      if (!saved) return;
+      closeModal();
+      toast(a ? t('Missatge desat') : t('Missatge publicat'));
+      render({ keepScroll: true });
+    };
+  });
+}
+
 // ---------- Pinyes de la colla (plantilles) ----------
 // Cada colla fa la pinya a la seva manera: aquí es redibuixa la de cada tipus de castell i val per a tots els castells
 // d'aquell nom. Les posicions que es mantenen conserven l'historial; les que es treuen deixen de sortir però no s'esborren.

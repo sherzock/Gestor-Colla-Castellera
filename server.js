@@ -356,9 +356,11 @@ function newPassword(password, username) {
   return hashPassword(p);
 }
 
+// latestNews: quan es va publicar l'últim missatge de l'altaveu (per marcar la pestanya si n'hi ha de nous).
+const latestNews = () => db.prepare('SELECT MAX(created_at) AS at FROM announcements').get().at;
 const meResponse = (user) => (user.mode === 'admin'
-  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions }
-  : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member', sessions: user.sessions });
+  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions, latestNews: latestNews() }
+  : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member', sessions: user.sessions, latestNews: latestNews() });
 
 // ---------- Rutes: autenticació i perfil ----------
 route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO }), 'public');
@@ -945,9 +947,39 @@ route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
   return { ok: true, count: list.length };
 }, 'admin');
 
+// ---------- Altaveu ----------
+// Missatges d'informació de l'administració per a tota la colla. Els membres no veuen qui els ha escrit
+// (els comptes d'administració poden dur el nom complet d'una persona).
+function announcementInput(body) {
+  const title = str(body.title, 150);
+  if (!title) fail(400, 'El títol és obligatori');
+  return { title, body: str(body.body, 4000), pinned: bool(body.pinned) };
+}
+const getAnnouncement = (id) => db.prepare('SELECT * FROM announcements WHERE id = ?').get(id) || fail(404, 'Missatge no trobat');
+
+route('GET', '/api/announcements', ({ user }) => db.prepare(`SELECT * FROM announcements
+  ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 200`).all().map((a) => (user.role === 'admin' ? a : { ...a, author: undefined })));
+
+route('POST', '/api/announcements', ({ body, user }) => {
+  const id = insertRow('announcements', { ...announcementInput(body), author: user.name, created_at: nowUtc() });
+  return getAnnouncement(id);
+}, 'admin');
+
+route('PUT', '/api/announcements/:id', ({ params, body }) => {
+  getAnnouncement(params.id);
+  updateRow('announcements', params.id, { ...announcementInput(body), updated_at: nowUtc() });
+  return getAnnouncement(params.id);
+}, 'admin');
+
+route('DELETE', '/api/announcements/:id', ({ params }) => {
+  db.prepare('DELETE FROM announcements WHERE id = ?').run(params.id);
+  return { ok: true };
+}, 'admin');
+
 // ---------- Plantilles de pinya ----------
 // Cada colla dibuixa la pinya de cada tipus de castell a la seva manera. Les plantilles valen per a tots els castells
 // d'aquell nom (passats i futurs): les posicions que es conserven mantenen la clau i, per tant, l'historial.
+const nowUtc = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const loadTemplates = () => setTemplates(db.prepare('SELECT name, layers FROM castell_templates').all()
   .map((r) => ({ name: r.name, layers: JSON.parse(r.layers) })));
 loadTemplates();

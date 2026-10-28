@@ -19,6 +19,10 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
   Els administradors veuen la taula completa amb totals i exporten a CSV.
+- **Altaveu**: pestanya amb missatges d'informació de l'administració per a tota la colla (canvis d'hora, què cal
+  portar, enllaços a fotos…). Els administradors els publiquen, editen, esborren i poden fixar-ne a dalt de tot. Les
+  adreces web es converteixen en enllaços. Quan hi ha missatges nous, la pestanya surt marcada i a l'inici apareix un
+  avís; cada mòbil recorda fins on ha llegit. Els membres no veuen quin compte d'administració ha escrit el missatge.
 - **Acompanyants**: en crear o editar una sessió, l'administració pot marcar «Pregunta si vindran acompanyats». Llavors,
   qui respon «Vinc» pot dir quants acompanyants porta i, si vol, el seu nom. Cada acompanyant es crea sol com a
   **persona temporal** de la sessió («Acompanyant de …» si no hi ha nom) i la tècnica el pot col·locar als castells.
@@ -151,6 +155,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 | Estadístiques per castell i de cada persona | | ✓ |
 | Editar dades i mides de qualsevol persona | | ✓ |
 | Crear/editar/esborrar sessions, camps extra i castells | | ✓ |
+| Llegir els missatges de l'altaveu | ✓ | ✓ |
+| Publicar, editar i esborrar missatges de l'altaveu | | ✓ |
 | Ocultar o mostrar sessions i castells als membres | | ✓ |
 | Col·locar persones (també temporals), muntador automàtic, duplicar castells | | ✓ |
 | Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV o ZIP amb els castells | | ✓ |

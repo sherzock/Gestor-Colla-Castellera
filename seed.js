@@ -50,7 +50,7 @@ const DIADA_NAMES = ['Diada de Sant Jordi', "Diada de l'aniversari", 'Diada de l
   'Trobada de colles', 'Diada del barri de Sant Pere', 'Diada a la Rambla', 'Diada de la colla', 'Diada de les entitats', 'Diada de la Festa Major'];
 
 transaction(() => {
-  for (const t of ['castell_templates', 'castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
+  for (const t of ['announcements', 'castell_templates', 'castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
 
   const insPerson = db.prepare(`INSERT INTO people (username, password_hash, role, name, alias, birthdate, height_cm, shoulder_height_cm, shoulder_width_cm, weight_kg, instrument)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -250,6 +250,11 @@ transaction(() => {
     a3: attend(events.a3, { past: false, escoleta: true }),
     sopar: attend(events.sopar, { past: false, extra: () => ({ [fMenu]: pick(['Carn', 'Carn', 'Peix', 'Vegetarià']) }) }),
   };
+  // Altaveu: uns quants missatges de l'administració.
+  const insNews = db.prepare("INSERT INTO announcements (title, body, pinned, author, created_at) VALUES (?, ?, ?, 'Tècnica', datetime('now', ?))");
+  insNews.run('Camisa i faixa per a la diada', "Recordeu portar la camisa neta i la faixa. Ens trobem a la plaça a les 11:15.\nQui necessiti faixa, que ho digui a l'assaig de dijous.", 1, '-2 days');
+  insNews.run("Canvi d'hora de l'assaig", "Aquesta setmana l'assaig del dijous comença a les 20:30 per l'obra del local.", 0, '-1 days');
+  insNews.run('Fotos de la darrera diada', 'Ja teniu les fotos penjades: https://example.com/fotos-diada', 0, '-6 days');
   const insCompanion = db.prepare('INSERT INTO event_guests (event_id, name, companion_of) VALUES (?, ?, ?)');
   const companionNames = ['Laia', 'Oriol', 'Marta', 'Pau', 'Núria', 'Jordi', 'Clara', 'Marc'];
   for (const p of people.filter((x) => present.sopar.has(x.id))) {

@@ -100,6 +100,9 @@ h3 { font-size: .95rem; }
     border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); z-index: 30;
   }
   .nav a, .nav button { flex-direction: column; gap: 2px; font-size: .72rem; padding: 6px 10px; }
+  /* Fins a 6 pestanyes en un mòbil estret: es reparteixen l'amplada i el text es retalla si cal. */
+  .nav a, .nav button { flex: 1 1 0; min-width: 0; padding: 6px 2px; font-size: .68rem; }
+  .nav a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 /* ---------- Pàgina ---------- */
@@ -777,3 +780,20 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .companions .field input[type=number] { max-width: 100px; }
 .comp-names { display: flex; flex-direction: column; gap: 6px; }
 .comp-names:empty { display: none; }
+
+/* ---------- Altaveu ---------- */
+.nav a { position: relative; }
+.nav-dot { position: absolute; top: 4px; right: calc(50% - 16px); width: 9px; height: 9px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+@media (min-width: 800px) { .nav-dot { top: 5px; right: 5px; } }
+.news-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; text-decoration: none; color: var(--ink); font-weight: 600; border-color: var(--accent); background: var(--accent-soft); }
+.news-banner svg { width: 20px; height: 20px; color: var(--accent); flex: none; }
+.news-banner > svg:last-child { margin-left: auto; transform: rotate(-90deg); }
+.news-list { display: flex; flex-direction: column; gap: 12px; }
+.news-head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.news-head h2 { margin: 0 0 4px; }
+.news.pinned { border-color: var(--accent); }
+.news.new { box-shadow: inset 4px 0 0 var(--accent); }
+.news-tag { font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
+.news-body { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.news-body a { color: var(--accent); }
+.empty > svg { width: 32px; height: 32px; opacity: .5; }
