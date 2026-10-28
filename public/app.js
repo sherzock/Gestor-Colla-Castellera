@@ -1,4 +1,6 @@
-import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL } from './castell.js';
+import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL, setTemplates, templateOf, configFromName, TEMPLATE_KINDS } from './castell.js';
+import { createEditor, layerToTemplate, boxShort } from './editor.js';
+import { castellPng, zip, fileSafe, download } from './export.js';
 import { proposeLineup } from './muntador.js';
 import { translate, LANGS } from './i18n.js';
 import { openZoom } from './zoom.js';
@@ -258,6 +260,7 @@ function renderNav() {
 document.getElementById('me-chip').onclick = () => settingsModal();
 
 const PUBLIC_ROUTES = ['#/login', '#/admin'];
+let templatesLoaded = false;
 const routes = [
   [/^#\/login$/, pageIdentify],
   [/^#\/admin$/, pageAdminLogin],
@@ -270,6 +273,8 @@ const routes = [
   [/^#\/calendari(?:\/(\d{4}-\d{2}))?$/, pageCalendar],
   [/^#\/estadistiques$/, pageStats],
   [/^#\/estadistiques\/persona\/(\d+)$/, pagePersonStats],
+  [/^#\/plantilles$/, pageTemplates],
+  [/^#\/plantilla\/([a-z0-9]{2,12})$/, pageTemplate],
 ];
 
 async function render({ keepScroll = false } = {}) {
@@ -277,6 +282,10 @@ async function render({ keepScroll = false } = {}) {
   const hash = location.hash || '#/';
   if (!me && !PUBLIC_ROUTES.includes(hash)) {
     try { me = await api('GET', '/me'); } catch { return; }
+  }
+  // Les plantilles de pinya de la colla canvien com es dibuixen els castells: s'han de tenir abans de cap pàgina.
+  if (me && !templatesLoaded) {
+    try { setTemplates(await api('GET', '/templates')); templatesLoaded = true; } catch { /* es dibuixa l'estàndard */ }
   }
   renderNav();
   const [re, page] = routes.find(([r]) => r.test(hash)) || routes[2];
@@ -542,6 +551,40 @@ function extraValue(f, v) {
   return esc(v);
 }
 
+// ZIP amb l'assistència (el mateix CSV) i una imatge PNG de cada castell de la sessió, amb les persones col·locades.
+async function exportSession(event, castells, button) {
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = t('Preparant…');
+  try {
+    const csv = await fetch(`/api/events/${event.id}/attendance.csv`, { headers: { 'X-Lang': lang } });
+    if (!csv.ok) throw new Error(t("No s'ha pogut exportar"));
+    const files = [{ name: `assistencia-${event.date}.csv`, data: new Uint8Array(await csv.arrayBuffer()) }];
+    const used = new Map();
+    for (const [i, c] of castells.entries()) {
+      const { castell, positions } = await api('GET', `/castells/${c.id}`);
+      const s = buildStructure(castell);
+      const byKey = new Map(positions.filter((p) => s.positions.has(p.pos_key)).map((p) => [p.pos_key, p]));
+      const extra = [castell.label, partialLabel(castell), resultLabel(castell.result)].filter(Boolean).join(' · ');
+      const data = await castellPng({
+        s, byKey, nameOf: assignedName,
+        title: `${s.name}${castell.label ? ` · ${castell.label}` : ''}`,
+        subtitle: `${event.title} · ${fmtLong(event.date)}${extra ? ` · ${extra}` : ''} · ${t('{a}/{b} posicions cobertes', { a: byKey.size, b: s.positions.size })}`,
+        labels: { tronc: t('Tronc i pom de dalt'), musica: t('Música'), short: boxShort },
+      });
+      const base = `${String(i + 1).padStart(2, '0')}-${fileSafe(s.name + (castell.label ? `-${castell.label}` : ''))}`;
+      used.set(base, (used.get(base) || 0) + 1);
+      files.push({ name: `${base}${used.get(base) > 1 ? `-${used.get(base)}` : ''}.png`, data });
+    }
+    download(zip(files), `sessio-${event.date}-${fileSafe(event.title)}.zip`);
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
 async function pageEvent(id) {
   const { event, fields, castells, mine, attendance, counts, guests = [] } = await api('GET', `/events/${id}`);
   const admin = isAdmin();
@@ -596,6 +639,7 @@ async function pageEvent(id) {
         <div class="actions">
           ${passList ? `<button class="btn sm primary" id="add-walkin">${icon.plus}${t('Afegeix qui ha vingut')}</button>` : ''}
           <a class="btn sm" href="/api/events/${event.id}/attendance.csv">${t('Exporta CSV')}</a>
+          ${castells.length ? `<button class="btn sm" id="export-zip" title="${t("L'assistència (CSV) i una imatge de cada castell, en un ZIP")}">${t('Exporta amb castells')}</button>` : ''}
         </div>
       </div>
       <div class="counts" style="margin-bottom:10px">
@@ -759,6 +803,7 @@ async function pageEvent(id) {
   };
   qs('#add-castell')?.addEventListener('click', () => castellModal(event.id));
   qs('#add-walkin')?.addEventListener('click', () => walkinModal(event, attendance, reload));
+  qs('#export-zip')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
 
   const ff = qs('#field-form');
   ff.elements.kind.onchange = () => qs('#opts').classList.toggle('hidden', ff.elements.kind.value !== 'select');
@@ -940,7 +985,7 @@ function castellModal(eventId, castell, onLost) {
       <div class="form-grid">
         <label class="field">${t('Persones per pis')}<select name="width">${WIDTHS.map((w) => `<option value="${w.value}" ${Number(c.width) === w.value ? 'selected' : ''}>${w.label}</option>`).join('')}</select></label>
         <label class="field">${t('Pisos')}<input name="height" type="number" min="3" max="11" value="${c.height}" required></label>
-        <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="12" value="${c.cordons}"></label>
+        <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="12" value="${c.cordons}"><span class="small muted hidden" id="cordons-tpl">${t('Els marca la pinya de la colla')}</span></label>
         <label class="check" id="ag-wrap"><input type="checkbox" name="agulla" ${c.agulla ? 'checked' : ''}> ${t('Amb agulla (pilar central)')}</label>
         <label class="check"><input type="checkbox" name="folre" ${c.folre ? 'checked' : ''}> ${t('Folre')}</label>
         <label class="check"><input type="checkbox" name="manilles" ${c.manilles ? 'checked' : ''}> ${t('Manilles')}</label>
@@ -1017,7 +1062,12 @@ function castellModal(eventId, castell, onLost) {
       form.elements.folre.disabled = d.net;
       form.elements.manilles.disabled = !d.folre;
       form.elements.puntals.disabled = !d.manilles;
+      // Si la colla té plantilla per a aquest castell, la pinya ja ve dibuixada (amb els seus cordons).
+      const tpl = !d.net && !!templateOf(d);
+      // Només de lectura (no desactivat): així es conserva el valor si un dia s'esborra la plantilla.
       form.elements.cordons.disabled = d.net;
+      form.elements.cordons.readOnly = tpl;
+      qs('#cordons-tpl', m).classList.toggle('hidden', !tpl);
       form.elements.height.min = d.width === 1 ? 3 : 4;
       qs('#cname', m).textContent = castellName(d);
     };
@@ -1041,7 +1091,7 @@ function castellModal(eventId, castell, onLost) {
 }
 
 // ---------- Visualitzador de castell ----------
-const KIND_LABEL = { base: 'Baix', crossa: 'Crossa', contrafort: 'Contrafort', agulla: 'Agulla', vent: 'Vents', mans: 'Mans', lateral: 'Laterals', latmans: 'Laterals de mans' };
+const KIND_LABEL = { base: 'Baix', crossa: 'Crossa', contrafort: 'Contrafort', agulla: 'Agulla', vent: 'Vents', mans: 'Mans', lateral: 'Laterals', latmans: 'Laterals de mans', altre: 'Altres' };
 let castellView = store.get('castellView', 'tronc');
 let selectedPerson = null;
 let searchQuery = '';
@@ -1113,9 +1163,8 @@ function troncView(s, cell) {
 // Color del contorn de cada tipus de posició (variables CSS, s'adapten al mode fosc).
 const KIND_VAR = {
   base: 'var(--k-baix)', contrafort: 'var(--k-contrafort)', agulla: 'var(--k-agulla)', crossa: 'var(--k-crossa)',
-  mans: 'var(--k-mans)', vent: 'var(--k-vent)', lateral: 'var(--k-lateral)', latmans: 'var(--k-latmans)',
+  mans: 'var(--k-mans)', vent: 'var(--k-vent)', lateral: 'var(--k-lateral)', latmans: 'var(--k-latmans)', altre: 'var(--accent)',
 };
-const KIND_SHORT = { base: 'Baix', contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', latmans: 'Lat. mans' };
 
 function layerSvg(layer, s, byKey, ctx) {
   const pad = 12;
@@ -1135,7 +1184,7 @@ function layerSvg(layer, s, byKey, ctx) {
     deg = ((deg % 360) + 360) % 360;
     if (deg > 90 && deg <= 270) deg -= 180;
     const name = a ? truncate(assignedName(a, true), item.w > 70 ? 11 : 8) : '—';
-    const short = item.shared ? role?.split(' · ')[0] : `${KIND_SHORT[item.kind]}${item.ring ? ` ${item.ring}` : ''}`;
+    const short = item.shared ? role?.split(' · ')[0] : boxShort(item);
     if (item.off) {
       return `<g class="box off" transform="translate(${item.x.toFixed(1)} ${item.y.toFixed(1)}) rotate(${deg.toFixed(1)})">
       <title>${esc(t('{level}: no es fa en aquesta prova', { level: role }))}</title>
@@ -1156,6 +1205,7 @@ function layerSvg(layer, s, byKey, ctx) {
 
 function pinyaView(s, byKey, ctx) {
   const kinds = ['base', 'contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral'];
+  if (s.layers.some((l) => l.items.some((i) => i.kind === 'altre'))) kinds.push('altre');
   return s.layers.map((layer, i) => {
     const filled = layer.items.filter((x) => !x.shared && byKey.has(x.key)).length;
     const total = layer.items.filter((x) => !x.shared).length;
@@ -1353,7 +1403,7 @@ async function pageCastell(id) {
       </div>
       <div class="actions">
         ${mineKey && !proposal ? `<button class="btn sm" id="find-me">${t('On sóc?')}</button>` : ''}
-        ${admin ? `<button class="btn sm primary" id="auto-build">${t('Munta automàticament')}</button>${hiddenToggle(castell.hidden, 'hide-castell')}<button class="btn sm" id="edit-castell">${t('Edita')}</button><button class="btn sm" id="dup-castell">${t('Duplica')}</button><button class="btn sm danger" id="del-castell">${t('Esborra')}</button>` : ''}
+        ${admin ? `<button class="btn sm primary" id="auto-build">${t('Munta automàticament')}</button>${hiddenToggle(castell.hidden, 'hide-castell')}<button class="btn sm" id="edit-castell">${t('Edita')}</button><button class="btn sm" id="dup-castell">${t('Duplica')}</button>${s.layers.length ? `<a class="btn sm" href="#/plantilla/${s.name}">${t('Pinya de la colla')}</a>` : ''}<button class="btn sm danger" id="del-castell">${t('Esborra')}</button>` : ''}
       </div>
     </div>
     ${admin ? `<div class="result-bar"><span class="small muted">${t('Com ha acabat?')}</span>
@@ -1836,6 +1886,180 @@ async function pageProfile() {
 
 // ---------- Comptes d'administració ----------
 // Només serveixen per editar. No són persones de la colla: qui també fa castells respon amb la seva fitxa de membre.
+// ---------- Pinyes de la colla (plantilles) ----------
+// Cada colla fa la pinya a la seva manera: aquí es redibuixa la de cada tipus de castell i val per a tots els castells
+// d'aquell nom. Les posicions que es mantenen conserven l'historial; les que es treuen deixen de sortir però no s'esborren.
+const KIND_NAMES = { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', altre: 'Una altra' };
+
+async function pageTemplates() {
+  if (!isAdmin()) { location.hash = '#/'; return; }
+  const [list, types] = await Promise.all([api('GET', '/templates'), api('GET', '/templates/types')]);
+  setTemplates(list);
+  const saved = new Map(list.map((x) => [x.name, x]));
+  const rows = [...types];
+  for (const x of list) if (!rows.some((r) => r.name === x.name)) rows.push({ name: x.name, castells: 0 });
+  $app.innerHTML = `
+    <a class="back" href="#/comptes">${icon.back}${t('Comptes')}</a>
+    <div class="page-head"><h1>${t('Pinyes de la colla')}</h1></div>
+    <p class="muted" style="margin-top:0">${t("Tria un castell per redibuixar-ne la pinya a la manera de la colla. Els canvis valen per a tots els castells d'aquest tipus, també els que ja s'han fet.")}</p>
+    <div class="card">
+      <ul class="tpl-list">${rows.map((r) => `<li><a href="#/plantilla/${r.name}"><strong>${esc(r.name)}</strong>
+        <span class="small muted">${tn(r.castells, '{n} castell', '{n} castells')}</span>
+        ${saved.has(r.name) ? `<span class="tpl-tag">${t('Plantilla de la colla')}</span>` : `<span class="small muted">${t('Estàndard')}</span>`}</a></li>`).join('')
+        || `<li class="muted small">${t('Encara no hi ha cap castell amb pinya.')}</li>`}</ul>
+      <form id="tpl-new" class="tpl-new">
+        <label class="field">${t('Un altre castell')}<input name="name" placeholder="3d8, 4d9f, pd5…" maxlength="12" autocomplete="off" required></label>
+        <button class="btn">${t('Obre')}</button>
+      </form>
+    </div>`;
+  qs('#tpl-new').onsubmit = (e) => {
+    e.preventDefault();
+    const name = e.target.elements.name.value.trim().toLowerCase();
+    const c = configFromName(name);
+    if (!c) { toast(t('Castell no vàlid'), true); return; }
+    if (c.net || !buildStructure(c, { ignoreTemplate: true }).layers.length) { toast(t('Aquest castell no té pinya'), true); return; }
+    location.hash = `#/plantilla/${name}`;
+  };
+}
+
+async function pageTemplate(name) {
+  if (!isAdmin()) { location.hash = '#/'; return; }
+  const config = configFromName(name);
+  if (!config || config.net) throw new Error(t('Castell no vàlid'));
+  const [list, { usage, castells, cordons }] = await Promise.all([api('GET', '/templates'), api('GET', `/templates/${name}/usage`)]);
+  setTemplates(list);
+  const saved = list.find((x) => x.name === name);
+  const standardStructure = (cordons) => buildStructure({ ...config, cordons }, { ignoreTemplate: true });
+  const standard = (cordons) => Object.fromEntries(standardStructure(cordons).layers.map((l) => [l.id, layerToTemplate(l)]));
+  const ref = standardStructure(cordons);
+  if (!ref.layers.length) throw new Error(t('Aquest castell no té pinya'));
+  const labels = Object.fromEntries(ref.layers.map((l) => [l.id, l.label]));
+  // Les capes que la plantilla no té (p. ex. s'hi ha afegit el folre després) surten com l'estàndard.
+  const layers = { ...standard(cordons), ...(saved ? structuredClone(saved.layers) : {}) };
+  for (const id of Object.keys(layers)) if (!labels[id]) delete layers[id];
+  const level = { pinya: 1, folre: 2, manilles: 3, puntals: 4 };
+  const baseLabel = (base, layerId) => (base === 'c' ? t('Pilar central') : ref.positions.get(`t${level[layerId]}-${base}`)?.role || t('Baix'));
+  let dirty = false;
+
+  $app.innerHTML = `
+    <a class="back" href="#/plantilles" id="tpl-back">${icon.back}${t('Pinyes de la colla')}</a>
+    <div class="page-head">
+      <div><h1>${t('Pinya del {castell}', { castell: esc(name) })}</h1>
+        <div class="muted small">${saved ? t('Plantilla de la colla') : t("Estàndard de l'app")} · ${tn(castells, '{n} castell d\'aquest tipus', '{n} castells d\'aquest tipus')}</div></div>
+      <div class="actions">
+        <button class="btn primary" id="tpl-save" disabled>${t('Desa')}</button>
+        ${saved ? `<button class="btn danger" id="tpl-delete">${t('Esborra la plantilla')}</button>` : ''}
+      </div>
+    </div>
+    <div class="card tpl-card">
+      <div class="card-head">
+        ${Object.keys(layers).length > 1 ? `<div class="tabs" id="tpl-layers">${Object.keys(layers).map((id, i) => `<button data-v="${id}" class="${i ? '' : 'on'}">${esc(labels[id])}</button>`).join('')}</div>` : `<h2>${esc(labels.pinya)}</h2>`}
+        <span class="muted small" id="tpl-count"></span>
+      </div>
+      <div class="tpl-toolbar">
+        <span class="small muted">${t('Afegeix')}</span>
+        ${TEMPLATE_KINDS.map((k) => `<button class="btn sm" data-add="${k}">${icon.plus}${t(KIND_NAMES[k])}</button>`).join('')}
+      </div>
+      <div class="tpl-canvas" id="tpl-canvas"></div>
+      <div class="tpl-zoombar"><button class="btn sm" id="tpl-zoom-out" aria-label="${t('Redueix')}">−</button><button class="btn sm" id="tpl-zoom-in" aria-label="${t('Amplia')}">+</button></div>
+      <div class="tpl-panel" id="tpl-panel"></div>
+      <div class="tpl-reset">
+        <label class="small muted">${t('Cordons')} <input id="tpl-cordons" type="number" min="0" max="12" value="${cordons}"></label>
+        <button class="btn sm" id="tpl-standard">${t("Torna a l'estàndard")}</button>
+      </div>
+    </div>
+    <p class="small muted">${t("Arrossega les caixes per moure-les. Toca'n una per canviar-ne el nom, el tipus o girar-la. Les posicions que es treuen deixen de sortir als castells, però les alineacions guardades no s'esborren: si es tornen a posar, tornen a sortir.")}</p>`;
+
+  const panel = qs('#tpl-panel');
+  const markDirty = () => {
+    dirty = true;
+    qs('#tpl-save').disabled = false;
+    count();
+  };
+  const count = () => {
+    const n = layers[editor.layer].filter((i) => i.base === undefined).length;
+    qs('#tpl-count').textContent = tn(n, '{n} posició', '{n} posicions');
+  };
+  const showPanel = (item) => {
+    if (!item) { panel.innerHTML = `<span class="small muted">${t('Toca una caixa per editar-la.')}</span>`; return; }
+    const rotate = `<div class="tpl-rot"><button class="btn sm" data-rot="-15">↺ 15°</button><button class="btn sm" data-rot="15">↻ 15°</button><button class="btn sm" data-rot="90">↻ 90°</button></div>`;
+    if (item.base !== undefined) {
+      panel.innerHTML = `<div class="tpl-fields"><strong>${esc(baseLabel(item.base, editor.layer))}</strong><span class="small muted">${t('És del tronc: es pot moure però no treure.')}</span></div>${rotate}`;
+    } else {
+      const used = usage[item.key] || 0;
+      panel.innerHTML = `<div class="tpl-fields">
+          <label class="field">${t('Nom')}<input id="tpl-role" maxlength="60" value="${esc(item.role)}"></label>
+          <label class="field">${t('Tipus')}<select id="tpl-kind">${TEMPLATE_KINDS.map((k) => `<option value="${k}" ${k === item.kind ? 'selected' : ''}>${t(KIND_NAMES[k])}</option>`).join('')}</select></label>
+          ${['mans', 'vent', 'lateral'].includes(item.kind) ? `<label class="field">${t('Cordó')}<input id="tpl-ring" type="number" min="1" max="12" value="${item.ring || 1}"></label>` : ''}
+        </div>
+        ${rotate}
+        <div class="tpl-rot"><button class="btn sm" id="tpl-dup">${t('Duplica')}</button><button class="btn sm danger" id="tpl-del">${t('Treu')}</button></div>
+        ${used ? `<p class="small muted" style="margin:0">${tn(used, "Surt {n} cop a l'historial.", "Surt {n} cops a l'historial.")}</p>` : ''}`;
+      qs('#tpl-role').oninput = (e) => { if (e.target.value.trim()) editor.update({ role: e.target.value.trim() }); };
+      qs('#tpl-kind').onchange = (e) => { editor.update({ kind: e.target.value }); showPanel(editor.selected); };
+      const ring = qs('#tpl-ring');
+      if (ring) ring.onchange = (e) => { editor.update({ ring: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }); showPanel(editor.selected); };
+      qs('#tpl-dup').onclick = () => editor.duplicate();
+      qs('#tpl-del').onclick = () => {
+        if (used && !confirm(t("Aquesta posició surt {n} cops a l'historial. Si la treus, deixarà de sortir als castells i a les estadístiques (no s'esborra res: si la tornes a posar, torna). Continuar?", { n: used }))) return;
+        editor.remove();
+      };
+    }
+    qsa('[data-rot]', panel).forEach((b) => (b.onclick = () => editor.rotate(Number(b.dataset.rot))));
+  };
+  const editor = createEditor(qs('#tpl-canvas'), {
+    layers, usage, t, baseLabel,
+    onChange: markDirty, onSelect: showPanel,
+  });
+  showPanel(null);
+  count();
+
+  qsa('#tpl-layers button').forEach((b) => (b.onclick = () => {
+    qsa('#tpl-layers button').forEach((x) => x.classList.toggle('on', x === b));
+    editor.setLayer(b.dataset.v);
+    count();
+  }));
+  qsa('[data-add]').forEach((b) => (b.onclick = () => editor.add(b.dataset.add)));
+  qs('#tpl-zoom-in').onclick = () => editor.zoomBy(1.4);
+  qs('#tpl-zoom-out').onclick = () => editor.zoomBy(1 / 1.4);
+  qs('#tpl-standard').onclick = () => {
+    if (!confirm(t("Tornar a la pinya estàndard? Es perdran els canvis que no hagis desat (la plantilla desada no canvia fins que desis).") )) return;
+    const n = Math.max(0, Math.min(12, Number(qs('#tpl-cordons').value) || 0));
+    editor.replace(standard(n));
+  };
+  // Fletxes del teclat: mouen la caixa seleccionada (Maj: més de pressa).
+  const onKey = (e) => {
+    if (!editor.selected || ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    const d = e.shiftKey ? 10 : 2;
+    const move = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] }[e.key];
+    if (move) { e.preventDefault(); editor.nudge(...move); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selected.base === undefined) { e.preventDefault(); qs('#tpl-del')?.click(); }
+  };
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('hashchange', () => document.removeEventListener('keydown', onKey), { once: true });
+  window.onbeforeunload = () => (dirty ? true : undefined);
+  window.addEventListener('hashchange', () => { window.onbeforeunload = null; }, { once: true });
+  qs('#tpl-back').onclick = (e) => { if (dirty && !confirm(t('Hi ha canvis sense desar. Sortir igualment?'))) e.preventDefault(); };
+
+  qs('#tpl-save').onclick = async () => {
+    const result = await attempt(() => api('PUT', `/templates/${name}`, { layers }));
+    if (!result) return;
+    dirty = false;
+    setTemplates(await api('GET', '/templates'));
+    toast(t('Pinya desada'));
+    render({ keepScroll: true });
+  };
+  const del = qs('#tpl-delete');
+  if (del) del.onclick = async () => {
+    if (!confirm(t("Esborrar la plantilla del {castell}? Els castells d'aquest tipus tornaran a tenir la pinya estàndard.", { castell: name }))) return;
+    if (!(await attempt(() => api('DELETE', `/templates/${name}`)))) return;
+    dirty = false;
+    setTemplates(await api('GET', '/templates'));
+    toast(t('Plantilla esborrada'));
+    render();
+  };
+}
+
 async function pageAccounts() {
   if (!isAdmin()) { location.hash = '#/perfil'; return; }
   const admins = await api('GET', '/admins');
@@ -1859,6 +2083,11 @@ async function pageAccounts() {
           <label class="field">${t('Nova contrasenya')}<input name="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="200" required></label>
           <div class="form-actions"><button class="btn">${t('Canvia')}</button></div>
         </form>
+        <div class="card stack">
+          <h2>${t('Pinyes de la colla')}</h2>
+          <p class="small muted" style="margin:0">${t('Redibuixa la pinya de cada castell a la manera de la colla: mou, afegeix o treu posicions.')}</p>
+          <div class="form-actions"><a class="btn" href="#/plantilles">${t('Obre l\'editor de pinyes')}</a></div>
+        </div>
       </div>
     </div>`;
   qs('#new-admin').onclick = () => adminModal();

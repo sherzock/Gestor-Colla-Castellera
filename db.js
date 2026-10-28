@@ -277,3 +277,10 @@ export function transaction(fn) {
     throw err;
   }
 }
+
+// Plantilles de pinya de la colla, per tipus de castell («3d7»): les capes redibuixades, en JSON.
+db.exec(`CREATE TABLE IF NOT EXISTS castell_templates (
+  name TEXT PRIMARY KEY,
+  layers TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);

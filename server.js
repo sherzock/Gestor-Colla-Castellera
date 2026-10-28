@@ -5,7 +5,8 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import zlib from 'node:zlib';
 import { db, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
-import { buildStructure, castellName, levelNames, levelRange, positionOf, structureOf } from './public/castell.js';
+import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates,
+  LAYER_PREFIX, TEMPLATE_KINDS } from './public/castell.js';
 import { translate } from './public/i18n.js';
 
 // Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
@@ -622,9 +623,10 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   const isAdmin = user.role === 'admin';
   const fields = loadFields(event.id);
   const mine = db.prepare('SELECT * FROM attendance WHERE event_id = ? AND person_id = ?').get(event.id, user.id);
-  const castells = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM castell_positions WHERE castell_id = c.id) AS assigned_count
-    FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
-    .map((c) => (isAdmin ? c : { ...c, tech_notes: undefined }));
+  // Posicions ocupades: només les que el castell té ara (una plantilla pot haver-ne tret alguna).
+  const keysOf = db.prepare('SELECT pos_key FROM castell_positions WHERE castell_id = ?');
+  const castells = db.prepare(`SELECT c.* FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
+    .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : { tech_notes: undefined }) }));
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
       ${CAME_SQL} AS present
     FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -886,6 +888,97 @@ route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
   return { ok: true, count: list.length };
 }, 'admin');
 
+// ---------- Plantilles de pinya ----------
+// Cada colla dibuixa la pinya de cada tipus de castell a la seva manera. Les plantilles valen per a tots els castells
+// d'aquell nom (passats i futurs): les posicions que es conserven mantenen la clau i, per tant, l'historial.
+const loadTemplates = () => setTemplates(db.prepare('SELECT name, layers FROM castell_templates').all()
+  .map((r) => ({ name: r.name, layers: JSON.parse(r.layers) })));
+loadTemplates();
+
+function templateInput(name, body) {
+  const config = configFromName(name);
+  if (!config) fail(400, 'Castell no vàlid');
+  const def = buildStructure(config, { ignoreTemplate: true });
+  if (!body.layers || typeof body.layers !== 'object' || Array.isArray(body.layers)) fail(400, 'Plantilla no vàlida');
+  const coord = (v, min, max) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < min || n > max) fail(400, 'Plantilla no vàlida');
+    return Math.round(n * 10) / 10;
+  };
+  const out = {};
+  const keys = new Set();
+  for (const [id, items] of Object.entries(body.layers)) {
+    const layer = def.layers.find((l) => l.id === id);
+    if (!layer || !Array.isArray(items) || items.length > 400) fail(400, 'Plantilla no vàlida');
+    const bases = new Set();
+    out[id] = items.map((it) => {
+      if (!it || typeof it !== 'object') fail(400, 'Plantilla no vàlida');
+      const box = { x: coord(it.x, -3000, 3000), y: coord(it.y, -3000, 3000), w: coord(it.w, 20, 300), h: coord(it.h, 14, 200),
+        rot: Math.round((((Number(it.rot) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) * 1e4) / 1e4 };
+      if (!Number.isFinite(box.rot)) fail(400, 'Plantilla no vàlida');
+      if (it.base !== undefined) {
+        // Les caixes del tronc que la capa envolta: una per columna (i el pilar central, si n'hi ha).
+        const base = it.base === 'c' ? 'c' : Number(it.base);
+        if (base === 'c' ? !layer.items.some((x) => x.shared && x.key.startsWith('ag')) : !(Number.isInteger(base) && base >= 0 && base < config.width)) fail(400, 'Plantilla no vàlida');
+        if (bases.has(base)) fail(400, 'Plantilla no vàlida');
+        bases.add(base);
+        return { base, ...box };
+      }
+      const key = String(it.key || '');
+      // Cada capa té les seves claus (p…, f…, m…, u…); mai les del tronc, el pilar o la música.
+      if (!/^[a-z][a-z0-9-]{0,23}$/.test(key) || !key.startsWith(LAYER_PREFIX[id]) || /^m[gt]\d/.test(key) || keys.has(key)) fail(400, 'Plantilla no vàlida');
+      keys.add(key);
+      const kind = TEMPLATE_KINDS.includes(it.kind) ? it.kind : fail(400, 'Plantilla no vàlida');
+      const role = str(it.role, 60) || fail(400, 'Cada posició necessita un nom');
+      const ring = int(it.ring, 0, 12, 0);
+      return { key, role, kind, ...box, ...(ring ? { ring } : {}) };
+    });
+  }
+  return out;
+}
+
+route('GET', '/api/templates', () => db.prepare('SELECT name, layers, updated_at FROM castell_templates ORDER BY name').all()
+  .map((r) => ({ name: r.name, layers: JSON.parse(r.layers), updated_at: r.updated_at })));
+
+// Tipus de castell que la colla ja ha fet o té previstos (amb pinya), per triar quina plantilla editar.
+route('GET', '/api/templates/types', () => {
+  const out = new Map();
+  for (const c of db.prepare('SELECT * FROM castells WHERE net = 0').all()) {
+    const name = castellName(c);
+    out.set(name, (out.get(name) || 0) + 1);
+  }
+  return [...out].map(([name, castells]) => ({ name, castells })).sort((a, b) => b.castells - a.castells || a.name.localeCompare(b.name));
+}, 'admin');
+
+// Quants cops s'ha fet servir cada posició en castells d'aquest tipus (per avisar abans de treure'n una).
+route('GET', '/api/templates/:name/usage', ({ params }) => {
+  if (!configFromName(params.name)) fail(400, 'Castell no vàlid');
+  const list = db.prepare('SELECT * FROM castells').all().filter((c) => castellName(c) === params.name);
+  const ids = list.map((c) => c.id);
+  // Els cordons més habituals d'aquest castell: és la pinya estàndard de partida a l'editor.
+  const byCordons = new Map();
+  for (const c of list) byCordons.set(c.cordons, (byCordons.get(c.cordons) || 0) + 1);
+  const cordons = [...byCordons].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 3;
+  const out = {};
+  const count = db.prepare('SELECT pos_key, COUNT(*) AS n FROM castell_positions WHERE castell_id = ? GROUP BY pos_key');
+  for (const id of ids) for (const r of count.all(id)) out[r.pos_key] = (out[r.pos_key] || 0) + r.n;
+  return { castells: ids.length, cordons, usage: out };
+}, 'admin');
+
+route('PUT', '/api/templates/:name', ({ params, body }) => {
+  const layers = templateInput(params.name, body);
+  db.prepare(`INSERT INTO castell_templates (name, layers, updated_at) VALUES (?, ?, datetime('now'))
+    ON CONFLICT(name) DO UPDATE SET layers = excluded.layers, updated_at = excluded.updated_at`).run(params.name, JSON.stringify(layers));
+  loadTemplates();
+  return { name: params.name, layers };
+}, 'admin');
+
+route('DELETE', '/api/templates/:name', ({ params }) => {
+  db.prepare('DELETE FROM castell_templates WHERE name = ?').run(params.name);
+  loadTemplates();
+  return { ok: true };
+}, 'admin');
+
 // ---------- Memòria de càlculs ----------
 // Les estadístiques i els historials llegeixen milers de posicions: es calculen un sol cop i es reaprofiten fins
 // que algú canvia qualsevol dada (dataVersion puja amb cada petició que no és GET) o canvia el dia.
@@ -931,7 +1024,9 @@ function pastRows() {
         c.manilles, c.puntals, c.sota, c.gralles, c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result,
         e.id AS event_id, e.date, e.title, e.type, MAX(c.hidden, e.hidden) AS hidden
       FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
-      WHERE e.date <= date('now','localtime') AND cp.person_id IS NOT NULL ORDER BY e.date DESC, c.position`).all() };
+      WHERE e.date <= date('now','localtime') AND cp.person_id IS NOT NULL ORDER BY e.date DESC, c.position`).all()
+      // Una posició que la plantilla de la colla ha tret no compta (la fila es conserva per si es torna a posar).
+      .filter((r) => positionOf(r, r.pos_key)) };
   }
   return pastCache.rows;
 }
@@ -1294,7 +1389,10 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
   const all = db.prepare(`SELECT c.*, e.date, e.title, e.type FROM castells c JOIN events e ON e.id = c.event_id
     WHERE e.date <= date('now','localtime') ORDER BY e.date, e.start_time, c.position, c.id`).all();
   const placed = new Map();
+  const byId = new Map(all.map((c) => [c.id, c]));
   for (const r of db.prepare('SELECT castell_id, pos_key, person_id FROM castell_positions').all()) {
+    const c = byId.get(r.castell_id);
+    if (!c || !positionOf(c, r.pos_key)) continue;
     if (!placed.has(r.castell_id)) placed.set(r.castell_id, new Map());
     placed.get(r.castell_id).set(r.pos_key, r.person_id);
   }

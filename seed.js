@@ -50,7 +50,7 @@ const DIADA_NAMES = ['Diada de Sant Jordi', "Diada de l'aniversari", 'Diada de l
   'Trobada de colles', 'Diada del barri de Sant Pere', 'Diada a la Rambla', 'Diada de la colla', 'Diada de les entitats', 'Diada de la Festa Major'];
 
 transaction(() => {
-  for (const t of ['castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
+  for (const t of ['castell_templates', 'castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
 
   const insPerson = db.prepare(`INSERT INTO people (username, password_hash, role, name, alias, birthdate, height_cm, shoulder_height_cm, shoulder_width_cm, weight_kg, instrument)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);

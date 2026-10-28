@@ -218,7 +218,56 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
   return { id, label, items };
 }
 
-export function buildStructure(c) {
+// ---------- Plantilles de la colla ----------
+// Cada colla pot redibuixar la pinya (i el folre, les manilles i els puntals) d'un tipus de castell («3d7», «4d8a»…):
+// moure, girar, reanomenar, afegir i treure posicions. Una plantilla substitueix la capa generada sencera.
+// Les posicions que ja existien conserven la clau, i així l'historial i les estadístiques no es perden.
+// Cada element de la capa és { key, role, kind, x, y, w, h, rot, ring? } o, per a les caixes del tronc que
+// la capa envolta, { base: columna | 'c' (pilar central), x, y, w, h, rot }.
+export const LAYER_IDS = ['pinya', 'folre', 'manilles', 'puntals'];
+export const LAYER_PREFIX = { pinya: 'p', folre: 'f', manilles: 'm', puntals: 'u' };
+export const TEMPLATE_KINDS = ['contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral', 'altre'];
+export const BOX = { w: BOX_W, h: BOX_H };
+let templates = new Map();
+export function setTemplates(list) {
+  templates = new Map((list || []).map((t) => [t.name, t]));
+  structureCache.clear();
+}
+export const templateOf = (c) => templates.get(castellName(c)) ?? null;
+
+// Categoria comparable entre castells (la mateixa que fa servir la capa generada).
+export function kindCat(layerId, kind, ring, role) {
+  const base = kind === 'mans' ? `${ordinal(ring || 1, true)} mans` : kind === 'vent' ? `${ordinal(ring || 1, false)} vent`
+    : kind === 'altre' ? role : { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', lateral: 'Lateral' }[kind];
+  return layerId === 'pinya' ? base : `${LAYER_LABEL[layerId]} · ${base}`;
+}
+const LAYER_LABEL = { pinya: 'Pinya', folre: 'Folre', manilles: 'Manilles', puntals: 'Puntals' };
+
+function templateLayer({ id, label, baseKey, centerKey, add }, items) {
+  const out = [];
+  for (const it of items) {
+    const box = { x: it.x, y: it.y, w: it.w, h: it.h, rot: it.rot };
+    if (it.base !== undefined) {
+      const key = it.base === 'c' ? centerKey : baseKey(it.base);
+      if (key) out.push({ key, role: null, kind: 'base', ...box, shared: true });
+      continue;
+    }
+    out.push(add(it.key, it.role, id, { kind: it.kind, ...box, cat: kindCat(id, it.kind, it.ring, it.role), ...(it.ring ? { ring: it.ring } : {}) }));
+  }
+  return { id, label, items: out };
+}
+
+// Configuració mínima a partir del nom («3d7fm» → tres de set amb folre i manilles), per a l'editor de plantilles.
+export function configFromName(name) {
+  const m = /^(?:pd|([2-579])d)(\d{1,2})(f(m(p)?)?)?(a)?(n)?(ps)?$/.exec(String(name));
+  if (!m) return null;
+  const c = { width: m[1] ? Number(m[1]) : 1, height: Number(m[2]), folre: m[3] ? 1 : 0, manilles: m[4] ? 1 : 0, puntals: m[5] ? 1 : 0,
+    agulla: m[6] ? 1 : 0, net: m[7] ? 1 : 0, sota: m[8] ? 1 : 0, cordons: 3 };
+  if (c.height < 3 || c.height > 12 || castellName(c) !== name) return null;
+  return c;
+}
+
+export function buildStructure(c, { ignoreTemplate = false } = {}) {
   const width = Number(c.width);
   const height = Number(c.height);
   const positions = new Map();
@@ -272,22 +321,24 @@ export function buildStructure(c) {
   // En una prova parcial hi són igual: només es treuen pisos del tronc, i el pis més baix que es fa
   // ocupa el lloc dels baixos a la pinya.
   const layers = [];
+  const template = ignoreTemplate ? null : templates.get(castellName(c));
+  const layer = (spec) => (template?.layers?.[spec.id] ? templateLayer(spec, template.layers[spec.id]) : buildLayer(spec));
   // Als castells amb agulla (pilar al mig), el baix del pilar queda al centre de la pinya.
   const center = (L) => (positions.has(`ag${L}`) ? `ag${L}` : null);
   if (!c.net) {
-    layers.push(buildLayer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`, centerKey: center(from),
+    layers.push(layer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`, centerKey: center(from),
       rings: Number(c.cordons ?? 3), vents: true, agulles: true, add }));
   }
   if (folre && troncLevels >= 2) {
-    layers.push(buildLayer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),
+    layers.push(layer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),
       rings: 1, vents: true, agulles: false, add }));
   }
   if (folre && c.manilles && troncLevels >= 3) {
-    layers.push(buildLayer({ id: 'manilles', label: 'Manilles', width, prefix: 'm', baseKey: (i) => `t3-${i}`,
+    layers.push(layer({ id: 'manilles', label: 'Manilles', width, prefix: 'm', baseKey: (i) => `t3-${i}`,
       rings: 0, vents: false, agulles: false, add }));
   }
   if (folre && c.manilles && c.puntals && troncLevels >= 4) {
-    layers.push(buildLayer({ id: 'puntals', label: 'Puntals', width, prefix: 'u', baseKey: (i) => `t4-${i}`,
+    layers.push(layer({ id: 'puntals', label: 'Puntals', width, prefix: 'u', baseKey: (i) => `t4-${i}`,
       rings: 0, vents: false, agulles: false, add }));
   }
   // Si el pis del tronc que envolta una capa no es fa, la seva caixa central queda buida i sense persona.

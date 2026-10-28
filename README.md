@@ -18,7 +18,9 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   sense respondre.
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
-  Els administradors veuen la taula completa amb totals i exporten a CSV.
+  Els administradors veuen la taula completa amb totals i exporten a CSV. Amb «Exporta amb castells» es descarrega un
+  ZIP amb el mateix CSV i una imatge PNG de cada castell de la sessió (tronc, pom de dalt i pinya, amb qui hi ha a cada
+  posició). Les imatges es dibuixen al navegador.
 - **Passar llista**: el dia de la sessió (i després), qui havia dit «Vinc» compta com a present. L'admin només ha de
   marcar **qui no ha vingut** i, amb «Afegeix qui ha vingut», qui ha vingut **sense apuntar-se** (fins i tot algú que
   encara no és a l'app: es crea en aquell moment). Els qui no han vingut deixen de sortir com a disponibles per als
@@ -88,6 +90,14 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   compte l'historial (la mateixa posició en el mateix castell i, en segon terme, la categoria en qualsevol castell, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
   (la canalla només al pom de dalt). Pots muntar només el tronc, només la pinya o tot, i mantenir el que ja hi ha.
   La proposta es veu marcada al castell i no es desa fins que no la apliques. La lògica és a `public/muntador.js`.
+- **Pinyes de la colla** (admins): cada colla fa la pinya a la seva manera. Des de «Comptes» → «Obre l'editor de
+  pinyes» (o el botó «Pinya de la colla» d'un castell) es redibuixa la pinya, el folre, les manilles i els puntals de
+  cada tipus de castell (3d7, 4d8a…). Es poden arrossegar les caixes, girar-les, canviar-ne el nom o el tipus,
+  duplicar-les, afegir-ne de noves (també posicions pròpies amb un altre nom) i treure-les. La plantilla desada val per
+  a tots els castells d'aquell tipus, també els passats. Les posicions que es mantenen conserven l'historial i les
+  estadístiques. Les que es treuen deixen de comptar, però les alineacions no s'esborren: si es tornen a posar, tornen.
+  «Torna a l'estàndard» parteix de la pinya automàtica amb els cordons que triïs, i «Esborra la plantilla» la deixa
+  com abans.
 - **Administradors**: creen/editen sessions i castells, assignen o canvien persones a cada posició
   (cercant per nom o ordenant per alçada d'espatlles, alçada o pes), poden posar convidats d'altres colles,
   i dupliquen castells (amb l'alineació) a una altra sessió. Truc ràpid: toca un nom a «Confirmats sense posició»
@@ -137,7 +147,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 | Crear/editar/esborrar sessions, camps extra i castells | | ✓ |
 | Ocultar o mostrar sessions i castells als membres | | ✓ |
 | Col·locar persones (també temporals), muntador automàtic, duplicar castells | | ✓ |
-| Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV | | ✓ |
+| Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV o ZIP amb els castells | | ✓ |
+| Editor de pinyes de la colla (plantilles per tipus de castell) | | ✓ |
 | Pàgina «Persones»: donar d'alta gent, desactivar | | ✓ |
 | Pàgina «Comptes»: crear, editar i esborrar comptes d'administració | | ✓ |
 | Data límit de respostes, llista de qui falta per contestar i missatge per WhatsApp | | ✓ |
@@ -257,6 +268,8 @@ public/index.html  Pàgina única
 public/theme.js    Aplica el tema i l'idioma abans de pintar la pàgina
 public/app.js      Interfície (sessions, assistència, persones, perfil, visualitzador)
 public/castell.js  Generador de l'estructura de cada castell (posicions i planta de la pinya)
+public/editor.js   Editor visual de pinyes de la colla (plantilles)
+public/export.js   Exportació d'una sessió en ZIP (CSV + imatge PNG de cada castell)
 public/muntador.js Muntador automàtic d'alineacions
 public/zoom.js     Visor a pantalla completa (pinça, roda, arrossegar)
 public/i18n.js     Traduccions (català, castellà, anglès), també per als errors del servidor
@@ -264,4 +277,5 @@ public/style.css   Estils (clar/fosc, responsive)
 ```
 
 La pinya es genera de manera automàtica a partir del tipus de castell i del nombre de cordons; és un model genèric.
-Si la vostra colla organitza la pinya diferent, es pot ajustar a `public/castell.js` (funció `buildLayer`).
+Si la vostra colla organitza la pinya diferent, es redibuixa des de l'editor de pinyes (sense tocar codi). Les
+plantilles es guarden a la taula `castell_templates` i `public/castell.js` les aplica en lloc de la capa generada.

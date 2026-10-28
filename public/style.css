@@ -740,3 +740,31 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .recent-attempts li { border-radius: 8px; background: var(--surface-2); padding: 7px 10px; }
 .recent-attempts a { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: center; text-decoration: none; color: var(--ink); }
 .recent-attempts li .small { margin-top: 2px; }
+
+/* ---------- Editor de pinyes de la colla ---------- */
+.tpl-list { list-style: none; margin: 0; padding: 0; }
+.tpl-list li + li { border-top: 1px solid var(--line); }
+.tpl-list a { display: flex; align-items: center; gap: 10px; padding: 10px 2px; color: inherit; text-decoration: none; }
+.tpl-list a strong { min-width: 64px; }
+.tpl-list a:hover strong { color: var(--accent); }
+.tpl-tag { font-size: 12px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
+.tpl-new { display: flex; gap: 8px; align-items: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.tpl-new .field { flex: 1; min-width: 160px; }
+.tpl-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.tpl-canvas { position: relative; overflow: auto; border: 1px dashed var(--line); border-radius: 10px; max-height: 70vh; background: var(--bg); }
+.editor-plan { display: block; max-width: none; margin: 0; user-select: none; -webkit-user-select: none; touch-action: pan-x pan-y; }
+.editor-plan .box { touch-action: none; }
+.tpl-zoombar { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+.tpl-zoombar .btn { min-width: 40px; justify-content: center; font-size: 18px; }
+.box.ed { cursor: grab; }
+.box.ed:active { cursor: grabbing; }
+.box.ed.sel rect { stroke: var(--accent) !important; stroke-width: 3.5; fill: var(--accent-soft); }
+.box.ed.fixed rect { stroke-dasharray: 4 2; }
+.ed-origin line { stroke: var(--ink-3); stroke-width: 1; opacity: .5; }
+.tpl-panel { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin-top: 12px; min-height: 38px; }
+.tpl-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.tpl-fields .field { min-width: 120px; }
+.tpl-fields input[type=number] { width: 70px; }
+.tpl-rot { display: flex; gap: 6px; }
+.tpl-reset { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tpl-reset input { width: 56px; margin-left: 4px; }
