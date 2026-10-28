@@ -161,6 +161,20 @@ function getEvent(id) {
 function getCastell(id) {
   return db.prepare('SELECT * FROM castells WHERE id = ?').get(id) || fail(404, 'Castell no trobat');
 }
+// Les sessions i els castells ocults, per als membres, és com si no existissin.
+const seesHidden = (user) => user?.role === 'admin';
+function visibleEvent(id, user) {
+  const event = getEvent(id);
+  if (event.hidden && !seesHidden(user)) fail(404, 'Sessió no trobada');
+  return event;
+}
+function visibleCastell(id, user) {
+  const castell = getCastell(id);
+  if (!seesHidden(user) && (castell.hidden || db.prepare('SELECT hidden FROM events WHERE id = ?').get(castell.event_id)?.hidden)) {
+    fail(404, 'Castell no trobat');
+  }
+  return castell;
+}
 
 function castellInput(body, existing = {}) {
   const merged = { ...existing, ...body };
@@ -186,6 +200,7 @@ function castellInput(body, existing = {}) {
     notes: str(merged.notes, 2000),
     result: RESULTS.includes(merged.result) ? merged.result : 'previst',
     tech_notes: str(merged.tech_notes, 1000),
+    hidden: bool(merged.hidden),
   };
   if (out.folre && height < 6) fail(400, 'El folre necessita un castell de 6 pisos o més');
   if (out.puntals && height < (width === 1 ? 8 : 9)) fail(400, 'Els puntals necessiten un castell més alt');
@@ -530,14 +545,15 @@ route('GET', '/api/events', ({ user, query }) => {
   const when = range ? 'e.date BETWEEN ? AND ?' : past ? "e.date < date('now','localtime')" : "e.date >= date('now','localtime')";
   // Els assajos de músics només els veuen els músics (i els administradors).
   const hideMusics = user.role !== 'admin' && !user.instrument;
+  const hidden = !seesHidden(user);
   return db.prepare(`SELECT e.*, a.status AS my_status,
       (SELECT COUNT(*) FROM attendance WHERE event_id = e.id AND status = 'si') AS count_si,
       (SELECT COUNT(*) FROM attendance WHERE event_id = e.id AND status = 'no') AS count_no,
       (SELECT GROUP_CONCAT(width || '|' || height || '|' || agulla || '|' || folre || '|' || manilles || '|' || puntals || '|' || sota
           || '|' || net || '|' || result, ';')
-         FROM (SELECT * FROM castells WHERE event_id = e.id ORDER BY position, id)) AS castells
+         FROM (SELECT * FROM castells WHERE event_id = e.id${hidden ? ' AND hidden = 0' : ''} ORDER BY position, id)) AS castells
     FROM events e LEFT JOIN attendance a ON a.event_id = e.id AND a.person_id = ?
-    WHERE ${when}${hideMusics ? " AND e.type != 'musics'" : ''}
+    WHERE ${when}${hideMusics ? " AND e.type != 'musics'" : ''}${hidden ? ' AND e.hidden = 0' : ''}
     ORDER BY e.date ${past && !range ? 'DESC' : 'ASC'}, e.start_time ${past && !range ? 'DESC' : 'ASC'}
     LIMIT 200`).all(user.id, ...(range ? [from, to] : [])).map((e) => ({ ...e, rsvp_open: rsvpOpen(e) }));
 });
@@ -558,6 +574,7 @@ function eventInput(body) {
     start_time: str(body.start_time, 5), end_time: str(body.end_time, 5),
     location: str(body.location, 200), description: str(body.description, 4000),
     escoleta, escoleta_time: escoleta ? str(body.escoleta_time, 5) : null,
+    ...('hidden' in body ? { hidden: bool(body.hidden) } : {}),
   };
 }
 
@@ -583,18 +600,30 @@ route('POST', '/api/events/:id/rsvp', ({ params, body }) => {
   return { ...event, rsvp_open: rsvpOpen(event) };
 }, 'admin');
 
+// Ocultar o tornar a mostrar una sessió o un castell als membres.
+route('PUT', '/api/events/:id/hidden', ({ params, body }) => {
+  getEvent(params.id);
+  db.prepare('UPDATE events SET hidden = ? WHERE id = ?').run(bool(body.hidden), params.id);
+  return getEvent(params.id);
+}, 'admin');
+route('PUT', '/api/castells/:id/hidden', ({ params, body }) => {
+  getCastell(params.id);
+  db.prepare('UPDATE castells SET hidden = ? WHERE id = ?').run(bool(body.hidden), params.id);
+  return getCastell(params.id);
+}, 'admin');
+
 route('DELETE', '/api/events/:id', ({ params }) => {
   db.prepare('DELETE FROM events WHERE id = ?').run(params.id);
   return { ok: true };
 }, 'admin');
 
 route('GET', '/api/events/:id', ({ params, user }) => {
-  const event = getEvent(params.id);
+  const event = visibleEvent(params.id, user);
   const isAdmin = user.role === 'admin';
   const fields = loadFields(event.id);
   const mine = db.prepare('SELECT * FROM attendance WHERE event_id = ? AND person_id = ?').get(event.id, user.id);
   const castells = db.prepare(`SELECT c.*, (SELECT COUNT(*) FROM castell_positions WHERE castell_id = c.id) AS assigned_count
-    FROM castells c WHERE c.event_id = ? ORDER BY c.position, c.id`).all(event.id)
+    FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
     .map((c) => (isAdmin ? c : { ...c, tech_notes: undefined }));
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
       ${CAME_SQL} AS present
@@ -647,7 +676,7 @@ function attendancePatch(event, body, { admin }) {
 }
 
 route('PUT', '/api/events/:id/attendance', ({ params, body, user }) => {
-  const event = getEvent(params.id);
+  const event = visibleEvent(params.id, user);
   if (user.mode === 'admin') fail(403, 'Per respondre, canvia a la teva fitxa de membre');
   if (!rsvpOpen(event)) fail(400, "Ja no es pot respondre a aquesta sessió. Si hi ha cap canvi, digues-ho a un administrador.");
   upsertAttendance(event.id, user.id, attendancePatch(event, body, { admin: false }));
@@ -749,7 +778,7 @@ route('POST', '/api/events/:id/castells', ({ params, body }) => {
 }, 'admin');
 
 route('GET', '/api/castells/:id', ({ params, user }) => {
-  const castell = getCastell(params.id);
+  const castell = visibleCastell(params.id, user);
   const isAdmin = user.role === 'admin';
   const event = getEvent(castell.event_id);
   const measures = 'p.birthdate, p.height_cm, p.shoulder_height_cm, p.shoulder_width_cm, p.weight_kg';
@@ -759,7 +788,8 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
       : ''}
     FROM castell_positions cp LEFT JOIN people p ON p.id = cp.person_id LEFT JOIN event_guests g ON g.id = cp.guest_id
     WHERE cp.castell_id = ?`).all(castell.id);
-  const siblings = db.prepare('SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level, label, result FROM castells WHERE event_id = ? ORDER BY position, id').all(event.id);
+  const siblings = db.prepare(`SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level,
+    label, result, hidden FROM castells WHERE event_id = ?${isAdmin ? '' : ' AND hidden = 0'} ORDER BY position, id`).all(event.id);
   // Les notes de la tècnica no les veuen els membres.
   const result = { castell: isAdmin ? castell : { ...castell, tech_notes: undefined }, event, siblings,
     positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null }
@@ -899,21 +929,22 @@ function pastRows() {
   if (pastCache?.key !== versionKey()) {
     pastCache = { key: versionKey(), rows: db.prepare(`SELECT cp.pos_key, cp.person_id, c.id AS castell_id, c.width, c.height, c.agulla, c.folre,
         c.manilles, c.puntals, c.sota, c.gralles, c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result,
-        e.id AS event_id, e.date, e.title, e.type
+        e.id AS event_id, e.date, e.title, e.type, MAX(c.hidden, e.hidden) AS hidden
       FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id JOIN events e ON e.id = c.event_id
       WHERE e.date <= date('now','localtime') AND cp.person_id IS NOT NULL ORDER BY e.date DESC, c.position`).all() };
   }
   return pastCache.rows;
 }
 // Els mateixos filtres que statsFilter, però sobre les files ja llegides.
-function historyRows({ personId, excludeCastell, query } = {}) {
+// visibleOnly: el que pot veure un membre (sense sessions ni castells ocults).
+function historyRows({ personId, excludeCastell, query, visibleOnly = false } = {}) {
   const season = query?.get('season') || '';
   const kind = query?.get('kind');
   const year = /^\d{4}$/.test(season) ? season : null;
   const types = kind === 'diades' ? ['diada', 'esdeveniment'] : kind === 'assajos' ? ['assaig'] : null;
   const person = personId ? Number(personId) : null;
   const exclude = excludeCastell ? Number(excludeCastell) : null;
-  return pastRows().filter((r) => (!person || r.person_id === person) && (!exclude || r.castell_id !== exclude)
+  return pastRows().filter((r) => (!person || r.person_id === person) && (!exclude || r.castell_id !== exclude) && !(visibleOnly && r.hidden)
     && (!year || r.date.startsWith(year)) && (!types || types.includes(r.type)));
 }
 
@@ -974,7 +1005,7 @@ route('GET', '/api/castells/:id/history', ({ params, user }) => {
 route('GET', '/api/people/:id/history', ({ params, user }) => {
   const personId = Number(params.id);
   if (user.role !== 'admin' && user.id !== personId) fail(403, 'Només pots veure el teu historial');
-  const rows = historyRows({ personId });
+  const rows = historyRows({ personId, visibleOnly: !seesHidden(user) });
   const cats = new Map();
   for (const r of rows) {
     const cat = positionOf(r, r.pos_key)?.cat;
@@ -1000,8 +1031,9 @@ const emptyResults = () => Object.fromEntries(STATS_RESULTS.map((r) => [r, 0]));
 const resultOf = (r) => (STATS_RESULTS.includes(r.result) ? r.result : 'previst');
 
 // Filtre comú: temporada (any) i tipus de sessió (diades o assajos).
-function statsFilter(query) {
+function statsFilter(query, { visibleOnly = false } = {}) {
   const where = ["e.date <= date('now','localtime')"];
+  if (visibleOnly) where.push('e.hidden = 0');
   const args = [];
   const season = query?.get('season') || '';
   const kind = query?.get('kind');
@@ -1020,8 +1052,8 @@ function seasons() {
 }
 
 // Sessions on la persona ha vingut, per tipus.
-function sessionsCame(query, personId = null) {
-  const { where, args } = statsFilter(query);
+function sessionsCame(query, personId = null, visibleOnly = false) {
+  const { where, args } = statsFilter(query, { visibleOnly });
   if (personId) { where.push('a.person_id = ?'); args.push(personId); }
   return db.prepare(`SELECT a.person_id, e.type, COUNT(*) AS n FROM attendance a JOIN events e ON e.id = a.event_id
     WHERE ${CAME_SQL} AND ${where.join(' AND ')} GROUP BY a.person_id, e.type`).all(...args);
@@ -1029,8 +1061,8 @@ function sessionsCame(query, personId = null) {
 
 const byCount = (a, b) => b.n - a.n || String(a.castell ?? a.cat).localeCompare(String(b.castell ?? b.cat));
 
-function personStats(personId, query) {
-  const rows = historyRows({ personId, query });
+function personStats(personId, query, visibleOnly) {
+  const rows = historyRows({ personId, query, visibleOnly });
   const results = emptyResults();
   const byCastell = new Map();
   const byPosition = new Map();
@@ -1051,7 +1083,7 @@ function personStats(personId, query) {
     byPosition.set(cat, p);
   }
   const sessions = {};
-  for (const r of sessionsCame(query, personId)) sessions[r.type] = r.n;
+  for (const r of sessionsCame(query, personId, visibleOnly)) sessions[r.type] = r.n;
   return {
     total: rows.length,
     results,
@@ -1070,7 +1102,7 @@ route('GET', '/api/stats/people/:id', ({ params, user, query }) => {
   if (user.role !== 'admin' && user.id !== personId) fail(403, 'Només pots veure les teves estadístiques');
   const person = db.prepare('SELECT id, name, alias, instrument FROM people WHERE id = ?').get(personId);
   if (!person) fail(404, 'Persona no trobada');
-  return { person: user.role === 'admin' ? person : publicPerson(person), seasons: seasons(), ...personStats(personId, query) };
+  return { person: user.role === 'admin' ? person : publicPerson(person), seasons: seasons(), ...personStats(personId, query, !seesHidden(user)) };
 });
 
 route('GET', '/api/stats/people', memo('people', ({ query }) => {
@@ -1129,11 +1161,13 @@ route('GET', '/api/stats/castells', memo('castells', ({ query }) => {
 const WIDTH_DIFFICULTY = { 1: 6, 2: 5, 9: 4, 7: 3.5, 5: 3, 3: 2, 4: 1 };
 const difficulty = (c) => c.height * 10 + (WIDTH_DIFFICULTY[c.width] || 0) + (c.agulla ? 0.5 : 0) + (c.net ? 0.3 : 0);
 
-route('GET', '/api/stats/season', ({ query }) => {
-  const { where, args } = statsFilter(query);
+route('GET', '/api/stats/season', ({ query, user }) => {
+  const visibleOnly = !seesHidden(user);
+  const { where, args } = statsFilter(query, { visibleOnly });
   const rows = db.prepare(`SELECT c.id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.net, c.from_level, c.to_level,
       c.result, e.id AS event_id, e.date, e.title, e.type
-    FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')} ORDER BY e.date, c.position`).all(...args);
+    FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')}${visibleOnly ? ' AND c.hidden = 0' : ''}
+    ORDER BY e.date, c.position`).all(...args);
   const sessions = db.prepare(`SELECT e.id, e.type, e.date, e.title,
       (SELECT COUNT(*) FROM attendance a WHERE a.event_id = e.id AND ${CAME_SQL}) AS came
     FROM events e WHERE ${where.join(' AND ')} AND e.type != 'musics' ORDER BY e.date`).all(...args);
@@ -1385,8 +1419,8 @@ route('GET', '/api/calendar.ics', ({ req, res, query }) => {
   const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   const origin = `${proto}://${req.headers.host}`;
   const one = Number(query.get('event')) || null;
-  const events = one ? [getEvent(one)]
-    : db.prepare(`SELECT * FROM events WHERE date >= date('now','localtime','-90 days')${query.get('musics') === '1' ? '' : " AND type != 'musics'"}
+  const events = one ? [visibleEvent(one, null)]
+    : db.prepare(`SELECT * FROM events WHERE hidden = 0 AND date >= date('now','localtime','-90 days')${query.get('musics') === '1' ? '' : " AND type != 'musics'"}
         ORDER BY date, start_time`).all();
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Colla castellera//CA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     `X-WR-CALNAME:${icsText(COLLA_NAME)}`, 'X-WR-TIMEZONE:Europe/Madrid', ...ICS_TZ, ...events.flatMap((e) => icsEvent(e, origin)), 'END:VCALENDAR'];

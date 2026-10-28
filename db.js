@@ -222,6 +222,10 @@ addColumn('castells', 'tech_notes', 'TEXT');
 // Una versió anterior guardava «on ha fallat»: es va treure perquè sovint no es pot saber.
 if (columns('castells').includes('fail_point')) db.exec('ALTER TABLE castells DROP COLUMN fail_point');
 
+// Sessions i castells ocults: només els veuen els administradors (p. ex. mentre es preparen).
+addColumn('events', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('castells', 'hidden', 'INTEGER NOT NULL DEFAULT 0');
+
 // Mòbils on un compte d'administració ha entrat bé: no queden bloquejats si algú altre prova contrasenyes del compte.
 db.exec(`CREATE TABLE IF NOT EXISTS admin_devices (
   token TEXT PRIMARY KEY,

@@ -45,6 +45,9 @@ async function api(method, url, body) {
   return data;
 }
 
+// Sessions i castells ocults: només els veuen els administradors (els membres no en saben res).
+const hiddenBadge = (label) => `<span class="badge hidden-badge">${icon.eyeOff}${label}</span>`;
+const hiddenToggle = (hidden, id) => `<button class="btn sm" id="${id}">${hidden ? `${icon.eye}${t('Mostra als membres')}` : `${icon.eyeOff}${t('Oculta als membres')}`}</button>`;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const isAdmin = () => me?.mode === 'admin';
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -108,6 +111,8 @@ const icon = {
   month: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>'),
   alert: svg('<circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h.01"/>', 2.2),
   check: svg('<path d="M20 6 9 17l-5-5"/>', 2.4),
+  eye: svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  eyeOff: svg('<path d="M10.6 5.1A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.4 3.3M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/>'),
   chart: svg('<path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/>'),
   calendar: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
   users: svg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
@@ -418,10 +423,10 @@ async function pageHome() {
     // A les properes, es veu d'un cop d'ull què has respost: franja de color i, si encara no has dit res, un avís.
     const waiting = answering && !e.my_status && e.rsvp_open;
     const answer = answering && (e.my_status || waiting) ? `ans-${e.my_status || 'none'}` : '';
-    return `${header}<a class="card event-card ${e.type} ${answer}" href="#/sessio/${e.id}" ${waiting ? 'data-pending' : ''}>
+    return `${header}<a class="card event-card ${e.type} ${answer} ${e.hidden ? 'is-hidden' : ''}" href="#/sessio/${e.id}" ${waiting ? 'data-pending' : ''}>
       <div class="date-block"><div class="d">${day(e.date).getDate()}</div><div class="w">${fmt(e.date, { weekday: 'short' })}</div></div>
       <div class="event-main">
-        ${typeBadge(e.type)}${e.escoleta ? ` <span class="badge escoleta">${t('Escoleta')}</span>` : ''}
+        ${typeBadge(e.type)}${e.escoleta ? ` <span class="badge escoleta">${t('Escoleta')}</span>` : ''}${e.hidden ? ` ${hiddenBadge(t('Oculta'))}` : ''}
         <div class="title">${esc(e.title)}</div>
         <div class="event-meta">
           ${time(e) ? `<span>${time(e)}</span>` : ''}${e.location ? `<span>${esc(e.location)}</span>` : ''}
@@ -483,6 +488,7 @@ function eventModal(event, defaults = {}) {
         <label class="field full">${t('Descripció')}<textarea name="description">${esc(e.description)}</textarea></label>
         <label class="field full">${t('Data límit per respondre (opcional)')}<input name="rsvp_until" type="datetime-local" value="${esc(e.rsvp_until || '')}">
           <span class="small muted">${t('Després ja no es podrà canviar la resposta. Si no en poses, es pot respondre fins al mateix dia.')}</span></label>
+        <label class="check full"><input type="checkbox" name="hidden" ${e.hidden ? 'checked' : ''}> ${icon.eyeOff} ${t('Oculta per als membres (la pots mostrar quan estigui a punt)')}</label>
       </div>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${event ? t('Desa') : t('Crea')}</button></div>
     </form>`, (m) => {
@@ -561,8 +567,8 @@ async function pageEvent(id) {
   const castellCards = castells.map((c) => {
     const total = buildStructure(c).positions.size;
     const pct = Math.round((c.assigned_count / total) * 100);
-    return `<a class="castell-card" href="#/castell/${c.id}">
-      <div class="name">${castellName(c)}</div>
+    return `<a class="castell-card ${c.hidden ? 'is-hidden' : ''}" href="#/castell/${c.id}">
+      <div class="name">${castellName(c)}${c.hidden ? ` ${hiddenBadge(t('Ocult'))}` : ''}</div>
       <div class="sub">${esc(c.label || '')} ${resultPill(c.result)}</div>
       <div class="meter" title="${c.assigned_count} / ${total}"><div style="width:${pct}%"></div></div>
       <div class="small muted" style="margin-top:4px">${t('{a}/{b} posicions', { a: c.assigned_count, b: total })}</div>
@@ -660,15 +666,16 @@ async function pageEvent(id) {
   $app.innerHTML = `
     <a class="back" href="#/">${icon.back}${t('Sessions')}</a>
     <div class="page-head"><div class="event-hero">
-        <div>${typeBadge(event.type)}</div>
+        <div>${typeBadge(event.type)}${event.hidden ? ` ${hiddenBadge(t('Oculta'))}` : ''}</div>
         <h1>${esc(event.title)}</h1>
         <div class="meta"><span>${icon.calendar}${fmtLong(event.date)}</span>${time(event) ? `<span>${icon.clock}${time(event)}</span>` : ''}${event.location ? `<span>${icon.pin}${esc(event.location)}</span>` : ''}${event.escoleta ? `<span class="badge escoleta">${t('Escoleta')}${escTime}</span>` : ''}</div>
       </div>
       <div class="actions">
-        ${event.date >= todayIso() ? `<a class="btn sm" href="/api/calendar.ics?event=${event.id}${calendarCode('&')}" download>${icon.calAdd}${t('Al meu calendari')}</a>` : ''}
-        ${admin ? `<button class="btn sm" id="edit-event">${t('Edita')}</button><button class="btn sm danger" id="del-event">${t('Esborra')}</button>` : ''}
+        ${event.date >= todayIso() && !event.hidden ? `<a class="btn sm" href="/api/calendar.ics?event=${event.id}${calendarCode('&')}" download>${icon.calAdd}${t('Al meu calendari')}</a>` : ''}
+        ${admin ? `${hiddenToggle(event.hidden, 'hide-event')}<button class="btn sm" id="edit-event">${t('Edita')}</button><button class="btn sm danger" id="del-event">${t('Esborra')}</button>` : ''}
       </div>
     </div>
+    ${event.hidden ? `<div class="hidden-note">${icon.eyeOff}<span>${t("Aquesta sessió està oculta: els membres no la veuen ni hi poden respondre, ni veuen els seus castells.")}</span></div>` : ''}
     ${event.description ? `<div class="card description">${esc(event.description)}</div>` : ''}
     <div class="grid-2" style="margin-top:14px">
       <div class="stack">
@@ -740,6 +747,12 @@ async function pageEvent(id) {
   qsa('[data-edit-guest]').forEach((b) => (b.onclick = () => guestModal(event.id, guests.find((g) => String(g.id) === b.dataset.editGuest), () => render({ keepScroll: true }))));
   const reload = () => render({ keepScroll: true });
   qs('#edit-event').onclick = () => eventModal(event);
+  qs('#hide-event').onclick = async () => {
+    if (await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: !event.hidden }))) {
+      toast(event.hidden ? t('Ara els membres ja la veuen') : t('Sessió oculta als membres'));
+      reload();
+    }
+  };
   qs('#del-event').onclick = async () => {
     if (!confirm(t("Segur que vols esborrar «{title}» amb els seus castells i l'assistència?", { title: event.title }))) return;
     if (await attempt(() => api('DELETE', `/events/${event.id}`))) { toast(t('Sessió esborrada')); location.hash = '#/'; }
@@ -827,11 +840,11 @@ function answersCard(event, attendance) {
     <div class="counts" style="margin-bottom:12px">${state}</div>
     ${pending.length ? `<h3 class="instr-h">${tn(pending.length, 'Falta {n} persona per contestar', 'Falten {n} persones per contestar')}</h3>
       <div class="names">${pending.map((a) => `<span>${esc(shortName(a))}</span>`).join('')}</div>
-      <div class="share-row">
+      ${event.hidden ? `<p class="small muted" style="margin:8px 0 0">${t('Quan la mostris als membres, podràs enviar el recordatori per WhatsApp.')}</p>` : `<div class="share-row">
         <a class="btn sm primary" id="wa-send" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(reminderText(event, pending))}">${icon.share}${t('Envia per WhatsApp')}</a>
         <button class="btn sm" id="copy-reminder">${icon.copy}${t('Copia el missatge')}</button>
       </div>
-      <p class="small muted" style="margin:8px 0 0">${t('El missatge porta la llista de malnoms i l\'enllaç a la sessió, per enviar-lo al grup.')}</p>`
+      <p class="small muted" style="margin:8px 0 0">${t('El missatge porta la llista de malnoms i l\'enllaç a la sessió, per enviar-lo al grup.')}</p>`}`
     : `<div class="all-answered" style="margin:0">${icon.check}${t('Tothom ha contestat.')}</div>`}
   </div>`;
 }
@@ -957,6 +970,7 @@ function castellModal(eventId, castell, onLost) {
         <label class="field full">${t('Etiqueta (opcional)')}<input name="label" value="${esc(c.label)}" placeholder="${t('1a ronda, prova de tronc…')}"></label>
         ${castell ? `<label class="field">${t('Resultat')}<select name="result">${Object.keys(RESULTS).map((v) => `<option value="${v}" ${c.result === v ? 'selected' : ''}>${resultLabel(v)}</option>`).join('')}</select></label>` : ''}
         <label class="field full">${t('Notes')}<textarea name="notes">${esc(c.notes)}</textarea></label>
+        <label class="check full"><input type="checkbox" name="hidden" ${c.hidden ? 'checked' : ''}> ${icon.eyeOff} ${t('Ocult per als membres (el pots mostrar quan estigui a punt)')}</label>
       </div>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${castell ? t('Desa') : t('Crea')}</button></div>
     </form>`, (m) => {
@@ -1328,18 +1342,21 @@ async function pageCastell(id) {
 
   $app.innerHTML = `
     <a class="back" href="#/sessio/${event.id}">${icon.back}${esc(event.title)} · ${fmt(event.date, { day: 'numeric', month: 'short' })}</a>
-    ${siblings.length > 1 ? `<nav class="sibling-nav">${siblings.map((c) => `<a href="#/castell/${c.id}" class="${c.id === castell.id ? 'on' : ''}">${castellName(c)}${c.label ? ` · ${esc(c.label)}` : ''}</a>`).join('')}</nav>` : ''}
+    ${siblings.length > 1 ? `<nav class="sibling-nav">${siblings.map((c) => `<a href="#/castell/${c.id}" class="${c.id === castell.id ? 'on' : ''} ${c.hidden ? 'is-hidden' : ''}">${c.hidden ? icon.eyeOff : ''}${castellName(c)}${c.label ? ` · ${esc(c.label)}` : ''}</a>`).join('')}</nav>` : ''}
     <div class="page-head">
       <div>
-        <div class="castell-title">${s.name}</div>
+        <div class="castell-title">${s.name}${castell.hidden ? ` ${hiddenBadge(t('Ocult'))}` : ''}</div>
         ${partialLabel(castell) ? `<div class="parts big">${partialLabel(castell)}</div>` : ''}
         <div class="muted">${castell.net ? `<span class="result">${t('Net: sense pinya')}</span> ` : ''}${castell.sota ? '<span class="result">Aixecat per sota</span> ' : ''}${esc(castell.label || '')} ${resultPill(castell.result)}</div>
       </div>
       <div class="actions">
         ${mineKey && !proposal ? `<button class="btn sm" id="find-me">${t('On sóc?')}</button>` : ''}
-        ${admin ? `<button class="btn sm primary" id="auto-build">${t('Munta automàticament')}</button><button class="btn sm" id="edit-castell">${t('Edita')}</button><button class="btn sm" id="dup-castell">${t('Duplica')}</button><button class="btn sm danger" id="del-castell">${t('Esborra')}</button>` : ''}
+        ${admin ? `<button class="btn sm primary" id="auto-build">${t('Munta automàticament')}</button>${hiddenToggle(castell.hidden, 'hide-castell')}<button class="btn sm" id="edit-castell">${t('Edita')}</button><button class="btn sm" id="dup-castell">${t('Duplica')}</button><button class="btn sm danger" id="del-castell">${t('Esborra')}</button>` : ''}
       </div>
     </div>
+    ${admin && (castell.hidden || event.hidden) ? `<div class="hidden-note">${icon.eyeOff}<span>${castell.hidden
+      ? t('Aquest castell està ocult: els membres no el veuen.')
+      : t('La sessió està oculta: els membres no veuen cap dels seus castells.')}</span></div>` : ''}
     ${admin ? `<div class="result-bar"><span class="small muted">${t('Com ha acabat?')}</span>
       <div class="tabs seg" id="result-seg">${Object.keys(RESULTS).map((r) => `<button type="button" data-v="${r}" class="${resultClass(r)} ${castell.result === r ? 'on' : ''}">${resultLabel(r)}</button>`).join('')}</div>
       <label class="tech-notes"><span class="small muted">${t('Notes de la tècnica')} · ${t('només les veuen els administradors')}</span>
@@ -1520,6 +1537,12 @@ async function pageCastell(id) {
   });
 
   qs('#edit-castell').onclick = () => castellModal(event.id, castell, (keep) => [...positions].filter((p) => !keep.has(p.pos_key)).length);
+  qs('#hide-castell').onclick = async () => {
+    if (await attempt(() => api('PUT', `/castells/${castell.id}/hidden`, { hidden: !castell.hidden }))) {
+      toast(castell.hidden ? t('Ara els membres ja el veuen') : t('Castell ocult als membres'));
+      render({ keepScroll: true });
+    }
+  };
   qs('#del-castell').onclick = async () => {
     if (!confirm(t('Esborrar el {name} i totes les posicions assignades?', { name: s.name }))) return;
     if (await attempt(() => api('DELETE', `/castells/${castell.id}`))) location.hash = `#/sessio/${event.id}`;

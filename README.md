@@ -76,6 +76,11 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     estadístiques de cadascú.
 - **Historial de posicions** de cada persona (fitxa i perfil): quantes vegades ha fet cada posició i els últims castells.
   Es calcula sol a partir de les alineacions dels castells de sessions passades (fins avui inclòs).
+- **Sessions i castells ocults** (admins): una sessió o un castell es pot ocultar als membres (per exemple, mentre es
+  prepara una diada) i mostrar-lo quan estigui a punt, amb el botó «Oculta als membres» / «Mostra als membres» o en
+  crear-lo. Per als membres és com si no existís: no surt a la llista, al calendari, a l'historial ni a les
+  estadístiques, i si en tenen l'enllaç no el poden obrir. Si s'oculta una sessió, també queden ocults tots els seus
+  castells. Els administradors ho continuen veient tot, marcat com a «Oculta» / «Ocult».
 - **Revisió de l'alineació** (admins): a cada castell, avisos de gent col·locada que ha dit que no ve o
   que no ha contestat; posicions buides al tronc; pisos amb més de 5 cm de diferència d'alçada d'espatlles; i algú que
   pesa més de 3 kg més que qui el porta. Tocant un nom es va a la seva posició.
@@ -130,6 +135,7 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 | Estadístiques per castell i de cada persona | | ✓ |
 | Editar dades i mides de qualsevol persona | | ✓ |
 | Crear/editar/esborrar sessions, camps extra i castells | | ✓ |
+| Ocultar o mostrar sessions i castells als membres | | ✓ |
 | Col·locar persones (també temporals), muntador automàtic, duplicar castells | | ✓ |
 | Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV | | ✓ |
 | Pàgina «Persones»: donar d'alta gent, desactivar | | ✓ |
@@ -175,7 +181,8 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
 - Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
 - Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
   dir qui va a l'escoleta, sense comentaris ni respostes als camps extra dels altres, i sense les
-  notes de la tècnica. Les persones temporals també surten com a «Nom I.».
+  notes de la tècnica. Les persones temporals també surten com a «Nom I.». Les sessions i els castells ocults no
+  arriben als membres per cap camí (llistes, fitxes, calendari, historial ni estadístiques).
 
 Una limitació que ve del disseny (entrar sense codis): qualsevol persona amb l'enllaç pot triar un nom i contestar
 l'assistència en nom d'aquella persona. No pot veure cap dada personal ni canviar res més; si es vol posar una mica més

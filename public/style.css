@@ -417,6 +417,18 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 /* ---------- Música i escoleta ---------- */
 .badge.musics { background: color-mix(in srgb, var(--musics) 16%, transparent); color: var(--musics); }
 .badge.escoleta { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+/* Sessions i castells ocults (només els veuen els administradors) */
+.badge.hidden-badge { background: color-mix(in srgb, var(--ink-2) 14%, transparent); color: var(--ink-2); vertical-align: middle; }
+.badge.hidden-badge svg { width: 13px; height: 13px; }
+.is-hidden { opacity: .62; }
+.is-hidden:hover { opacity: .85; }
+.castell-card.is-hidden, .event-card.is-hidden { border-style: dashed; }
+.sibling-nav a.is-hidden svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
+.castell-title .hidden-badge { font-size: .8rem; font-family: inherit; letter-spacing: 0; }
+.hidden-note { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--line);
+  color: var(--ink-2); font-size: .88rem; background: color-mix(in srgb, var(--ink-2) 6%, transparent); }
+.hidden-note svg { flex: none; width: 18px; height: 18px; }
+.check svg { width: 15px; height: 15px; vertical-align: -3px; }
 .event-card.musics .date-block { background: color-mix(in srgb, var(--musics) 14%, transparent); color: var(--musics); }
 .event-hero .meta .badge { align-self: center; }
 legend svg { width: 16px; height: 16px; vertical-align: -2px; }
