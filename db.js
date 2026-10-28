@@ -284,3 +284,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS castell_templates (
   layers TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
+
+// Acompanyants: si la sessió ho pregunta, cada acompanyant que diu un membre és una persona temporal de la sessió
+// (companion_of = qui l'acompanya). Si deixa de venir però ja era en un castell, no s'esborra: queda marcat (dropped).
+addColumn('events', 'ask_companions', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('event_guests', 'companion_of', 'INTEGER REFERENCES people(id) ON DELETE CASCADE');
+addColumn('event_guests', 'companion_dropped', 'INTEGER NOT NULL DEFAULT 0');

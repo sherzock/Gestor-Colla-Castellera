@@ -497,6 +497,8 @@ function eventModal(event, defaults = {}) {
         <label class="field full">${t('Descripció')}<textarea name="description">${esc(e.description)}</textarea></label>
         <label class="field full">${t('Data límit per respondre (opcional)')}<input name="rsvp_until" type="datetime-local" value="${esc(e.rsvp_until || '')}">
           <span class="small muted">${t('Després ja no es podrà canviar la resposta. Si no en poses, es pot respondre fins al mateix dia.')}</span></label>
+        <label class="check full top"><input type="checkbox" name="ask_companions" ${e.ask_companions ? 'checked' : ''}><span>${t('Pregunta si vindran acompanyats')}
+          <span class="small muted block">${t('Cada acompanyant es crea com a persona temporal de la sessió i es pot col·locar als castells.')}</span></span></label>
         <label class="check full"><input type="checkbox" name="hidden" ${e.hidden ? 'checked' : ''}> ${icon.eyeOff} ${t('Oculta per als membres (la pots mostrar quan estigui a punt)')}</label>
       </div>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${event ? t('Desa') : t('Crea')}</button></div>
@@ -545,6 +547,31 @@ function readExtra(form, fields, prefix = 'x') {
   }
   return out;
 }
+// Acompanyants: quants i, si es vol, el nom de cadascun (si no, «Acompanyant de …»).
+function companionsInput(list = []) {
+  return `<div class="companions" data-companions>
+    <label class="field">${t('Acompanyants')}<input type="number" name="companions_n" min="0" max="10" step="1" inputmode="numeric" value="${list.length}"></label>
+    <div class="comp-names">${list.map((name, i) => companionName(name, i)).join('')}</div>
+    <p class="small muted" style="margin:0">${t('La tècnica els podrà col·locar als castells. El nom és opcional.')}</p>
+  </div>`;
+}
+const companionName = (name, i) => `<input name="comp${i}" maxlength="80" value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}">`;
+function bindCompanions(root) {
+  const box = qs('[data-companions]', root);
+  if (!box) return;
+  const n = box.querySelector('[name=companions_n]');
+  n.oninput = () => {
+    const want = Math.max(0, Math.min(10, Math.floor(Number(n.value) || 0)));
+    const names = qs('.comp-names', box);
+    const now = [...names.children];
+    for (let i = now.length; i < want; i++) names.insertAdjacentHTML('beforeend', companionName('', i));
+    now.slice(want).forEach((el) => el.remove());
+  };
+}
+const readCompanions = (form) => [...form.querySelectorAll('.comp-names input')].map((el) => el.value.trim());
+// Els noms automàtics («Acompanyant de …») no es tornen a mostrar a la casella: el nom és opcional.
+const ownCompanionNames = (list) => list.filter((g) => !g.dropped).map((g) => (/^Acompanyant d(e |')/.test(g.name) ? '' : g.name));
+
 function extraValue(f, v) {
   if (v === null || v === undefined || v === '') return '';
   if (f.kind === 'bool') return v ? t('Sí') : t('No');
@@ -644,7 +671,7 @@ async function pageEvent(id) {
       </div>
       <div class="counts" style="margin-bottom:10px">
         ${passList ? `<span class="status si strong">${t('{n} han vingut', { n: counts.present })}</span>` : ''}
-        <span class="status si">${t('{n} vénen', { n: counts.si })}</span>
+        <span class="status si">${t('{n} vénen', { n: counts.si })}${counts.companions ? ` ${t('+ {n} acompanyants', { n: counts.companions })}` : ''}</span>
         <span class="status no">${t('{n} no', { n: counts.no })}</span>
         ${passList && counts.absent ? `<span class="status no">${t('{n} apuntats que no han vingut', { n: counts.absent })}</span>` : ''}
         ${passList && counts.walkins ? `<span class="status none">${t('{n} sense apuntar-se', { n: counts.walkins })}</span>` : ''}
@@ -655,12 +682,13 @@ async function pageEvent(id) {
       ${passList ? `<p class="small muted" style="margin:0 0 8px">${t('Qui havia dit «Vinc» compta com a present. Toca «Ha vingut» per marcar qui no ha vingut, o afegeix qui ha vingut sense apuntar-se.')}</p>` : ''}
       <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" style="margin-bottom:6px">
       <div class="table-wrap"><table class="responsive" id="att-table">
-        <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>${t('Comentari')}</th></tr></thead>
+        <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>${t('Comentari')}</th></tr></thead>
         <tbody>${sortedAttendance.map((a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
           <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}</td>
           <td><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
           ${cameCell(a)}
           ${event.escoleta ? `<td data-l="${t('Escoleta')}">${escValue(a.escoleta)}</td>` : ''}
+          ${event.ask_companions ? `<td data-l="${t('Acompanyants')}" class="small">${a.companions.length ? `<strong>${a.companions.length}</strong> · ${esc(a.companions.join(', '))}` : ''}</td>` : ''}
           ${fields.map((f) => `<td data-l="${esc(f.label)}">${extraValue(f, a.extra?.[f.id])}</td>`).join('')}
           <td data-l="${t('Comentari')}" class="small">${esc(a.comment)}</td>
         </tr>`).join('')}</tbody>
@@ -671,7 +699,7 @@ async function pageEvent(id) {
       <h2>${passList ? t('Qui ha vingut') : t('Qui hi va')}</h2>
       <div class="counts" style="margin-top:10px">${passList
         ? `<span class="status si">${t('{n} han vingut', { n: counts.present })}</span>`
-        : `<span class="status si">${t('{n} vénen', { n: counts.si })}</span>`}
+        : `<span class="status si">${t('{n} vénen', { n: counts.si })}${counts.companions ? ` ${t('+ {n} acompanyants', { n: counts.companions })}` : ''}</span>`}
         ${event.escoleta ? `<span class="status none">${t('Escoleta: {n}', { n: counts.escoleta })}</span>` : ''}${instrumentCounts}</div>
       ${!attendance.length ? `<div class="names"><span class="muted">${t('Encara ningú')}</span></div>`
         : isMusics ? namesByInstrument(attendance)
@@ -684,7 +712,7 @@ async function pageEvent(id) {
         <div class="actions"><button class="btn sm" id="add-guest">${icon.plus}${t('Afegeix')}</button></div></div>
       <p class="small muted" style="margin-top:-6px">${t("Gent que no és de la colla (d'una altra colla, de prova…). Es poden col·locar a qualsevol castell d'aquesta sessió i no compten a l'historial ni a les estadístiques.")}</p>
       <div class="field-list">${guests.map((g) => `<div class="field-row"><div>
-          <div>${esc(g.name)}${g.colla ? ` <span class="muted small">· ${esc(g.colla)}</span>` : ''}</div>
+          <div>${esc(g.name)}${g.colla ? ` <span class="muted small">· ${esc(g.colla)}</span>` : ''}${g.companion_of && !/^Acompanyant d(e |')/.test(g.name) ? ` <span class="muted small">· ${t('acompanya {name}', { name: esc(g.companion_of_name) })}</span>` : ''}${g.companion_dropped ? ` <span class="status no">${t('Ja no ve')}</span>` : ''}</div>
           <div class="k">${[g.shoulder_height_cm ? `${t('esp.')} ${g.shoulder_height_cm} cm` : null, g.weight_kg ? `${g.weight_kg} kg` : null,
             g.placed ? tn(g.placed, 'A {n} castell', 'A {n} castells') : t('Encara sense posició')].filter(Boolean).join(' · ')}</div></div>
         <button class="btn ghost sm" style="margin-left:auto" data-edit-guest="${g.id}">${t('Edita')}</button></div>`).join('')
@@ -741,6 +769,8 @@ async function pageEvent(id) {
               <button type="button" data-v="no" class="${escoleta === false ? 'on' : ''}">${t('No hi vindré')}</button>
             </div></div>` : ''}
           <div id="extras" class="stack ${status === 'no' || !status ? 'hidden' : ''}" style="margin-top:14px">
+            ${event.ask_companions ? companionsInput(ownCompanionNames(mine?.companions || [])) : ''}
+            ${mine?.companions?.some((g) => g.dropped) ? `<p class="small muted" style="margin:0">${t("Algun acompanyant que has tret ja era en un castell: la tècnica ho veurà.")}</p>` : ''}
             ${fields.map((f) => fieldInput(f, mine?.extra?.[f.id])).join('')}
           </div>
           <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
@@ -762,6 +792,7 @@ async function pageEvent(id) {
   const form = qs('#rsvp-form');
   if (form && !event.rsvp_open) qsa('input, select, textarea, button', form).forEach((el) => (el.disabled = true));
   if (form && event.rsvp_open) {
+  bindCompanions(form);
   qsa('#rsvp-main button', form).forEach((b) => (b.onclick = () => {
     status = b.dataset.v;
     qsa('#rsvp-main button', form).forEach((x) => x.classList.toggle('on', x === b));
@@ -777,6 +808,7 @@ async function pageEvent(id) {
     e.preventDefault();
     const body = { comment: form.elements.comment.value };
     if (status) { body.status = status; body.extra = status === 'no' ? {} : readExtra(form, fields); }
+    if (event.ask_companions && status === 'si') body.companions = readCompanions(form);
     if (event.escoleta) body.escoleta = escoleta;
     if (await attempt(() => api('PUT', `/events/${event.id}/attendance`, body))) {
       toast(t('Assistència desada'));
@@ -839,15 +871,18 @@ async function pageEvent(id) {
     qs('.lead', tr).onclick = () => {
       openModal(`${modalHead(esc(fullName(a)))}
         <form id="att-edit" class="stack">
-          ${fields.map((f) => fieldInput(f, a.extra?.[f.id])).join('') || `<p class="muted">${t('Aquesta sessió no té camps extra.')}</p>`}
+          ${event.ask_companions && a.status === 'si' ? companionsInput(a.companions.map((n) => (/^Acompanyant d(e |')/.test(n) ? '' : n))) : ''}
+          ${fields.map((f) => fieldInput(f, a.extra?.[f.id])).join('') || (event.ask_companions && a.status === 'si' ? '' : `<p class="muted">${t('Aquesta sessió no té camps extra.')}</p>`)}
           ${event.escoleta ? `<label class="field">${t('Escoleta')}<select name="escoleta"><option value="">—</option>
             <option value="1" ${a.escoleta === true ? 'selected' : ''}>${t('Hi vindrà')}</option><option value="0" ${a.escoleta === false ? 'selected' : ''}>${t('No hi vindrà')}</option></select></label>` : ''}
           <label class="field">${t('Comentari')}<input name="comment" value="${esc(a.comment)}"></label>
           <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${t('Desa')}</button></div>
         </form>`, (m) => {
+        bindCompanions(m);
         qs('#att-edit', m).onsubmit = async (e) => {
           e.preventDefault();
           const body = { extra: readExtra(e.target, fields), comment: e.target.elements.comment.value };
+          if (qs('[data-companions]', m)) body.companions = readCompanions(e.target);
           if (event.escoleta) body.escoleta = e.target.elements.escoleta.value === '' ? null : e.target.elements.escoleta.value === '1';
           if (await attempt(() => api('PUT', `/events/${event.id}/attendance/${pid}`, body))) { closeModal(); reload(); }
         };
@@ -1253,7 +1288,8 @@ function historyView(s, ctx) {
 // espatlles desiguals en un mateix pis i algú que pesa més que qui el porta.
 const SHOULDER_GAP_CM = 5;
 const WEIGHT_GAP_KG = 3;
-function lineupWarnings(s, byKey, candidates, event, prep) {
+function lineupWarnings(s, byKey, candidates, event, prep, guests = []) {
+  const guestsById = new Map(guests.map((g) => [g.id, g]));
   const out = [];
   const status = new Map(candidates.map((c) => [c.id, c.status]));
   const role = (key) => s.positions.get(key)?.role || key;
@@ -1266,6 +1302,10 @@ function lineupWarnings(s, byKey, candidates, event, prep) {
     group('bad', t('Han dit que no vénen'), placed.filter((a) => status.get(a.person_id) === 'no'));
     group('warn', t('Encara no han contestat'), placed.filter((a) => !status.get(a.person_id)));
   }
+  // Acompanyants col·locats que ja no vénen (qui els portava ho ha canviat).
+  const gone = [...byKey.values()].filter((a) => a.guest_id && (guestsById.get(a.guest_id)?.companion_dropped
+    || (guestsById.get(a.guest_id)?.companion_of && status.get(guestsById.get(a.guest_id).companion_of) !== 'si')));
+  if (gone.length) out.push({ level: 'bad', text: t('Acompanyants que ja no vénen'), items: gone.map(chip) });
   const tronc = [...s.positions.values()].filter((p) => ['baixos', 'tronc', 'pom', 'agulla'].includes(p.group));
   const empty = tronc.filter((p) => !byKey.has(p.key));
   if (empty.length) out.push({ level: 'bad', text: tn(empty.length, 'Falta {n} posició al tronc', 'Falten {n} posicions al tronc'), items: empty.map((p) => ({ key: p.key, label: p.role })) });
@@ -1388,7 +1428,7 @@ async function pageCastell(id) {
   const placedGuests = new Set(guests.map((g) => g.guest_id).filter(Boolean));
   const freeGuests = sessionGuests.filter((g) => !placedGuests.has(g.id));
   const canZoom = castellView !== 'llista';
-  const warnings = admin ? lineupWarnings(s, byKey, candidates, event, prep) : [];
+  const warnings = admin ? lineupWarnings(s, byKey, candidates, event, prep, sessionGuests) : [];
 
   $app.innerHTML = `
     <a class="back" href="#/sessio/${event.id}">${icon.back}${esc(event.title)} · ${fmt(event.date, { day: 'numeric', month: 'short' })}</a>

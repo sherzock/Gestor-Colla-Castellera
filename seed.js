@@ -239,7 +239,8 @@ transaction(() => {
   db.prepare('UPDATE events SET rsvp_until = ? WHERE id = ?').run(`${iso(until)}T22:00`, events.diada);
   const fDinar = Number(insField.run(events.diada, 'Em quedo a dinar', 'bool', null, 0, 1).lastInsertRowid);
   const fAcomp = Number(insField.run(events.diada, 'Acompanyants al dinar', 'number', null, 0, 2).lastInsertRowid);
-  const fSoparAcomp = Number(insField.run(events.sopar, 'Acompanyants', 'number', null, 1, 1).lastInsertRowid);
+  // El sopar pregunta pels acompanyants: cadascun és una persona temporal de la sessió.
+  db.prepare('UPDATE events SET ask_companions = 1 WHERE id = ?').run(events.sopar);
   const fMenu = Number(insField.run(events.sopar, 'Menú', 'select', JSON.stringify(['Carn', 'Peix', 'Vegetarià']), 1, 2).lastInsertRowid);
   const present = {
     a1: attend(events.a1, { past: false, escoleta: true }),
@@ -247,8 +248,15 @@ transaction(() => {
     a2: attend(events.a2, { past: false }),
     diada: attend(events.diada, { past: false, extra: () => ({ [fDinar]: rand() < 0.6, [fAcomp]: between(0, 2) }) }),
     a3: attend(events.a3, { past: false, escoleta: true }),
-    sopar: attend(events.sopar, { past: false, extra: () => ({ [fSoparAcomp]: between(0, 3), [fMenu]: pick(['Carn', 'Carn', 'Peix', 'Vegetarià']) }) }),
+    sopar: attend(events.sopar, { past: false, extra: () => ({ [fMenu]: pick(['Carn', 'Carn', 'Peix', 'Vegetarià']) }) }),
   };
+  const insCompanion = db.prepare('INSERT INTO event_guests (event_id, name, companion_of) VALUES (?, ?, ?)');
+  const companionNames = ['Laia', 'Oriol', 'Marta', 'Pau', 'Núria', 'Jordi', 'Clara', 'Marc'];
+  for (const p of people.filter((x) => present.sopar.has(x.id))) {
+    const n = rand() < 0.45 ? between(1, 3) : 0;
+    const label = p.alias || p.name.replace(/^(\S+)\s+(\S).*$/, '$1 $2.');
+    for (let i = 0; i < n; i++) insCompanion.run(events.sopar, rand() < 0.4 ? pick(companionNames) : `Acompanyant ${/^[aeiouàèéíòóúh]/i.test(label) ? "d'" : 'de '}${label}${n > 1 ? ` (${i + 1})` : ''}`, p.id);
+  }
   castell(events.a1, '3d8', { label: 'Prova de tronc', position: 1, ratio: 0.6, present: present.a1, partial: { from_level: 2, to_level: 6 } });
   castell(events.a1, '3d6n', { label: 'Prova neta', position: 2, ratio: 1, present: present.a1 });
   castell(events.a1, 'pd5', { position: 3, ratio: 1, present: present.a1 });

@@ -576,6 +576,7 @@ function eventInput(body) {
     location: str(body.location, 200), description: str(body.description, 4000),
     escoleta, escoleta_time: escoleta ? str(body.escoleta_time, 5) : null,
     ...('hidden' in body ? { hidden: bool(body.hidden) } : {}),
+    ...('ask_companions' in body ? { ask_companions: bool(body.ask_companions) } : {}),
   };
 }
 
@@ -640,11 +641,18 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   counts.walkins = rows.filter((r) => r.came === 1 && r.status !== 'si').length;
   counts.absent = rows.filter((r) => r.came === 0 && r.status === 'si').length;
   counts.escoleta = rows.filter((r) => r.escoleta === 1).length;
+  // Acompanyants de qui ve (els marcats com que ja no vénen no compten).
+  const companionRows = event.ask_companions ? db.prepare(`SELECT companion_of, name FROM event_guests
+    WHERE event_id = ? AND companion_of IS NOT NULL AND companion_dropped = 0 ORDER BY id`).all(event.id) : [];
+  const companionsBy = new Map();
+  for (const g of companionRows) companionsBy.set(g.companion_of, [...(companionsBy.get(g.companion_of) || []), g.name]);
+  counts.companions = companionRows.length;
   return {
     event: { ...event, rsvp_open: rsvpOpen(event) }, fields, castells, counts,
     guests: isAdmin ? guestsOf(event.id) : undefined,
-    mine: mine ? { ...mine, came: flag(mine.came), escoleta: flag(mine.escoleta), extra: parseJSON(mine.extra, {}) } : null,
-    attendance: isAdmin ? attendance : attendance.filter((a) => a.present),
+    mine: mine ? { ...mine, came: flag(mine.came), escoleta: flag(mine.escoleta), extra: parseJSON(mine.extra, {}),
+      companions: event.ask_companions ? companionsOf(event.id, user.id) : [] } : null,
+    attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [] })) : attendance.filter((a) => a.present),
   };
 });
 
@@ -677,33 +685,81 @@ function attendancePatch(event, body, { admin }) {
   return patch;
 }
 
+// ---------- Acompanyants ----------
+// Si la sessió pregunta pels acompanyants, cada acompanyant és una persona temporal de la sessió i la tècnica la pot
+// col·locar als castells. La llista es manté sola amb la resposta: si en diu menys o ja no ve, els que encara no
+// són a cap castell s'esborren; els que ja hi són es queden marcats perquè l'administració ho vegi.
+const MAX_COMPANIONS = 10;
+function companionNames(body) {
+  if (!('companions' in body)) return undefined;
+  if (!Array.isArray(body.companions) || body.companions.length > MAX_COMPANIONS) fail(400, 'Com a molt {n} acompanyants', { n: MAX_COMPANIONS });
+  return body.companions.map((n) => (typeof n === 'string' ? str(n, 80) : null));
+}
+function syncCompanions(event, personId, names) {
+  if (!event.ask_companions) return;
+  const status = db.prepare('SELECT status FROM attendance WHERE event_id = ? AND person_id = ?').get(event.id, personId)?.status;
+  // Qui no ve no porta ningú; si diu que ve sense dir res dels acompanyants, es deixen com estaven.
+  if (status !== 'si') names = [];
+  else if (names === undefined) return;
+  const person = db.prepare('SELECT name, alias FROM people WHERE id = ?').get(personId);
+  const who = publicName(person);
+  const label = (i) => `Acompanyant ${/^[aeiouàèéíòóúh]/i.test(who) ? "d'" : 'de '}${who}${names.length > 1 ? ` (${i + 1})` : ''}`;
+  const list = db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM castell_positions WHERE guest_id = g.id) AS placed
+    FROM event_guests g WHERE g.event_id = ? AND g.companion_of = ? ORDER BY g.companion_dropped, placed DESC, g.id`).all(event.id, personId);
+  const rename = db.prepare('UPDATE event_guests SET name = ?, companion_dropped = 0 WHERE id = ?');
+  const renamePlaced = db.prepare('UPDATE castell_positions SET guest_name = ? WHERE guest_id = ?');
+  names.forEach((n, i) => {
+    const name = n || label(i);
+    const g = list[i];
+    if (g) { rename.run(name, g.id); renamePlaced.run(name, g.id); }
+    else insertRow('event_guests', { event_id: event.id, name, companion_of: personId });
+  });
+  for (const g of list.slice(names.length)) {
+    if (g.placed) db.prepare('UPDATE event_guests SET companion_dropped = 1 WHERE id = ?').run(g.id);
+    else db.prepare('DELETE FROM event_guests WHERE id = ?').run(g.id);
+  }
+}
+const companionsOf = (eventId, personId) => db.prepare(`SELECT g.name, g.companion_dropped AS dropped,
+    (SELECT COUNT(*) FROM castell_positions WHERE guest_id = g.id) AS placed
+  FROM event_guests g WHERE g.event_id = ? AND g.companion_of = ? ORDER BY g.companion_dropped, g.id`).all(eventId, personId);
+
 route('PUT', '/api/events/:id/attendance', ({ params, body, user }) => {
   const event = visibleEvent(params.id, user);
   if (user.mode === 'admin') fail(403, 'Per respondre, canvia a la teva fitxa de membre');
   if (!rsvpOpen(event)) fail(400, "Ja no es pot respondre a aquesta sessió. Si hi ha cap canvi, digues-ho a un administrador.");
-  upsertAttendance(event.id, user.id, attendancePatch(event, body, { admin: false }));
+  const names = companionNames(body);
+  transaction(() => {
+    upsertAttendance(event.id, user.id, attendancePatch(event, body, { admin: false }));
+    syncCompanions(event, user.id, names);
+  });
   return { ok: true };
 });
 
 route('PUT', '/api/events/:id/attendance/:personId', ({ params, body }) => {
   const event = getEvent(params.id);
   if (!db.prepare('SELECT 1 FROM people WHERE id = ?').get(params.personId)) fail(404, 'Persona no trobada');
-  upsertAttendance(event.id, Number(params.personId), attendancePatch(event, body, { admin: true }));
+  const names = companionNames(body);
+  transaction(() => {
+    upsertAttendance(event.id, Number(params.personId), attendancePatch(event, body, { admin: true }));
+    syncCompanions(event, Number(params.personId), names);
+  });
   return { ok: true };
 }, 'admin');
 
 route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
   const event = getEvent(params.id);
   const fields = loadFields(event.id);
-  const rows = db.prepare(`SELECT p.name, p.alias, a.status, a.escoleta, a.extra, a.comment, ${CAME_SQL} AS present
+  const rows = db.prepare(`SELECT p.id, p.name, p.alias, a.status, a.escoleta, a.extra, a.comment, ${CAME_SQL} AS present
     FROM attendance a JOIN people p ON p.id = a.person_id WHERE a.event_id = ? ORDER BY p.name COLLATE NOCASE`).all(event.id);
   // Els comentaris els escriu qualsevol: es neutralitza el que un full de càlcul llegiria com a fórmula.
   const cell = (v) => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
   const yesNo = (v) => (v ? 'sí' : v === 0 ? 'no' : '');
-  const lines = [['Nom', 'Malnom', 'Estat', 'Ha vingut', ...(event.escoleta ? ['Escoleta'] : []), ...fields.map((f) => f.label), 'Comentari'].map(cell).join(';')];
+  const companions = (id) => (event.ask_companions ? [companionsOf(event.id, id).filter((g) => !g.dropped).map((g) => g.name).join(', ')] : []);
+  const lines = [['Nom', 'Malnom', 'Estat', 'Ha vingut', ...(event.escoleta ? ['Escoleta'] : []), ...(event.ask_companions ? ['Acompanyants'] : []),
+    ...fields.map((f) => f.label), 'Comentari'].map(cell).join(';')];
   for (const r of rows) {
     const extra = parseJSON(r.extra, {});
-    lines.push([r.name, r.alias, r.status, r.present ? 'sí' : 'no', ...(event.escoleta ? [yesNo(r.escoleta)] : []),
+    lines.push([r.name, r.alias, r.status, r.present ? 'sí' : 'no', ...(event.escoleta ? [yesNo(r.escoleta)] : []), ...companions(r.id),
       ...fields.map((f) => (f.kind === 'bool' ? (extra[f.id] ? 'sí' : extra[f.id] === false ? 'no' : '') : extra[f.id])),
       r.comment].map(cell).join(';'));
   }
@@ -749,8 +805,9 @@ function guestInput(body) {
   if (!name) fail(400, 'El nom és obligatori');
   return { name, colla: str(body.colla, 80), shoulder_height_cm: num(body.shoulder_height_cm), weight_kg: num(body.weight_kg) };
 }
-const guestsOf = (eventId) => db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM castell_positions WHERE guest_id = g.id) AS placed
-  FROM event_guests g WHERE g.event_id = ? ORDER BY g.name COLLATE NOCASE`).all(eventId);
+const guestsOf = (eventId) => db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM castell_positions WHERE guest_id = g.id) AS placed,
+    COALESCE(p.alias, p.name) AS companion_of_name
+  FROM event_guests g LEFT JOIN people p ON p.id = g.companion_of WHERE g.event_id = ? ORDER BY g.name COLLATE NOCASE`).all(eventId);
 
 route('POST', '/api/events/:id/guests', ({ params, body }) => {
   const event = getEvent(params.id);
@@ -800,7 +857,7 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
     result.candidates = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, ${measures}, ${EFFECTIVE_STATUS_SQL} AS status
       FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
       WHERE p.active = 1 ORDER BY p.name COLLATE NOCASE`).all(event.id);
-    result.guests = db.prepare('SELECT * FROM event_guests WHERE event_id = ? ORDER BY name COLLATE NOCASE').all(event.id);
+    result.guests = guestsOf(event.id);
     result.events = db.prepare(`SELECT id, title, date, type FROM events
       WHERE date >= date('now','localtime', '-30 days') ORDER BY date LIMIT 100`).all();
   }

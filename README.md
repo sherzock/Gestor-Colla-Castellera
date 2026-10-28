@@ -18,7 +18,13 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   sense respondre.
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
-  Els administradors veuen la taula completa amb totals i exporten a CSV. Amb «Exporta amb castells» es descarrega un
+  Els administradors veuen la taula completa amb totals i exporten a CSV.
+- **Acompanyants**: en crear o editar una sessió, l'administració pot marcar «Pregunta si vindran acompanyats». Llavors,
+  qui respon «Vinc» pot dir quants acompanyants porta i, si vol, el seu nom. Cada acompanyant es crea sol com a
+  **persona temporal** de la sessió («Acompanyant de …» si no hi ha nom) i la tècnica el pot col·locar als castells.
+  Si la persona en diu menys o ja no ve, els que encara no són a cap castell s'esborren sols. Els que ja hi són es
+  queden marcats «Ja no ve» i el castell en mostra un avís. El recompte surt com «40 vénen + 6 acompanyants», i el CSV
+  té una columna amb els noms. Els membres no veuen els acompanyants dels altres (als castells, com tothom, «Nom I.»). Amb «Exporta amb castells» es descarrega un
   ZIP amb el mateix CSV i una imatge PNG de cada castell de la sessió (tronc, pom de dalt i pinya, amb qui hi ha a cada
   posició). Les imatges es dibuixen al navegador.
 - **Passar llista**: el dia de la sessió (i després), qui havia dit «Vinc» compta com a present. L'admin només ha de

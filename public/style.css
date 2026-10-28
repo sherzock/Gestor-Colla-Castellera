@@ -768,3 +768,12 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .tpl-rot { display: flex; gap: 6px; }
 .tpl-reset { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tpl-reset input { width: 56px; margin-left: 4px; }
+
+/* Acompanyants */
+.check.top { align-items: flex-start; }
+.check.top input { margin-top: 3px; }
+.small.block { display: block; font-weight: 400; margin-top: 2px; }
+.companions { display: flex; flex-direction: column; gap: 8px; }
+.companions .field input[type=number] { max-width: 100px; }
+.comp-names { display: flex; flex-direction: column; gap: 6px; }
+.comp-names:empty { display: none; }
