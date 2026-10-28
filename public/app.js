@@ -2222,6 +2222,7 @@ async function pageAccounts() {
   $app.innerHTML = `
     <div class="page-head"><h1>${t("Comptes d'administració")}</h1>
       <div class="actions"><button class="btn primary" id="new-admin">${icon.plus}${t('Nou compte')}</button></div></div>
+    ${config.demo ? `<div class="demo-note">${t("A la versió de prova no es poden canviar els comptes d'administració")}.</div>` : ''}
     <p class="muted" style="margin-top:0">${t("Aquests comptes només serveixen per editar: sessions, castells i persones. No surten a les llistes ni responen a les sessions. Qui també fa castells respon amb la seva fitxa de membre (des d'«Ajustos» → «Respon com a…»).")}</p>
     <div class="grid-2">
       <div class="card">
@@ -2589,7 +2590,7 @@ async function pageTecnica(tabs) {
         <span class="small muted">${tn(p.people.length, '{n} persona', '{n} persones')}</span>
         ${p.few ? `<span class="status no">${t('Poca gent')}</span>` : ''}</div>
       <div class="names">${p.people.length ? who(p.people.slice(0, 8)) : `<span class="muted small">${t('Ningú encara')}</span>`}${p.people.length > 8 ? `<span class="muted small">+${p.people.length - 8}</span>` : ''}</div>
-      ${p.suggest.length ? `<div class="suggest small"><span class="muted">${t('Es podria preparar:')}</span> ${p.suggest.map((x) => `<a href="#/estadistiques/persona/${x.id}">${esc(x.name)}${x.n ? ` <span class="muted">${x.n === 1 ? t('{n} cop a {cat}', { n: 1, cat: p.cat }) : t('{n} cops a {cat}', { n: x.n, cat: p.cat })}</span>` : ''}</a>`).join('')}</div>` : ''}
+      ${p.suggest.length ? `<div class="suggest small"><span class="muted">${t('Es podria preparar:')}</span> ${p.suggest.map((x) => `<a href="#/estadistiques/persona/${x.id}">${esc(x.name)}${x.n ? ` <span class="muted">${x.n === 1 ? t('{n} cop a {cat}', { n: 1, cat: esc(p.cat) }) : t('{n} cops a {cat}', { n: x.n, cat: esc(p.cat) })}</span>` : ''}</a>`).join('')}</div>` : ''}
     </li>`).join('') : '';
 
   const prepRows = st.prep.map((c) => {

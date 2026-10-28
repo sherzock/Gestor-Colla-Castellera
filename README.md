@@ -238,7 +238,9 @@ Per provar-la amb dades d'exemple (**esborra les dades existents**):
 node seed.js
 ```
 
-A la demostració, els membres entren triant el seu nom; l'administrador és `admin` / `admin1234`. Les persones i els
+A la demostració, els membres entren triant el seu nom; l'administrador és `admin` / `admin1234`. Com que el compte és
+compartit, en mode demo (`DEMO=1`) no es poden canviar contrasenyes ni crear, editar o esborrar comptes d'administració
+(ningú pot deixar els altres sense entrar). Les persones i els
 malnoms de la demostració són inventats (els malnoms són noms de fruites i verdures).
 Hi ha unes 125 persones (amb mainada i músics) i dues temporades senceres: assajos els dimarts i divendres, una diada
 cada 3–4 setmanes i castells que van pujant al llarg de la temporada, cadascun amb el seu tronc habitual i

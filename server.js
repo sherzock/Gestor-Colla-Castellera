@@ -441,6 +441,7 @@ route('PUT', '/api/me', async ({ user, body, req }) => {
   const name = 'name' in body ? str(body.name, 100) : user.name;
   if (!name) fail(400, 'El nom és obligatori');
   if (body.newPassword) {
+    noDemoAccounts();
     await confirmPassword(req, user, body.currentPassword);
     db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(newPassword(body.newPassword, user.username), user.admin_id);
     db.prepare('DELETE FROM admin_tokens WHERE admin_id = ? AND token != ?').run(user.admin_id, user.tokenHash);
@@ -468,8 +469,14 @@ function adminInput(body, existing = null) {
 
 route('GET', '/api/admins', () => db.prepare('SELECT * FROM admins ORDER BY name COLLATE NOCASE').all().map(adminRow), 'admin');
 
+// A la versió de prova tothom entra amb el mateix compte: si algú li canviés la contrasenya o l'esborrés, els altres
+// ja no hi podrien entrar fins que es tornessin a crear les dades.
+const DEMO_ACCOUNTS = "A la versió de prova no es poden canviar els comptes d'administració";
+const noDemoAccounts = () => { if (DEMO) fail(403, DEMO_ACCOUNTS); };
+
 // Crear, canviar o esborrar comptes d'administració demana la contrasenya de qui ho fa.
 route('POST', '/api/admins', async ({ body, user, req }) => {
+  noDemoAccounts();
   await confirmPassword(req, user, body.currentPassword);
   const data = adminInput(body);
   const id = insertRow('admins', data);
@@ -477,6 +484,7 @@ route('POST', '/api/admins', async ({ body, user, req }) => {
 }, 'admin');
 
 route('PUT', '/api/admins/:id', async ({ params, body, user, req }) => {
+  noDemoAccounts();
   const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(params.id) || fail(404, 'Compte no trobat');
   await confirmPassword(req, user, body.currentPassword);
   const data = adminInput(body, admin);
@@ -490,6 +498,7 @@ route('PUT', '/api/admins/:id', async ({ params, body, user, req }) => {
 }, 'admin');
 
 route('DELETE', '/api/admins/:id', async ({ params, user, body, req }) => {
+  noDemoAccounts();
   if (Number(params.id) === user.admin_id) fail(400, 'No pots esborrar el compte amb què has entrat');
   await confirmPassword(req, user, body.currentPassword);
   if (db.prepare('SELECT COUNT(*) AS n FROM admins').get().n <= 1) fail(400, "Ha de quedar almenys un compte d'administració");
@@ -1150,14 +1159,19 @@ function dataChanged(pathname) {
 const memoized = new Map();
 // Són les respostes més grans i es demanen sovint: el JSON i la versió comprimida també es guarden.
 const encodedMemo = new WeakMap();
+// La clau només té els valors que canvien la resposta (una temporada o res, un tipus conegut o res) i se'n guarden
+// poques: la temporada també la pot demanar un membre, i amb valors inventats podria omplir la memòria del servidor.
+const MEMO_ENTRIES = 40;
 const memo = (name, handler, { keyOf = versionKey, variant = () => '' } = {}) => {
   let cache = { key: null, map: new Map() };
   const wrapped = (ctx) => {
     if (cache.key !== keyOf()) cache = { key: keyOf(), map: new Map() };
-    const key = `${ctx.query.get('season') || ''}|${ctx.query.get('kind') || ''}|${variant(ctx)}`;
+    const season = ctx.query.get('season') || '', kind = ctx.query.get('kind') || '';
+    const key = `${/^\d{4}$/.test(season) ? season : ''}|${['diades', 'assajos'].includes(kind) ? kind : ''}|${variant(ctx)}`;
     if (!cache.map.has(key)) {
       const result = handler(ctx);
       encodedMemo.set(result, {});
+      if (cache.map.size >= MEMO_ENTRIES) cache.map.delete(cache.map.keys().next().value);
       cache.map.set(key, result);
     }
     return cache.map.get(key);
