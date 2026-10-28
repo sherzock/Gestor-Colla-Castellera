@@ -354,6 +354,7 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .pos.hist:hover { border-color: var(--accent); }
 .pos.hist .h { font-size: .74rem; display: flex; gap: 4px; justify-content: center; white-space: nowrap; }
 .pos.hist .h b { font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pos.hist .over, .t-label .tag.over, .bad-text { color: var(--bad); font-weight: 700; }
 .hist-grid { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(var(--cw, 118px), 1fr)); }
 .hist-grid .pos { width: auto; }
 .bars { display: grid; gap: 6px; }
@@ -642,7 +643,7 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .tech-notes { display: grid; gap: 4px; flex: 1 1 100%; }
 
 /* Estadístiques per a la tècnica */
-.factor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.factor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .factor-grid > .card { margin: 0; }
 .factor h3 { margin: 0 0 10px; font-size: .95rem; }
 .factor-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }

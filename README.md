@@ -70,12 +70,14 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   només diades o només assajos. Només compten les sessions passades.
   - *Tècnica* (admins): un castell és de tota la colla, així que no es mira qui ha fallat sinó:
     - **què acompanya els castells descarregats**: tronc repetit respecte a l'últim cop o amb canvis, tronc amb
-      experiència a cada posició o amb gent nova, i pinya plena (≥90 %) o incompleta;
+      experiència a cada posició o amb gent nova, pinya plena (≥90 %) o incompleta, cada pis del tronc anivellat
+      (≤5 cm de diferència d'espatlles) o desnivellat, i algú que pesa més que qui el porta o no (amb les mides actuals);
     - **com avança cada castell**: es tria un castell i es veu un gràfic de columnes per mes (separat per anys) amb
       quants intents n'hi ha de cada resultat, quants intents sencers i parcials s'han fet, quants han calgut fins al
       primer descarregat, el percentatge de descarregats a assajos i a diades, els últims intents i les notes de la tècnica;
     - **preparació de les properes diades**: per a cada castell, quanta gent del tronc ha assajat la seva posició
-      d'aquell castell les últimes 6 setmanes;
+      d'aquell castell les últimes 6 setmanes, i quantes posicions no tenen relleu (ningú més actiu les ha fet
+      descarregant o carregant aquell castell);
     - **recanvis per a cada castell** (es tria el castell, perquè una mateixa posició no és igual en un 3de7 que en un
       4de8): qui ha fet cada posició del tronc en aquell castell, un avís quan poca gent ho ha fet sovint i propostes de
       gent que es podria preparar (alçada d'espatlles i pes semblants, i experiència al mateix pis en altres castells).
@@ -95,7 +97,12 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   castells. Els administradors ho continuen veient tot, marcat com a «Oculta» / «Ocult».
 - **Revisió de l'alineació** (admins): a cada castell, avisos de gent col·locada que ha dit que no ve o
   que no ha contestat; posicions buides al tronc; pisos amb més de 5 cm de diferència d'alçada d'espatlles; i algú que
-  pesa més de 3 kg més que qui el porta. Tocant un nom es va a la seva posició.
+  pesa més de 3 kg més que qui el porta. Abans d'una diada, també qui no ha assajat la seva posició i les posicions
+  sense relleu (amb el percentatge de sessions dels últims 3 mesos a què ha vingut qui hi ha). Tocant un nom es va a la
+  seva posició.
+- **Mides del tronc** (admins): vista «Mides» de cada castell amb l'alçada d'espatlles i el pes de cada persona, el
+  desnivell de cada pis i el pes que porta a sobre cada posició (la seva columna i la part del pom de dalt que li toca),
+  també en vegades el seu propi pes.
 - **Omplir com un castell anterior** (admins): en afegir o editar un castell, el formulari ofereix els 6 castells
   més recents del mateix tipus (de qualsevol sessió fins a la data d'aquesta) que tinguin gent col·locada. Si en tries
   un, se'n copien la gent de cada posició, els cordons, la música i els pisos de la prova. En editar, substitueix

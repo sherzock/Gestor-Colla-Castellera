@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, sessions } from './helpers.js';
-import { buildStructure, configFromName } from '../public/castell.js';
+import { buildStructure, configFromName, troncLoad, levelGaps, weightInversions } from '../public/castell.js';
 import { layerToTemplate } from '../public/editor.js';
 
 let server, s;
@@ -152,6 +152,40 @@ test('memòries: cada canvi refà el que en depèn', async () => {
 test('estructures: un pilar per sota i un de normal no es confonen', () => {
   assert.equal(buildStructure({ width: 1, height: 4, cordons: 3 }).name, 'pd4');
   assert.equal(buildStructure({ width: 1, height: 4, cordons: 3, sota: 1 }).name, 'pd4ps');
+});
+
+// ---------- Mides del tronc i relleus ----------
+test('mides del tronc: pes que porta cada posició, desnivell per pis i pesos invertits', () => {
+  const s = buildStructure({ width: 3, height: 7, cordons: 3 }, { ignoreTemplate: true });
+  const m = { 't2-0': { shoulder_height_cm: 150, weight_kg: 60 }, 't2-1': { shoulder_height_cm: 157, weight_kg: 60 }, 't3-0': { weight_kg: 66 },
+    't4-0': { weight_kg: 50 }, dos1: { weight_kg: 20 }, dos2: { weight_kg: 20 }, acot: { weight_kg: 15 }, enx: { weight_kg: 15 } };
+  const load = troncLoad(s, (k) => m[k]);
+  assert.deepEqual(load.get('t4-0'), { kg: 23, partial: false }, 'el pom (70 kg) es reparteix entre les 3 columnes');
+  assert.deepEqual(load.get('t2-0'), { kg: 139, partial: false });
+  assert.equal(load.get('t2-1').partial, true, 'a la columna 1 falta el pes del terç i del quart');
+  assert.deepEqual(levelGaps(s, (k) => m[k]), [{ level: 2, gap: 7, keys: ['t2-0', 't2-1'] }]);
+  assert.deepEqual(weightInversions(s, (k) => m[k]), [{ up: 't3-0', down: 't2-0', diff: 6 }]);
+  const pilar = buildStructure({ width: 1, height: 5 });
+  assert.equal(troncLoad(pilar, () => ({ weight_kg: 50 })).get('t1-0').kg, 200);
+});
+
+test('tècnica: espatlles i pes com a factors, i relleus de les properes diades', async () => {
+  const st = (await s.admin('GET', '/stats/tecnica?season=all')).d;
+  for (const k of ['level', 'weight']) assert.ok(st.factors[k].high.n + st.factors[k].low.n > 0, k);
+  // Un castell que la colla no ha fet mai: ningú en pot fer de relleu.
+  const diada = (await s.admin('POST', '/events', { type: 'diada', title: 'Diada de prova', date: '2026-12-12' })).d;
+  const fresh = (await s.admin('POST', `/events/${diada.id}/castells`, { width: 5, height: 6 })).d;
+  await s.admin('PUT', `/castells/${fresh.id}/positions/t1-0`, { person_id: s.personId });
+  const prep = (await s.admin('GET', `/castells/${fresh.id}/prep`)).d.positions;
+  assert.equal(prep.find((p) => p.key === 't1-0').reliefs, 0);
+  assert.ok(prep.find((p) => p.key === 't1-0').attendance >= 0);
+  // El mateix tronc d'un castell que es fa sovint sí que té relleus (sense comptar qui hi ha posat).
+  const sc = (await s.admin('GET', `/castells/${s.pastCastell.id}`)).d;
+  const copy = (await s.admin('POST', `/events/${diada.id}/castells`, { ...sc.castell, copy_from: s.pastCastell.id })).d;
+  const rows = (await s.admin('GET', `/castells/${copy.id}/prep`)).d.positions.filter((p) => p.person_id);
+  assert.ok(rows.some((p) => p.reliefs > 0));
+  const card = (await s.admin('GET', '/stats/tecnica?season=all')).d.prep.find((c) => c.castell_id === fresh.id);
+  assert.equal(card.noRelief, 1);
 });
 
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {

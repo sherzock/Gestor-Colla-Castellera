@@ -6,7 +6,7 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import { db, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates,
-  LAYER_PREFIX, TEMPLATE_KINDS } from './public/castell.js';
+  LAYER_PREFIX, TEMPLATE_KINDS, levelGaps, weightInversions, SHOULDER_GAP_CM } from './public/castell.js';
 import { translate } from './public/i18n.js';
 
 // Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
@@ -1305,7 +1305,7 @@ function historyIndex() {
   for (const r of historyRows()) {
     if (r.result !== 'previst') {
       if (!byName.has(r.castell)) byName.set(r.castell, []);
-      byName.get(r.castell).push({ castell_id: r.castell_id, pos_key: r.pos_key, person_id: r.person_id, date: r.date, type: r.type });
+      byName.get(r.castell).push({ castell_id: r.castell_id, pos_key: r.pos_key, person_id: r.person_id, date: r.date, type: r.type, result: r.result });
     }
     const { cat } = r;
     (byCat[r.person_id] ??= {})[cat] = (byCat[r.person_id][cat] || 0) + 1;
@@ -1612,13 +1612,38 @@ function troncPrep(castell) {
   const since = new Date(`${date}T12:00:00`); since.setDate(since.getDate() - PREP_DAYS);
   const sinceIso = since.toISOString().slice(0, 10);
   const past = (historyIndex().byName.get(castellName(castell)) || []).filter((r) => r.castell_id !== castell.id && r.date < date);
+  // Relleus: altres persones actives que ja han fet bé (descarregat o carregat) aquesta posició en aquest castell.
+  const active = new Set(db.prepare('SELECT id FROM people WHERE active = 1').all().map((r) => r.id));
+  const good = new Map();
+  for (const x of past) {
+    if ((x.result !== 'descarregat' && x.result !== 'carregat') || !active.has(x.person_id)) continue;
+    if (!good.has(x.pos_key)) good.set(x.pos_key, new Set());
+    good.get(x.pos_key).add(x.person_id);
+  }
+  const rate = attendanceRate(date);
   return keys.map((p) => {
     const r = placedRows.get(p.key);
     const mine = r?.person_id ? past.filter((x) => x.pos_key === p.key && x.person_id === r.person_id) : [];
+    const others = [...(good.get(p.key) || [])].filter((id) => id !== r?.person_id);
     return { key: p.key, role: p.role, person_id: r?.person_id || null, guest: !!r?.guest_id,
       recent: mine.filter((x) => x.type === 'assaig' && x.date >= sinceIso).length,
-      ever: mine.length, last: mine.map((x) => x.date).sort().pop() || null };
+      ever: mine.length, last: mine.map((x) => x.date).sort().pop() || null,
+      reliefs: others.length, attendance: r?.person_id ? rate.get(r.person_id) ?? null : null };
   });
+}
+
+// Percentatge de sessions (assajos i diades) dels últims 3 mesos a què ha vingut cada persona, abans d'una data.
+const RATE_DAYS = 90, RATE_MIN_SESSIONS = 4;
+function attendanceRate(date) {
+  const since = new Date(`${date}T12:00:00`); since.setDate(since.getDate() - RATE_DAYS);
+  const events = db.prepare(`SELECT COUNT(*) AS n FROM events WHERE type IN ('assaig','diada') AND date >= ? AND date < ?
+    AND date < date('now','localtime')`).get(since.toISOString().slice(0, 10), date).n;
+  const out = new Map();
+  if (events < RATE_MIN_SESSIONS) return out;
+  for (const r of db.prepare(`SELECT a.person_id, COUNT(*) AS n FROM attendance a JOIN events e ON e.id = a.event_id
+      WHERE e.type IN ('assaig','diada') AND e.date >= ? AND e.date < ? AND e.date < date('now','localtime') AND ${CAME_SQL}
+      GROUP BY a.person_id`).all(since.toISOString().slice(0, 10), date)) out.set(r.person_id, Math.round((r.n / events) * 100));
+  return out;
 }
 
 route('GET', '/api/castells/:id/prep', ({ params }) => ({ days: PREP_DAYS, positions: troncPrep(getCastell(params.id)) }), 'admin');
@@ -1660,7 +1685,11 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
     stability: { high: emptyOutcome(), low: emptyOutcome() },
     experience: { high: emptyOutcome(), low: emptyOutcome() },
     pinya: { high: emptyOutcome(), low: emptyOutcome() },
+    level: { high: emptyOutcome(), low: emptyOutcome() },
+    weight: { high: emptyOutcome(), low: emptyOutcome() },
   };
+  // Les mides són les d'ara de cada persona (no es guarda com eren el dia del castell).
+  const measures = new Map(db.prepare('SELECT id, shoulder_height_cm, weight_kg FROM people').all().map((p) => [p.id, p]));
   const add = (bucket, res) => { bucket.n++; bucket[outcomeOf(res)]++; };
   const done = new Map();       // «amplada|posició|persona» → vegades que l'ha fet abans
   const lastTronc = new Map();  // nom del castell → tronc de l'últim cop (posició → persona)
@@ -1681,6 +1710,14 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
       const expert = troncPeople.filter((k) => done.get(`${c.width}|${k}|${filled.get(k)}`)).length / troncPeople.length;
       add(factors.experience[expert >= EXPERIENCED ? 'high' : 'low'], c.result);
       if (pinyaKeys.length) add(factors.pinya[pinyaKeys.filter((k) => filled.has(k)).length / pinyaKeys.length >= FULL_PINYA ? 'high' : 'low'], c.result);
+      const s = structureOf(c);
+      const get = (k) => measures.get(filled.get(k));
+      const gaps = levelGaps(s, get);
+      if (gaps.length) add(factors.level[gaps.every((g) => g.gap <= SHOULDER_GAP_CM) ? 'high' : 'low'], c.result);
+      // Només compta si se sap el pes de, com a mínim, la meitat del tronc.
+      if (troncPeople.filter((k) => get(k)?.weight_kg).length * 2 >= troncPeople.length) {
+        add(factors.weight[weightInversions(s, get).length ? 'low' : 'high'], c.result);
+      }
     }
     if (inFilter.has(c.id)) {
       const t = types.get(name) || { castell: name, attempts: [] };
@@ -1721,7 +1758,8 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
     prep: upcoming.map((c) => {
       const rows = troncPrep(c);
       return { castell_id: c.id, event_id: c.event_id, date: c.date, title: c.title, castell: castellName(c),
-        total: rows.length, placed: rows.filter((r) => r.person_id).length, rehearsed: rows.filter((r) => r.recent).length };
+        total: rows.length, placed: rows.filter((r) => r.person_id).length, rehearsed: rows.filter((r) => r.recent).length,
+        noRelief: rows.filter((r) => r.person_id && !r.reliefs).length };
     }).filter((c) => c.placed),
   };
 }), 'admin');

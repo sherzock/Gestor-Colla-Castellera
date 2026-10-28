@@ -370,3 +370,57 @@ export function structureOf(c) {
 export function positionOf(c, key) {
   return structureOf(c).positions.get(key) ?? null;
 }
+
+// ---------- Mides del tronc ----------
+// «get(clau)» torna { shoulder_height_cm, weight_kg } de qui hi ha a cada posició (o res si està buida).
+export const SHOULDER_GAP_CM = 5;
+export const WEIGHT_GAP_KG = 3;
+
+// Diferència d'alçada d'espatlles dins de cada pis del tronc, a partir dels segons (els baixos s'ajusten amb la pinya).
+export function levelGaps(s, get) {
+  const out = [];
+  for (const l of s.levels) {
+    const cells = l.cells.filter((p) => p.key.startsWith('t') && p.level > 1 && get(p.key)?.shoulder_height_cm);
+    if (cells.length < 2) continue;
+    const hs = cells.map((p) => get(p.key).shoulder_height_cm);
+    out.push({ level: l.level, gap: Math.round(Math.max(...hs) - Math.min(...hs)), keys: cells.map((p) => p.key) });
+  }
+  return out;
+}
+
+// Qui puja no hauria de pesar més que qui el porta (mateixa columna, un pis més avall).
+export function weightInversions(s, get) {
+  const out = [];
+  for (const p of s.positions.values()) {
+    const m = p.key.match(/^(t|ag)(\d+)(-\d+)?$/);
+    if (!m || Number(m[2]) < 2) continue;
+    const below = `${m[1]}${Number(m[2]) - 1}${m[3] || ''}`;
+    const up = get(p.key)?.weight_kg, down = get(below)?.weight_kg;
+    if (up && down && up - down > WEIGHT_GAP_KG) out.push({ up: p.key, down: below, diff: Math.round(up - down) });
+  }
+  return out;
+}
+
+// Pes que porta cada posició del tronc i del pilar central: tot el que té a sobre a la seva columna. El pom de dalt
+// (dosos, acotxador i enxaneta) es reparteix a parts iguals entre les columnes del pis més alt del tronc. Si falta el
+// pes d'algú de sobre, «partial» ho diu (el número és el que se sap).
+export function troncLoad(s, get) {
+  const out = new Map();
+  const pom = [...s.positions.values()].filter((p) => p.group === 'pom');
+  const pomKg = pom.reduce((sum, p) => sum + (get(p.key)?.weight_kg || 0), 0);
+  const pomPartial = pom.some((p) => !get(p.key)?.weight_kg);
+  const walk = (keys, kg, partial) => {
+    for (const key of keys) {
+      out.set(key, { kg: Math.round(kg), partial });
+      const w = get(key)?.weight_kg;
+      kg += w || 0;
+      partial ||= !w;
+    }
+  };
+  const tronc = s.levels.filter((l) => l.cells[0]?.key.startsWith('t')).reverse();
+  for (let i = 0; i < s.width; i++) {
+    walk(tronc.map((l) => l.cells[i]?.key).filter(Boolean), pom.length ? pomKg / s.width : 0, pom.length > 0 && pomPartial);
+  }
+  walk([...s.agulla].reverse().map((p) => p.key), 0, false);
+  return out;
+}

@@ -1,4 +1,5 @@
-import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL, setTemplates, templateOf, configFromName, TEMPLATE_KINDS } from './castell.js';
+import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL, setTemplates, templateOf, configFromName, TEMPLATE_KINDS,
+  SHOULDER_GAP_CM, levelGaps, weightInversions, troncLoad } from './castell.js';
 import { createEditor, layerToTemplate, boxShort, MAX_BOXES } from './editor.js';
 import { castellPng, zip, fileSafe, download } from './export.js';
 import { proposeLineup } from './muntador.js';
@@ -1236,13 +1237,13 @@ function histCell(p, ctx) {
   </button>`;
 }
 
-function troncView(s, cell) {
+function troncView(s, cell, levelNote = () => '') {
   const agByLevel = new Map(s.agulla.map((a) => [a.level, a]));
   const n = Math.max(...s.levels.map((l) => l.cells.length));
   const rowClass = `t-row${s.agulla.length ? ' ag' : ''}`;
   const rows = [...s.levels].reverse().map((row) => `
     <div class="${rowClass}">
-      <div class="t-label"><span class="lv">${row.label}</span>${row.tags.map((x) => `<span class="tag">+ ${x}</span>`).join('')}</div>
+      <div class="t-label"><span class="lv">${row.label}</span>${row.tags.map((x) => `<span class="tag">+ ${x}</span>`).join('')}${levelNote(row)}</div>
       <div class="t-cells">${row.cells.map(cell).join('')}</div>
       ${s.agulla.length ? `<div class="t-cells">${agByLevel.has(row.level) ? cell(agByLevel.get(row.level)) : ''}</div>` : ''}
     </div>`).join('');
@@ -1331,6 +1332,29 @@ function listView(s, byKey, ctx) {
   return `<div class="pos-list">${listSections(s).map(({ title, items }) => `<h3>${esc(title)} <span class="muted small">${items.filter((p) => byKey.has(p.key)).length}/${items.length}</span></h3><ul>${items.map(li).join('')}</ul>`).join('')}</div>`;
 }
 
+// Mides del tronc (administració): espatlles i pes de cada persona i el pes que porta a sobre.
+function measuresView(s, byKey) {
+  const get = (key) => byKey.get(key);
+  const load = troncLoad(s, get);
+  const gaps = new Map(levelGaps(s, get).map((g) => [g.level, g.gap]));
+  const heavy = new Set(weightInversions(s, get).map((w) => w.up));
+  const cell = (p) => {
+    const a = get(p.key);
+    const l = load.get(p.key);
+    const w = a?.weight_kg;
+    return `<button class="pos hist g-${p.group}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(a)}">
+      <span class="role">${esc(p.role)}</span>
+      <span class="who">${a ? esc(assignedName(a)) : '—'}</span>
+      ${a ? `<span class="h" title="${t('Espatlles')} · ${t('Pes')}"><span>${a.shoulder_height_cm ? `${a.shoulder_height_cm} cm` : '? cm'} · <span class="${heavy.has(p.key) ? 'over' : ''}">${w ? `${w} kg` : '? kg'}</span></span></span>` : ''}
+      ${l && (l.kg || l.partial) ? `<span class="h"><span>${t('porta {n} kg', { n: `${l.partial ? '≥ ' : ''}${l.kg}` })}${w && l.kg ? ` ×${(l.kg / w).toFixed(1)}` : ''}</span></span>` : ''}
+    </button>`;
+  };
+  const note = (row) => (gaps.has(row.level)
+    ? `<span class="tag ${gaps.get(row.level) > SHOULDER_GAP_CM ? 'over' : ''}">${t('{n} cm de desnivell', { n: gaps.get(row.level) })}</span>` : '');
+  return `<p class="small muted" style="margin-top:0">${t("Alçada d'espatlles i pes de cada persona, i el pes que porta a sobre (la seva columna i la part del pom de dalt que li toca). «×» és quantes vegades el seu propi pes. Amb «≥» falta el pes d'algú de sobre.")}</p>
+    ${troncView({ ...s, musica: [] }, cell, note)}`;
+}
+
 function historyView(s, ctx) {
   const { hist } = ctx;
   if (!hist.castellsCount) {
@@ -1347,8 +1371,6 @@ function historyView(s, ctx) {
 // ---------- Revisió de l'alineació (administració) ----------
 // Avisos per detectar errors abans de la sessió: gent col·locada que no ve, forats al tronc,
 // espatlles desiguals en un mateix pis i algú que pesa més que qui el porta.
-const SHOULDER_GAP_CM = 5;
-const WEIGHT_GAP_KG = 3;
 function lineupWarnings(s, byKey, candidates, event, prep, guests = []) {
   const guestsById = new Map(guests.map((g) => [g.id, g]));
   const out = [];
@@ -1372,28 +1394,17 @@ function lineupWarnings(s, byKey, candidates, event, prep, guests = []) {
   if (empty.length) out.push({ level: 'bad', text: tn(empty.length, 'Falta {n} posició al tronc', 'Falten {n} posicions al tronc'), items: empty.map((p) => ({ key: p.key, label: p.role })) });
 
   // Mateix pis: les espatlles han de quedar a la mateixa alçada.
-  const byLevel = new Map();
-  for (const p of tronc) if (p.key.startsWith('t') && p.level > 1) byLevel.set(p.level, [...(byLevel.get(p.level) || []), p]);
-  for (const [level, list] of byLevel) {
-    const people = list.map((p) => byKey.get(p.key)).filter((a) => a?.shoulder_height_cm);
-    if (people.length < 2) continue;
-    const hs = people.map((a) => a.shoulder_height_cm);
-    const gap = Math.round(Math.max(...hs) - Math.min(...hs));
-    if (gap > SHOULDER_GAP_CM) {
-      out.push({ level: 'warn', text: t("{level}: {n} cm de diferència d'alçada d'espatlles", { level: LEVEL_PLURAL[level - 1], n: gap }),
-        items: people.sort((a, b) => b.shoulder_height_cm - a.shoulder_height_cm).map((a) => ({ key: a.pos_key, label: `${who(a)} · ${a.shoulder_height_cm} cm` })) });
-    }
+  const get = (key) => byKey.get(key);
+  for (const g of levelGaps(s, get)) {
+    if (g.gap <= SHOULDER_GAP_CM) continue;
+    out.push({ level: 'warn', text: t("{level}: {n} cm de diferència d'alçada d'espatlles", { level: LEVEL_PLURAL[g.level - 1], n: g.gap }),
+      items: g.keys.map(get).sort((a, b) => b.shoulder_height_cm - a.shoulder_height_cm).map((a) => ({ key: a.pos_key, label: `${who(a)} · ${a.shoulder_height_cm} cm` })) });
   }
   // Qui puja no hauria de pesar més que qui el porta (mateixa columna, un pis més avall).
-  for (const p of tronc) {
-    const m = p.key.match(/^(t|ag)(\d+)(-\d+)?$/);
-    if (!m || Number(m[2]) < 2) continue;
-    const below = `${m[1]}${Number(m[2]) - 1}${m[3] || ''}`;
-    const up = byKey.get(p.key), down = byKey.get(below);
-    if (up?.weight_kg && down?.weight_kg && up.weight_kg - down.weight_kg > WEIGHT_GAP_KG) {
-      out.push({ level: 'warn', text: t('{up} pesa {n} kg més que {down}, que el porta', { up: who(up), n: Math.round(up.weight_kg - down.weight_kg), down: who(down) }),
-        items: [chip(up), chip(down)] });
-    }
+  for (const w of weightInversions(s, get)) {
+    const up = get(w.up), down = get(w.down);
+    out.push({ level: 'warn', text: t('{up} pesa {n} kg més que {down}, que el porta', { up: who(up), n: w.diff, down: who(down) }),
+      items: [chip(up), chip(down)] });
   }
   // Abans d'una diada: qui no ha assajat la seva posició d'aquest castell (només de l'alineació desada).
   if (prep && event.type !== 'assaig') {
@@ -1403,6 +1414,14 @@ function lineupWarnings(s, byKey, candidates, event, prep, guests = []) {
     const chips = (list) => list.map((r) => chip(byKey.get(r.key)));
     if (never.length) out.push({ level: 'warn', text: t("Mai no han fet aquesta posició en aquest castell"), items: chips(never) });
     if (notRecent.length) out.push({ level: 'warn', text: t("No l'han assajada les últimes {n} setmanes", { n: Math.round(prep.days / 7) }), items: chips(notRecent) });
+    // Sense relleu: si no vénen, ningú més ha fet bé aquesta posició en aquest castell.
+    const alone = same.filter((r) => !r.reliefs);
+    if (alone.length) {
+      out.push({ level: 'warn', text: t('Sense relleu: ningú més ho ha fet bé en aquest castell'), items: alone.map((r) => {
+        const c = chip(byKey.get(r.key));
+        return r.attendance != null ? { ...c, label: `${c.label} · ${t('ve el {n}%', { n: r.attendance })}` } : c;
+      }) });
+    }
   }
   const order = { bad: 0, warn: 1 };
   return out.sort((a, b) => order[a.level] - order[b.level]);
@@ -1476,11 +1495,12 @@ async function pageCastell(id) {
     if (!admin && mineKey) castellView = inTroncView(s.positions.get(mineKey)) ? 'tronc' : 'pinya';
   }
 
-  const views = { tronc: 'Tronc', ...(s.layers.length ? { pinya: 'Pinya' } : {}), llista: t('Llista'), ...(admin ? { historial: t('Historial') } : {}) };
+  const views = { tronc: 'Tronc', ...(s.layers.length ? { pinya: 'Pinya' } : {}), llista: t('Llista'), ...(admin ? { mides: t('Mides'), historial: t('Historial') } : {}) };
   if (!views[castellView]) castellView = 'tronc';
   const body = {
     pinya: () => pinyaView(s, byKey, ctx),
     llista: () => listView(s, byKey, ctx),
+    mides: () => measuresView(s, byKey),
     historial: () => historyView(s, ctx),
   }[castellView]?.() ?? troncView(s, (p) => posCell(p, byKey, ctx));
   const confirmed = candidates.filter((c) => c.status === 'si');
@@ -2512,6 +2532,8 @@ async function pageTecnica(tabs) {
     ['stability', t('Tronc'), t("Repetit (com a mínim 3 de cada 4 posicions, igual que l'últim cop)"), t('Amb canvis')],
     ['experience', t('Experiència'), t('Gairebé tot el tronc ja havia fet la seva posició'), t('Amb gent nova a la seva posició')],
     ['pinya', 'Pinya', t('Plena (90% o més)'), t('Incompleta')],
+    ['level', t('Espatlles'), t('Cada pis anivellat (5 cm o menys de diferència)'), t('Algun pis desnivellat')],
+    ['weight', t('Pes'), t('Ningú pesa més que qui el porta'), t('Algú pesa més que qui el porta')],
   ];
   const factorCards = FACTORS.map(([k, title, hi, lo]) => {
     const f = st.factors[k];
@@ -2602,7 +2624,7 @@ async function pageTecnica(tabs) {
       <span class="castell-tag">${esc(c.castell)}</span>
       <span class="small muted">${fmt(c.date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${esc(c.title)}</span>
       <span class="prep-bar"><i class="${pctR >= 75 ? 'ok' : pctR >= 50 ? 'warn' : 'bad'}" style="width:${pctR}%"></i></span>
-      <span class="small"><strong>${c.rehearsed}/${c.placed}</strong> ${t("l'han assajat")}${c.placed < c.total ? ` · ${t('{n} sense posar', { n: c.total - c.placed })}` : ''}</span>
+      <span class="small"><strong>${c.rehearsed}/${c.placed}</strong> ${t("l'han assajat")}${c.placed < c.total ? ` · ${t('{n} sense posar', { n: c.total - c.placed })}` : ''}${c.noRelief ? ` · <span class="bad-text">${tn(c.noRelief, '{n} sense relleu', '{n} sense relleu')}</span>` : ''}</span>
     </a></li>`;
   }).join('');
 
@@ -2619,7 +2641,7 @@ async function pageTecnica(tabs) {
       <div>
         <h2 class="section-h">${t('Què acompanya els castells descarregats')}</h2>
         <div class="factor-grid">${factorCards}</div>
-        <p class="small muted" style="margin:8px 0 0">${t('El percentatge és de castells descarregats. Verd: descarregat · groc: carregat · vermell: caigut.')}</p>
+        <p class="small muted" style="margin:8px 0 0">${t('El percentatge és de castells descarregats. Verd: descarregat · groc: carregat · vermell: caigut.')} ${t("Espatlles i pes es miren amb les mides actuals de cada persona.")}</p>
       </div>
       <div class="grid-2">
         <div class="card">
