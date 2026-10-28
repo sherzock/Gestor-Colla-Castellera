@@ -7,6 +7,8 @@ const MARGIN = 140;
 const SNAP = 2;
 const snap = (v) => Math.round(v / SNAP) * SNAP;
 const DEG = Math.PI / 180;
+// Com a molt tantes caixes per capa (el servidor tampoc n'accepta més): una pinya de debò en té menys de cent.
+export const MAX_BOXES = 200;
 
 // Text de la caixa: el tipus i el cordó (com a la vista de pinya) o el nom si és una posició pròpia.
 export const KIND_SHORT = { base: 'Baix', contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', altre: '' };
@@ -181,7 +183,9 @@ export function createEditor(root, { layers, baseLabel, usage, t, onChange, onSe
       item.x += dx; item.y += dy;
       fitView(); changed();
     },
+    // Tornen false si la capa ja és plena.
     add(kind) {
+      if (items().length >= MAX_BOXES) return false;
       const from = items()[selected];
       const ring = ['mans', 'vent', 'lateral'].includes(kind) ? 1 : undefined;
       const item = {
@@ -196,6 +200,7 @@ export function createEditor(root, { layers, baseLabel, usage, t, onChange, onSe
     duplicate() {
       const from = items()[selected];
       if (!from || from.base !== undefined) return;
+      if (items().length >= MAX_BOXES) return false;
       items().push({ ...from, key: nextKey(), x: snap(from.x + 24), y: snap(from.y + 24) });
       selected = items().length - 1;
       fitView(); changed(); onSelect?.(items()[selected]);

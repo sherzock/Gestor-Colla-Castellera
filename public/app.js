@@ -1,5 +1,5 @@
 import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTHS, RESULTS, LEVEL_PLURAL, setTemplates, templateOf, configFromName, TEMPLATE_KINDS } from './castell.js';
-import { createEditor, layerToTemplate, boxShort } from './editor.js';
+import { createEditor, layerToTemplate, boxShort, MAX_BOXES } from './editor.js';
 import { castellPng, zip, fileSafe, download } from './export.js';
 import { proposeLineup } from './muntador.js';
 import { translate, LANGS } from './i18n.js';
@@ -72,6 +72,8 @@ const day = (d) => new Date(d + 'T12:00:00');
 const fmt = (d, opts) => day(d).toLocaleDateString(LOCALE[lang], opts);
 const fmtLong = (d) => fmt(d, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const time = (e) => [e.start_time, e.end_time].filter(Boolean).join('–');
+// Mides possibles (cm i kg), les mateixes que accepta el servidor.
+const MEASURES = { height_cm: [50, 230], shoulder_height_cm: [30, 200], shoulder_width_cm: [15, 80], weight_kg: [10, 200] };
 const todayIso = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 
 function age(birthdate) {
@@ -489,16 +491,16 @@ function eventModal(event, defaults = {}) {
     <form id="event-form">
       <div class="form-grid">
         <label class="field">${t('Tipus')}<select name="type">${TYPES.map((v) => `<option value="${v}" ${e.type === v ? 'selected' : ''}>${typeLabel(v)}</option>`).join('')}</select></label>
-        <label class="field full">${t('Títol')}<input name="title" required value="${esc(e.title)}" placeholder="${t('p. ex. Assaig general, Diada de la Mercè…')}"></label>
-        <label class="field">${t('Data')}<input name="date" type="date" required value="${esc(e.date)}"></label>
+        <label class="field full">${t('Títol')}<input name="title" required maxlength="120" value="${esc(e.title)}" placeholder="${t('p. ex. Assaig general, Diada de la Mercè…')}"></label>
+        <label class="field">${t('Data')}<input name="date" type="date" required min="2000-01-01" max="2100-12-31" value="${esc(e.date)}"></label>
         <label class="field">${t('Inici')}<input name="start_time" type="time" value="${esc(e.start_time)}"></label>
         <label class="field">${t('Final')}<input name="end_time" type="time" value="${esc(e.end_time)}"></label>
-        <label class="field full">${t('Lloc')}<input name="location" value="${esc(e.location)}" placeholder="${t('Local, plaça…')}"></label>
+        <label class="field full">${t('Lloc')}<input name="location" maxlength="150" value="${esc(e.location)}" placeholder="${t('Local, plaça…')}"></label>
         <div class="full escoleta-opt" id="esc-wrap">
           <label class="check"><input type="checkbox" name="escoleta" ${e.escoleta ? 'checked' : ''}> ${t("Hi ha escoleta abans de l'assaig")}</label>
           <label class="field" id="esc-time">${t("Hora de l'escoleta")}<input name="escoleta_time" type="time" value="${esc(e.escoleta_time || '19:00')}"></label>
         </div>
-        <label class="field full">${t('Descripció')}<textarea name="description">${esc(e.description)}</textarea></label>
+        <label class="field full">${t('Descripció')}<textarea name="description" maxlength="4000">${esc(e.description)}</textarea></label>
         <label class="field full">${t('Data límit per respondre (opcional)')}<input name="rsvp_until" type="datetime-local" value="${esc(e.rsvp_until || '')}">
           <span class="small muted">${t('Després ja no es podrà canviar la resposta. Si no en poses, es pot respondre fins al mateix dia.')}</span></label>
         <label class="check full top"><input type="checkbox" name="ask_companions" ${e.ask_companions ? 'checked' : ''}><span>${t('Pregunta si vindran acompanyats')}
@@ -540,7 +542,7 @@ function fieldInput(f, value, prefix = 'x') {
   if (f.kind === 'select') {
     return `<label class="field">${esc(f.label)}${req}<select name="${name}"><option value="">—</option>${f.options.map((o) => `<option ${value === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
   }
-  const type = f.kind === 'number' ? 'number" min="0" step="1" inputmode="numeric' : 'text';
+  const type = f.kind === 'number' ? 'number" min="0" max="100000" step="1" inputmode="numeric' : 'text" maxlength="300';
   return `<label class="field">${esc(f.label)}${req}<input type="${type}" name="${name}" value="${esc(value)}"></label>`;
 }
 function readExtra(form, fields, prefix = 'x') {
@@ -551,21 +553,22 @@ function readExtra(form, fields, prefix = 'x') {
   }
   return out;
 }
-// Acompanyants: quants i, si es vol, el nom de cadascun (si no, «Acompanyant de …»).
+// Acompanyants: quants i, si es vol, el nom de cadascun (si no, «Acompanyant de …»). El màxim és el del servidor.
+const MAX_COMPANIONS = 6;
 function companionsInput(list = []) {
   return `<div class="companions" data-companions>
-    <label class="field">${t('Acompanyants')}<input type="number" name="companions_n" min="0" max="10" step="1" inputmode="numeric" value="${list.length}"></label>
+    <label class="field">${t('Acompanyants')}<input type="number" name="companions_n" min="0" max="${MAX_COMPANIONS}" step="1" inputmode="numeric" value="${list.length}"></label>
     <div class="comp-names">${list.map((name, i) => companionName(name, i)).join('')}</div>
     <p class="small muted" style="margin:0">${t('La tècnica els podrà col·locar als castells. El nom és opcional.')}</p>
   </div>`;
 }
-const companionName = (name, i) => `<input name="comp${i}" maxlength="80" value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}">`;
+const companionName = (name, i) => `<input name="comp${i}" maxlength="60" value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}">`;
 function bindCompanions(root) {
   const box = qs('[data-companions]', root);
   if (!box) return;
   const n = box.querySelector('[name=companions_n]');
   n.oninput = () => {
-    const want = Math.max(0, Math.min(10, Math.floor(Number(n.value) || 0)));
+    const want = Math.max(0, Math.min(MAX_COMPANIONS, Math.floor(Number(n.value) || 0)));
     const names = qs('.comp-names', box);
     const now = [...names.children];
     for (let i = now.length; i < want; i++) names.insertAdjacentHTML('beforeend', companionName('', i));
@@ -734,9 +737,9 @@ async function pageEvent(id) {
         <div class="k">${{ number: t('Número'), text: t('Text'), bool: t('Sí / No'), select: t('Llista') + ': ' + esc(f.options.join(', ')) }[f.kind]}</div></div>
         <button class="btn ghost sm danger" style="margin-left:auto" data-del-field="${f.id}">${t('Esborra')}</button></div>`).join('') || `<div class="muted small">${t('Cap camp extra.')}</div>`}</div>
       <form id="field-form" class="form-grid">
-        <label class="field">${t('Nom del camp')}<input name="label" placeholder="${t('Acompanyants')}" required></label>
+        <label class="field">${t('Nom del camp')}<input name="label" maxlength="60" placeholder="${t('Acompanyants')}" required></label>
         <label class="field">${t('Tipus')}<select name="kind"><option value="number">${t('Número')}</option><option value="bool">${t('Sí / No')}</option><option value="text">${t('Text')}</option><option value="select">${t("Llista d'opcions")}</option></select></label>
-        <label class="field full hidden" id="opts">${t('Opcions (separades per comes)')}<input name="options" placeholder="${t('Carn, Peix, Vegetarià')}"></label>
+        <label class="field full hidden" id="opts">${t('Opcions (separades per comes)')}<input name="options" maxlength="800" placeholder="${t('Carn, Peix, Vegetarià')}"></label>
         <label class="check"><input type="checkbox" name="required"> ${t('Obligatori')}</label>
         <div class="full"><button class="btn sm">${icon.plus}${t('Afegeix camp')}</button></div>
       </form>
@@ -780,7 +783,7 @@ async function pageEvent(id) {
             ${mine?.companions?.some((g) => g.dropped) ? `<p class="small muted" style="margin:0">${t("Algun acompanyant que has tret ja era en un castell: la tècnica ho veurà.")}</p>` : ''}
             ${fields.map((f) => fieldInput(f, mine?.extra?.[f.id])).join('')}
           </div>
-          <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
+          <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" maxlength="300" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
           ${event.rsvp_open ? `<div class="form-actions"><button class="btn primary" ${status || escoleta !== null ? '' : 'disabled'} id="rsvp-save">${t('Desa')}</button></div>` : ''}
         </form>`}
         ${isMusics ? '' : `<div class="card">
@@ -882,7 +885,7 @@ async function pageEvent(id) {
           ${fields.map((f) => fieldInput(f, a.extra?.[f.id])).join('') || (event.ask_companions && a.status === 'si' ? '' : `<p class="muted">${t('Aquesta sessió no té camps extra.')}</p>`)}
           ${event.escoleta ? `<label class="field">${t('Escoleta')}<select name="escoleta"><option value="">—</option>
             <option value="1" ${a.escoleta === true ? 'selected' : ''}>${t('Hi vindrà')}</option><option value="0" ${a.escoleta === false ? 'selected' : ''}>${t('No hi vindrà')}</option></select></label>` : ''}
-          <label class="field">${t('Comentari')}<input name="comment" value="${esc(a.comment)}"></label>
+          <label class="field">${t('Comentari')}<input name="comment" maxlength="300" value="${esc(a.comment)}"></label>
           <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${t('Desa')}</button></div>
         </form>`, (m) => {
         bindCompanions(m);
@@ -949,11 +952,11 @@ function bindAnswersCard(event, attendance) {
 
 // Persona temporal d'una sessió: només el nom és obligatori; les mides ajuden a revisar l'alineació.
 function guestModal(eventId, guest, onSaved) {
-  const n = (name, label, unit, step = '1') => `<label class="field">${label} (${unit})<input name="${name}" type="number" min="0" step="${step}" inputmode="decimal" value="${guest?.[name] ?? ''}"></label>`;
+  const n = (name, label, unit, step = '1') => `<label class="field">${label} (${unit})<input name="${name}" type="number" min="${MEASURES[name][0]}" max="${MEASURES[name][1]}" step="${step}" inputmode="decimal" value="${guest?.[name] ?? ''}"></label>`;
   openModal(`${modalHead(guest ? esc(guest.name) : t('Nova persona temporal'))}
     <form id="guest-edit" class="stack">
-      <label class="field">${t('Nom o malnom')}<input name="name" required value="${esc(guest?.name)}" autocomplete="off"></label>
-      <label class="field">${t('Colla (opcional)')}<input name="colla" value="${esc(guest?.colla)}" placeholder="${t("p. ex. Castellers d'una altra vila")}"></label>
+      <label class="field">${t('Nom o malnom')}<input name="name" required maxlength="60" value="${esc(guest?.name)}" autocomplete="off"></label>
+      <label class="field">${t('Colla (opcional)')}<input name="colla" maxlength="80" value="${esc(guest?.colla)}" placeholder="${t("p. ex. Castellers d'una altra vila")}"></label>
       <div class="form-grid">${n('shoulder_height_cm', t("Alçada d'espatlles"), 'cm')}${n('weight_kg', t('Pes'), 'kg', '0.1')}</div>
       <p class="small muted" style="margin:0">${t("Només es fa servir en aquesta sessió. No surt a la llista de persones ni compta a l'historial.")}</p>
       <div class="form-actions">${guest ? `<button type="button" class="btn danger" id="del-guest" style="margin-right:auto">${t('Esborra')}</button>` : ''}
@@ -987,7 +990,7 @@ function walkinModal(event, attendance, reload) {
     <div class="people-pick" id="walk-list">${absent.map((a) => `<button data-pid="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}">
       <span class="nm">${esc(fullName(a))}</span>${statusPill(a.status)}</button>`).join('') || `<p class="muted">${t('Tothom ja consta com a present.')}</p>`}</div>
     <form id="walk-new" class="pick-bar">
-      <input name="name" placeholder="${t("No és a l'app? Escriu nom i cognoms")}" autocomplete="off">
+      <input name="name" maxlength="60" placeholder="${t("No és a l'app? Escriu nom i cognoms")}" autocomplete="off">
       <button class="btn">${t('Crea i afegeix')}</button>
     </form>
     <div class="form-actions"><button class="btn primary" data-close>${t('Fet')}</button></div>`, (m) => {
@@ -1031,7 +1034,7 @@ function castellModal(eventId, castell, onLost) {
       <div class="form-grid">
         <label class="field">${t('Persones per pis')}<select name="width">${WIDTHS.map((w) => `<option value="${w.value}" ${Number(c.width) === w.value ? 'selected' : ''}>${w.label}</option>`).join('')}</select></label>
         <label class="field">${t('Pisos')}<input name="height" type="number" min="3" max="11" value="${c.height}" required></label>
-        <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="12" value="${c.cordons}"><span class="small muted hidden" id="cordons-tpl">${t('Els marca la pinya de la colla')}</span></label>
+        <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="8" value="${c.cordons}"><span class="small muted hidden" id="cordons-tpl">${t('Els marca la pinya de la colla')}</span></label>
         <label class="check" id="ag-wrap"><input type="checkbox" name="agulla" ${c.agulla ? 'checked' : ''}> ${t('Amb agulla (pilar central)')}</label>
         <label class="check"><input type="checkbox" name="folre" ${c.folre ? 'checked' : ''}> ${t('Folre')}</label>
         <label class="check"><input type="checkbox" name="manilles" ${c.manilles ? 'checked' : ''}> ${t('Manilles')}</label>
@@ -1058,9 +1061,9 @@ function castellModal(eventId, castell, onLost) {
         </div>
       </fieldset>
       <div class="form-grid" style="margin-top:14px">
-        <label class="field full">${t('Etiqueta (opcional)')}<input name="label" value="${esc(c.label)}" placeholder="${t('1a ronda, prova de tronc…')}"></label>
+        <label class="field full">${t('Etiqueta (opcional)')}<input name="label" maxlength="60" value="${esc(c.label)}" placeholder="${t('1a ronda, prova de tronc…')}"></label>
         ${castell ? `<label class="field">${t('Resultat')}<select name="result">${Object.keys(RESULTS).map((v) => `<option value="${v}" ${c.result === v ? 'selected' : ''}>${resultLabel(v)}</option>`).join('')}</select></label>` : ''}
-        <label class="field full">${t('Notes')}<textarea name="notes">${esc(c.notes)}</textarea></label>
+        <label class="field full">${t('Notes')}<textarea name="notes" maxlength="2000">${esc(c.notes)}</textarea></label>
         <label class="check full"><input type="checkbox" name="hidden" ${c.hidden ? 'checked' : ''}> ${icon.eyeOff} ${t('Ocult per als membres (el pots mostrar quan estigui a punt)')}</label>
       </div>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${castell ? t('Desa') : t('Crea')}</button></div>
@@ -1855,14 +1858,14 @@ function personHistoryHtml(h) {
 
 // ---------- Persones ----------
 function personFields(p = {}, { admin = false, isNew = false } = {}) {
-  const n = (name, label, unit, step = '1') => `<label class="field">${label} (${unit})<input name="${name}" type="number" min="0" step="${step}" inputmode="decimal" value="${p[name] ?? ''}"></label>`;
+  const n = (name, label, unit, step = '1') => `<label class="field">${label} (${unit})<input name="${name}" type="number" min="${MEASURES[name][0]}" max="${MEASURES[name][1]}" step="${step}" inputmode="decimal" value="${p[name] ?? ''}"></label>`;
   return `<div class="form-grid">
-    <label class="field full">${t('Nom i cognoms')}<input name="name" required value="${esc(p.name)}"></label>
+    <label class="field full">${t('Nom i cognoms')}<input name="name" required maxlength="100" value="${esc(p.name)}"></label>
     <p class="small muted full" style="margin:-4px 0 0">${t('El malnom és el que surt a la pinya i al tronc, i no es pot repetir. Si no en té, es mostra el nom i la inicial del cognom.')}</p>
-    <label class="field">${t('Malnom')}<input name="alias" value="${esc(p.alias)}" placeholder="${t('Com et coneixen a la colla')}"></label>
-    <label class="field">${t('Data de naixement')}<input name="birthdate" type="date" value="${esc(p.birthdate)}"></label>
-    <label class="field">${t('Telèfon')}<input name="phone" type="tel" value="${esc(p.phone)}"></label>
-    <label class="field">${t('Correu')}<input name="email" type="email" value="${esc(p.email)}"></label>
+    <label class="field">${t('Malnom')}<input name="alias" maxlength="40" value="${esc(p.alias)}" placeholder="${t('Com et coneixen a la colla')}"></label>
+    <label class="field">${t('Data de naixement')}<input name="birthdate" type="date" min="1900-01-01" max="${todayIso()}" value="${esc(p.birthdate)}"></label>
+    <label class="field">${t('Telèfon')}<input name="phone" type="tel" maxlength="30" value="${esc(p.phone)}"></label>
+    <label class="field">${t('Correu')}<input name="email" type="email" maxlength="120" value="${esc(p.email)}"></label>
     <label class="field">${t('Músic/a')}<select name="instrument"><option value="">${t('No toca')}</option>${Object.entries(INSTRUMENTS).map(([v, l]) => `<option value="${v}" ${p.instrument === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
   </div>
   <fieldset style="margin-top:16px"><legend>${t('Mides')}</legend><div class="form-grid">
@@ -1871,7 +1874,7 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
     ${n('shoulder_width_cm', t("Amplada d'espatlles"), 'cm')}
     ${n('weight_kg', t('Pes'), 'kg', '0.1')}
   </div></fieldset>
-  <label class="field" style="margin-top:12px">${t('Notes')}<textarea name="notes" placeholder="${t('Posicions habituals, lesions…')}">${esc(p.notes)}</textarea></label>
+  <label class="field" style="margin-top:12px">${t('Notes')}<textarea name="notes" maxlength="2000" placeholder="${t('Posicions habituals, lesions…')}">${esc(p.notes)}</textarea></label>
   ${admin && !isNew ? `<label class="check" style="margin-top:12px"><input type="checkbox" name="active" ${p.active !== 0 ? 'checked' : ''}> ${t('Activa (desmarca-ho si ha deixat la colla)')}</label>` : ''}`;
 }
 
@@ -2026,7 +2029,7 @@ async function pageNews() {
 function newsModal(a) {
   openModal(`${modalHead(a ? t('Edita el missatge') : t('Nou missatge'))}
     <form id="news-form" class="stack">
-      <label class="field">${t('Títol')}<input name="title" required maxlength="150" value="${esc(a?.title)}" placeholder="${t('p. ex. Canvi d\'hora de l\'assaig')}"></label>
+      <label class="field">${t('Títol')}<input name="title" required maxlength="120" value="${esc(a?.title)}" placeholder="${t('p. ex. Canvi d\'hora de l\'assaig')}"></label>
       <label class="field">${t('Missatge')}<textarea name="body" rows="7" maxlength="4000" placeholder="${t('Les adreces web es converteixen en enllaços.')}">${esc(a?.body)}</textarea></label>
       <label class="check"><input type="checkbox" name="pinned" ${a?.pinned ? 'checked' : ''}> ${t('Fixa-ho a dalt de tot')}</label>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${a ? t('Desa') : t('Publica')}</button></div>
@@ -2144,9 +2147,9 @@ async function pageTemplate(name) {
     } else {
       const used = usage[item.key] || 0;
       panel.innerHTML = `<div class="tpl-fields">
-          <label class="field">${t('Nom')}<input id="tpl-role" maxlength="60" value="${esc(item.role)}"></label>
+          <label class="field">${t('Nom')}<input id="tpl-role" maxlength="30" value="${esc(item.role)}"></label>
           <label class="field">${t('Tipus')}<select id="tpl-kind">${TEMPLATE_KINDS.map((k) => `<option value="${k}" ${k === item.kind ? 'selected' : ''}>${t(KIND_NAMES[k])}</option>`).join('')}</select></label>
-          ${['mans', 'vent', 'lateral'].includes(item.kind) ? `<label class="field">${t('Cordó')}<input id="tpl-ring" type="number" min="1" max="12" value="${item.ring || 1}"></label>` : ''}
+          ${['mans', 'vent', 'lateral'].includes(item.kind) ? `<label class="field">${t('Cordó')}<input id="tpl-ring" type="number" min="1" max="8" value="${item.ring || 1}"></label>` : ''}
         </div>
         ${rotate}
         <div class="tpl-rot"><button class="btn sm" id="tpl-dup">${t('Duplica')}</button><button class="btn sm danger" id="tpl-del">${t('Treu')}</button></div>
@@ -2155,7 +2158,7 @@ async function pageTemplate(name) {
       qs('#tpl-kind').onchange = (e) => { editor.update({ kind: e.target.value }); showPanel(editor.selected); };
       const ring = qs('#tpl-ring');
       if (ring) ring.onchange = (e) => { editor.update({ ring: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }); showPanel(editor.selected); };
-      qs('#tpl-dup').onclick = () => editor.duplicate();
+      qs('#tpl-dup').onclick = () => { if (editor.duplicate() === false) toast(t('Com a molt {n} caixes per capa', { n: MAX_BOXES }), true); };
       qs('#tpl-del').onclick = () => {
         if (used && !confirm(t("Aquesta posició surt {n} cops a l'historial. Si la treus, deixarà de sortir als castells i a les estadístiques (no s'esborra res: si la tornes a posar, torna). Continuar?", { n: used }))) return;
         editor.remove();
@@ -2175,7 +2178,7 @@ async function pageTemplate(name) {
     editor.setLayer(b.dataset.v);
     count();
   }));
-  qsa('[data-add]').forEach((b) => (b.onclick = () => editor.add(b.dataset.add)));
+  qsa('[data-add]').forEach((b) => (b.onclick = () => { if (editor.add(b.dataset.add) === false) toast(t('Com a molt {n} caixes per capa', { n: MAX_BOXES }), true); }));
   qs('#tpl-zoom-in').onclick = () => editor.zoomBy(1.4);
   qs('#tpl-zoom-out').onclick = () => editor.zoomBy(1 / 1.4);
   qs('#tpl-standard').onclick = () => {
@@ -2259,8 +2262,8 @@ function adminModal(account) {
   const self = account?.id === me.admin_id;
   openModal(`${modalHead(account ? esc(account.name) : t('Nou compte'))}
     <form id="admin-form" class="stack">
-      <label class="field">${t('Nom')}<input name="name" required value="${esc(account?.name)}" placeholder="${t('p. ex. Junta tècnica, Marta…')}"></label>
-      <label class="field">${t('Usuari')}<input name="username" required autocapitalize="none" autocomplete="off" value="${esc(account?.username)}"></label>
+      <label class="field">${t('Nom')}<input name="name" required maxlength="60" value="${esc(account?.name)}" placeholder="${t('p. ex. Junta tècnica, Marta…')}"></label>
+      <label class="field">${t('Usuari')}<input name="username" required maxlength="60" autocapitalize="none" autocomplete="off" value="${esc(account?.username)}"></label>
       <label class="field">${account ? t('Nova contrasenya') : t('Contrasenya')}<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" ${account ? '' : 'required'} placeholder="${account ? t('Deixa-ho buit per no canviar') : t('Mínim 8 caràcters')}"></label>
       <label class="field">${t('La teva contrasenya')}<input name="currentPassword" type="password" autocomplete="current-password" required>
         <span class="small muted">${t('Per seguretat, crear, canviar o esborrar comptes demana la teva contrasenya.')}</span></label>

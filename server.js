@@ -70,8 +70,30 @@ function int(value, min, max, fallback) {
   return n;
 }
 const bool = (v) => (v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0);
-const isDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
-const isTime = (v) => v == null || v === '' || (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v));
+// Una data que existeix de debò (res de «2026-02-31») i una hora del dia.
+const isDate = (v) => {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+};
+const isTime = (v) => v == null || v === '' || (typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v));
+// Un número dins d'un marge raonable (amb un decimal com a molt), o res.
+function inRange(value, min, max) {
+  const n = num(value);
+  if (n === null) return null;
+  if (n < min || n > max) fail(400, 'Valor fora de rang ({min}-{max})', { min, max });
+  return Math.round(n * 10) / 10;
+}
+// Quantes coses hi pot haver com a molt: res d'això té sentit a milers (i la pàgina no ho podria mostrar).
+const LIMITS = {
+  people: 2000, events: 5000, admins: 25, announcements: 300, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
+  guestsPerEvent: 200, companions: 6, templateBoxes: 200,
+};
+// Mides humanes possibles (en cm i kg): un valor fora d'aquí és un error en escriure'l.
+const MEASURES = { height_cm: [50, 230], shoulder_height_cm: [30, 200], shoulder_width_cm: [15, 80], weight_kg: [10, 200] };
+function atMost(max, message, sql, ...args) {
+  if (db.prepare(sql).get(...args).n >= max) fail(400, message, { n: max });
+}
 const pad = (n) => String(n).padStart(2, '0');
 const localStamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const nowLocal = () => localStamp(new Date());
@@ -90,20 +112,21 @@ function personRow(p) {
   return rest;
 }
 
+const PERSON_TEXT = { name: 100, alias: 40, email: 120, phone: 30, notes: 2000 };
 function pickPersonFields(body, fields) {
   const out = {};
   for (const f of fields) {
     if (!(f in body)) continue;
-    if (NUMERIC_PERSON_FIELDS.includes(f)) out[f] = num(body[f]);
+    if (NUMERIC_PERSON_FIELDS.includes(f)) out[f] = inRange(body[f], ...MEASURES[f]);
     else if (f === 'birthdate') {
       const v = str(body[f], 10);
-      if (v && !isDate(v)) fail(400, 'Data de naixement no vàlida');
+      if (v && (!isDate(v) || v < '1900-01-01' || v > nowLocal().slice(0, 10))) fail(400, 'Data de naixement no vàlida');
       out[f] = v;
     } else if (f === 'instrument') {
       if (body.instrument && !INSTRUMENTS.includes(body.instrument)) fail(400, 'Instrument no vàlid');
       out.instrument = body.instrument || null;
     } else if (f === 'active') out.active = bool(body.active);
-    else out[f] = str(body[f], f === 'notes' ? 2000 : 200);
+    else out[f] = str(body[f], PERSON_TEXT[f] ?? 200);
   }
   if ('name' in out && !out.name) fail(400, 'El nom és obligatori');
   return out;
@@ -146,10 +169,10 @@ function cleanExtra(fields, extra, enforceRequired) {
   for (const f of fields) {
     let v = extra[f.id];
     if (v === undefined || v === null || v === '') v = null;
-    else if (f.kind === 'number') v = num(v);
+    else if (f.kind === 'number') v = inRange(v, -100000, 100000);
     else if (f.kind === 'bool') v = !!bool(v);
     else if (f.kind === 'select') { if (!f.options.includes(v)) fail(400, 'Opció no vàlida per a «{label}»', { label: f.label }); }
-    else v = str(v, 500);
+    else v = str(v, 300);
     if (enforceRequired && f.required && v === null) fail(400, 'Cal omplir «{label}»', { label: f.label });
     out[f.id] = v;
   }
@@ -194,10 +217,10 @@ function castellInput(body, existing = {}) {
     net,
     from_level: int(merged.from_level, 1, 11, 1),
     to_level: int(merged.to_level, 0, 11, 0),
-    cordons: int(merged.cordons, 0, 12, 4),
+    cordons: int(merged.cordons, 0, 8, 4),
     gralles: int(merged.gralles, 0, 12, 0),
     timbals: int(merged.timbals, 0, 12, 0),
-    label: str(merged.label, 100),
+    label: str(merged.label, 60),
     notes: str(merged.notes, 2000),
     result: RESULTS.includes(merged.result) ? merged.result : 'previst',
     tech_notes: str(merged.tech_notes, 1000),
@@ -438,7 +461,7 @@ route('GET', '/api/me', ({ user, req, res }) => {
 
 // Els administradors poden canviar el nom i la contrasenya del seu compte.
 route('PUT', '/api/me', async ({ user, body, req }) => {
-  const name = 'name' in body ? str(body.name, 100) : user.name;
+  const name = 'name' in body ? str(body.name, 60) : user.name;
   if (!name) fail(400, 'El nom és obligatori');
   if (body.newPassword) {
     noDemoAccounts();
@@ -455,7 +478,7 @@ const adminRow = (a) => ({ id: a.id, username: a.username, name: a.name, created
 function adminInput(body, existing = null) {
   const out = {};
   if ('name' in body || !existing) {
-    out.name = str(body.name, 100);
+    out.name = str(body.name, 60);
     if (!out.name) fail(400, 'El nom és obligatori');
   }
   if ('username' in body || !existing) {
@@ -478,6 +501,7 @@ const noDemoAccounts = () => { if (DEMO) fail(403, DEMO_ACCOUNTS); };
 route('POST', '/api/admins', async ({ body, user, req }) => {
   noDemoAccounts();
   await confirmPassword(req, user, body.currentPassword);
+  atMost(LIMITS.admins, "Com a molt {n} comptes d'administració", 'SELECT COUNT(*) AS n FROM admins');
   const data = adminInput(body);
   const id = insertRow('admins', data);
   return adminRow(db.prepare('SELECT * FROM admins WHERE id = ?').get(id));
@@ -526,6 +550,7 @@ route('GET', '/api/people', () => {
 }, 'admin');
 
 route('POST', '/api/people', ({ body }) => {
+  atMost(LIMITS.people, 'Com a molt {n} persones', 'SELECT COUNT(*) AS n FROM people');
   const data = pickPersonFields(body, PROFILE_FIELDS);
   if (!data.name) fail(400, 'El nom és obligatori');
   checkAliasUnique(data.alias);
@@ -571,19 +596,19 @@ route('GET', '/api/events', ({ user, query }) => {
 
 function eventInput(body) {
   if (!EVENT_TYPES.includes(body.type)) fail(400, 'Tipus de sessió no vàlid');
-  if (!isDate(body.date)) fail(400, 'Data no vàlida');
+  if (!isDate(body.date) || body.date < '2000-01-01' || body.date > '2100-12-31') fail(400, 'Data no vàlida');
   if (!isTime(body.start_time) || !isTime(body.end_time)) fail(400, 'Hora no vàlida');
-  const title = str(body.title, 150);
+  const title = str(body.title, 120);
   if (!title) fail(400, 'El títol és obligatori');
   if (!isTime(body.escoleta_time)) fail(400, 'Hora no vàlida');
   const escoleta = bool(body.escoleta);
   const until = body.rsvp_until ? String(body.rsvp_until).slice(0, 16) : null;
-  if (until && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(until)) fail(400, 'Data límit no vàlida');
+  if (until && !(isDate(until.slice(0, 10)) && until[10] === 'T' && isTime(until.slice(11)))) fail(400, 'Data límit no vàlida');
   return {
     rsvp_until: until,
     type: body.type, title, date: body.date,
     start_time: str(body.start_time, 5), end_time: str(body.end_time, 5),
-    location: str(body.location, 200), description: str(body.description, 4000),
+    location: str(body.location, 150), description: str(body.description, 4000),
     escoleta, escoleta_time: escoleta ? str(body.escoleta_time, 5) : null,
     ...('hidden' in body ? { hidden: bool(body.hidden) } : {}),
     ...('ask_companions' in body ? { ask_companions: bool(body.ask_companions) } : {}),
@@ -591,6 +616,7 @@ function eventInput(body) {
 }
 
 route('POST', '/api/events', ({ body }) => {
+  atMost(LIMITS.events, 'Com a molt {n} sessions', 'SELECT COUNT(*) AS n FROM events');
   const id = insertRow('events', eventInput(body));
   return getEvent(id);
 }, 'admin');
@@ -688,7 +714,7 @@ function attendancePatch(event, body, { admin }) {
     patch.status = body.status;
   }
   if ('extra' in body) patch.extra = cleanExtra(loadFields(event.id), body.extra, !admin && body.status === 'si');
-  if ('comment' in body) patch.comment = str(body.comment, 500);
+  if ('comment' in body) patch.comment = str(body.comment, 300);
   const tri = (v) => (v === null || v === undefined || v === '' ? null : bool(v));
   if ('escoleta' in body) patch.escoleta = tri(body.escoleta);
   if (admin && 'came' in body) patch.came = tri(body.came);
@@ -699,11 +725,11 @@ function attendancePatch(event, body, { admin }) {
 // Si la sessió pregunta pels acompanyants, cada acompanyant és una persona temporal de la sessió i la tècnica la pot
 // col·locar als castells. La llista es manté sola amb la resposta: si en diu menys o ja no ve, els que encara no
 // són a cap castell s'esborren; els que ja hi són es queden marcats perquè l'administració ho vegi.
-const MAX_COMPANIONS = 10;
+const MAX_COMPANIONS = LIMITS.companions;
 function companionNames(body) {
   if (!('companions' in body)) return undefined;
   if (!Array.isArray(body.companions) || body.companions.length > MAX_COMPANIONS) fail(400, 'Com a molt {n} acompanyants', { n: MAX_COMPANIONS });
-  return body.companions.map((n) => (typeof n === 'string' ? str(n, 80) : null));
+  return body.companions.map((n) => (typeof n === 'string' ? str(n, 60) : null));
 }
 function syncCompanions(event, personId, names) {
   if (!event.ask_companions) return;
@@ -789,14 +815,16 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
 
 // ---------- Rutes: camps extra ----------
 function fieldInput(body) {
-  const label = str(body.label, 100);
+  const label = str(body.label, 60);
   if (!label) fail(400, 'El camp necessita un nom');
   if (!FIELD_KINDS.includes(body.kind)) fail(400, 'Tipus de camp no vàlid');
   let options = null;
   if (body.kind === 'select') {
     const list = (Array.isArray(body.options) ? body.options : String(body.options || '').split(','))
-      .map((o) => String(o).trim()).filter(Boolean);
+      .map((o) => String(o).trim().slice(0, 40)).filter(Boolean);
     if (list.length < 2) fail(400, 'Una llista necessita almenys dues opcions');
+    if (list.length > LIMITS.fieldOptions) fail(400, 'Com a molt {n} opcions', { n: LIMITS.fieldOptions });
+    if (new Set(list).size !== list.length) fail(400, 'Hi ha opcions repetides');
     options = JSON.stringify(list);
   }
   return { label, kind: body.kind, options, required: bool(body.required) };
@@ -804,6 +832,7 @@ function fieldInput(body) {
 
 route('POST', '/api/events/:id/fields', ({ params, body }) => {
   getEvent(params.id);
+  atMost(LIMITS.fieldsPerEvent, 'Com a molt {n} camps per sessió', 'SELECT COUNT(*) AS n FROM event_fields WHERE event_id = ?', params.id);
   const position = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM event_fields WHERE event_id = ?').get(params.id).p;
   insertRow('event_fields', { event_id: Number(params.id), position, ...fieldInput(body) });
   return loadFields(params.id);
@@ -816,9 +845,10 @@ route('DELETE', '/api/fields/:id', ({ params }) => {
 
 // ---------- Rutes: persones temporals d'una sessió ----------
 function guestInput(body) {
-  const name = str(body.name, 80);
+  const name = str(body.name, 60);
   if (!name) fail(400, 'El nom és obligatori');
-  return { name, colla: str(body.colla, 80), shoulder_height_cm: num(body.shoulder_height_cm), weight_kg: num(body.weight_kg) };
+  return { name, colla: str(body.colla, 80), shoulder_height_cm: inRange(body.shoulder_height_cm, ...MEASURES.shoulder_height_cm),
+    weight_kg: inRange(body.weight_kg, ...MEASURES.weight_kg) };
 }
 const guestsOf = (eventId) => db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM castell_positions WHERE guest_id = g.id) AS placed,
     COALESCE(p.alias, p.name) AS companion_of_name
@@ -826,6 +856,7 @@ const guestsOf = (eventId) => db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM cast
 
 route('POST', '/api/events/:id/guests', ({ params, body }) => {
   const event = getEvent(params.id);
+  atMost(LIMITS.guestsPerEvent, 'Com a molt {n} persones temporals per sessió', 'SELECT COUNT(*) AS n FROM event_guests WHERE event_id = ?', event.id);
   const id = insertRow('event_guests', { event_id: event.id, ...guestInput(body) });
   return db.prepare('SELECT * FROM event_guests WHERE id = ?').get(id);
 }, 'admin');
@@ -885,6 +916,7 @@ function copyLineup(target, sourceId) {
 
 route('POST', '/api/events/:id/castells', ({ params, body }) => {
   if (getEvent(params.id).type === 'musics') fail(400, 'Els assajos de músics no tenen castells');
+  atMost(LIMITS.castellsPerEvent, 'Com a molt {n} castells per sessió', 'SELECT COUNT(*) AS n FROM castells WHERE event_id = ?', params.id);
   const position = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(params.id).p;
   return transaction(() => {
     const id = insertRow('castells', { event_id: Number(params.id), position, ...castellInput(body) });
@@ -946,6 +978,7 @@ route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
   const castell = getCastell(params.id);
   const target = getEvent(body.event_id ?? castell.event_id);
   if (target.type === 'musics') fail(400, 'Els assajos de músics no tenen castells');
+  atMost(LIMITS.castellsPerEvent, 'Com a molt {n} castells per sessió', 'SELECT COUNT(*) AS n FROM castells WHERE event_id = ?', target.id);
   return transaction(() => {
     const { id, event_id, position, ...rest } = castell;
     const nextPos = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(target.id).p;
@@ -965,6 +998,8 @@ route('PUT', '/api/castells/:id/positions/:key', ({ params, body }) => {
   if (!/^[\w-]{1,40}$/.test(key)) fail(400, 'Posició no vàlida');
   const personId = body.person_id ? Number(body.person_id) : null;
   const guestId = !personId && body.guest_id ? Number(body.guest_id) : null;
+  // Es pot buidar qualsevol clau (p. ex. una que la plantilla ha tret), però només es pot posar gent a les del castell.
+  if ((personId || guestId) && !positionOf(castell, key)) fail(400, 'Posició no vàlida');
   if (personId && !db.prepare('SELECT 1 FROM people WHERE id = ?').get(personId)) fail(404, 'Persona no trobada');
   const guest = guestId ? db.prepare('SELECT * FROM event_guests WHERE id = ? AND event_id = ?').get(guestId, castell.event_id) : null;
   if (guestId && !guest) fail(404, 'Persona temporal no trobada');
@@ -984,10 +1019,13 @@ route('PUT', '/api/castells/:id/positions/:key', ({ params, body }) => {
 route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
   const castell = getCastell(params.id);
   if (!Array.isArray(body.assignments)) fail(400, 'Falten les assignacions');
+  const positions = structureOf(castell).positions;
+  if (body.assignments.length > positions.size + 50) fail(400, 'Posició no vàlida');
   const list = body.assignments.map((a) => {
-    const key = String(a.pos_key || '');
-    if (!/^[\w-]{1,40}$/.test(key)) fail(400, 'Posició no vàlida');
-    return { key, personId: a.person_id ? Number(a.person_id) : null };
+    const key = String(a?.pos_key || '');
+    const personId = a?.person_id ? Number(a.person_id) : null;
+    if (!/^[\w-]{1,40}$/.test(key) || (personId && !positions.has(key))) fail(400, 'Posició no vàlida');
+    return { key, personId };
   });
   transaction(() => {
     const del = db.prepare('DELETE FROM castell_positions WHERE castell_id = ? AND pos_key = ?');
@@ -1007,7 +1045,7 @@ route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
 // Missatges d'informació de l'administració per a tota la colla. Els membres no veuen qui els ha escrit
 // (els comptes d'administració poden dur el nom complet d'una persona).
 function announcementInput(body) {
-  const title = str(body.title, 150);
+  const title = str(body.title, 120);
   if (!title) fail(400, 'El títol és obligatori');
   return { title, body: str(body.body, 4000), pinned: bool(body.pinned) };
 }
@@ -1017,6 +1055,7 @@ route('GET', '/api/announcements', ({ user }) => db.prepare(`SELECT * FROM annou
   ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 200`).all().map((a) => (user.role === 'admin' ? a : { ...a, author: undefined })));
 
 route('POST', '/api/announcements', ({ body, user }) => {
+  atMost(LIMITS.announcements, "Com a molt {n} missatges: esborra'n algun d'antic", 'SELECT COUNT(*) AS n FROM announcements');
   const id = insertRow('announcements', { ...announcementInput(body), author: user.name, created_at: nowUtc() });
   return getAnnouncement(id);
 }, 'admin');
@@ -1054,7 +1093,8 @@ function templateInput(name, body) {
   const keys = new Set();
   for (const [id, items] of Object.entries(body.layers)) {
     const layer = def.layers.find((l) => l.id === id);
-    if (!layer || !Array.isArray(items) || items.length > 400) fail(400, 'Plantilla no vàlida');
+    if (!layer || !Array.isArray(items)) fail(400, 'Plantilla no vàlida');
+    if (items.length > LIMITS.templateBoxes) fail(400, 'Com a molt {n} caixes per capa', { n: LIMITS.templateBoxes });
     const bases = new Set();
     out[id] = items.map((it) => {
       if (!it || typeof it !== 'object') fail(400, 'Plantilla no vàlida');
@@ -1074,8 +1114,8 @@ function templateInput(name, body) {
       if (!/^[a-z][a-z0-9-]{0,23}$/.test(key) || !key.startsWith(LAYER_PREFIX[id]) || /^m[gt]\d/.test(key) || keys.has(key)) fail(400, 'Plantilla no vàlida');
       keys.add(key);
       const kind = TEMPLATE_KINDS.includes(it.kind) ? it.kind : fail(400, 'Plantilla no vàlida');
-      const role = str(it.role, 60) || fail(400, 'Cada posició necessita un nom');
-      const ring = int(it.ring, 0, 12, 0);
+      const role = str(it.role, 30) || fail(400, 'Cada posició necessita un nom');
+      const ring = int(it.ring, 0, 8, 0);
       return { key, role, kind, ...box, ...(ring ? { ring } : {}) };
     });
   }

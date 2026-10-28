@@ -207,6 +207,10 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
 - L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula i no es guarda a la memòria
   cau del navegador. Al calendari (`.ics`), el text de les sessions no pot afegir línies.
 - Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
+- Límits per al que no té sentit: textos tallats (noms 100, malnoms 40, comentaris 300, caixes de plantilla 30…),
+  alçades i pesos possibles, dates i hores que existeixen, i com a molt 6 acompanyants per persona, 30 castells,
+  15 camps extra i 200 persones temporals per sessió, 200 caixes per capa de plantilla i només posicions que el
+  castell té. Els valors són a `LIMITS` i `MEASURES` (a `server.js`; l'app fa servir els mateixos).
 - Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
   dir qui va a l'escoleta, sense comentaris ni respostes als camps extra dels altres, i sense les
   notes de la tècnica. Les persones temporals també surten com a «Nom I.». Les sessions i els castells ocults no
