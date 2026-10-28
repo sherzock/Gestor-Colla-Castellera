@@ -124,6 +124,11 @@ export function createEditor(root, { layers, baseLabel, usage, t, onChange, onSe
   };
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
+  // Als mòbils, «touch-action» no sempre val dins d'un SVG (Safari l'ignora): si el dit comença sobre una caixa, el
+  // navegador encara faria scroll alhora. Aturant l'esdeveniment tàctil, el dit només mou la caixa; al fons es desplaça.
+  const noScroll = (e) => { if (e.target.closest?.('g.box') || drag) e.preventDefault(); };
+  svg.addEventListener('touchstart', noScroll, { passive: false });
+  svg.addEventListener('touchmove', noScroll, { passive: false });
 
   const nextKey = () => {
     const prefix = `${LAYER_PREFIX[layerId]}n`;
