@@ -797,3 +797,7 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .news-body { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .news-body a { color: var(--accent); }
 .empty > svg { width: 32px; height: 32px; opacity: .5; }
+
+/* Omplir un castell com un d'anterior */
+.copy-from { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin-bottom: 14px; border: 1px dashed var(--accent); border-radius: 10px; background: var(--accent-soft); }
+.copy-from select { width: 100%; }

@@ -831,11 +831,50 @@ route('DELETE', '/api/guests/:id', ({ params }) => {
 }, 'admin');
 
 // ---------- Rutes: castells i posicions ----------
+// ---------- Omplir un castell com un d'anterior ----------
+// Els últims castells del mateix tipus («3d7») fets fins a la data d'aquesta sessió, amb gent col·locada,
+// per copiar-ne l'alineació tal qual.
+const SOURCES_LIMIT = 6;
+route('GET', '/api/events/:id/castell-sources', ({ params, query }) => {
+  const event = getEvent(params.id);
+  const name = String(query.get('name') || '');
+  if (!configFromName(name)) fail(400, 'Castell no vàlid');
+  const exclude = Number(query.get('exclude')) || 0;
+  const placed = db.prepare('SELECT COUNT(*) AS n FROM castell_positions WHERE castell_id = ?');
+  const out = [];
+  for (const c of db.prepare(`SELECT c.*, e.title AS event_title, e.date AS event_date, e.type AS event_type FROM castells c
+      JOIN events e ON e.id = c.event_id WHERE e.date <= ? AND c.id != ? ORDER BY e.date DESC, e.start_time DESC, c.position DESC, c.id DESC`).all(event.date, exclude)) {
+    if (castellName(c) !== name) continue;
+    const n = placed.get(c.id).n;
+    if (!n) continue;
+    out.push({ id: c.id, event_id: c.event_id, event_title: c.event_title, event_date: c.event_date, event_type: c.event_type, label: c.label,
+      result: c.result, placed: n, cordons: c.cordons, gralles: c.gralles, timbals: c.timbals, from_level: c.from_level, to_level: c.to_level });
+    if (out.length >= SOURCES_LIMIT) break;
+  }
+  return out;
+}, 'admin');
+
+// Substitueix l'alineació del castell per la d'un altre del mateix tipus. Només es copien les posicions que aquest
+// castell té i la gent activa; les persones temporals, només si són de la mateixa sessió.
+function copyLineup(target, sourceId) {
+  const source = getCastell(sourceId);
+  if (castellName(source) !== castellName(target)) fail(400, 'Només es pot copiar un castell del mateix tipus');
+  const sameEvent = source.event_id === target.event_id;
+  const rows = db.prepare(`SELECT cp.* FROM castell_positions cp LEFT JOIN people p ON p.id = cp.person_id
+    WHERE cp.castell_id = ? AND (p.active = 1 OR (cp.person_id IS NULL AND ? = 1))`).all(source.id, sameEvent ? 1 : 0);
+  db.prepare('DELETE FROM castell_positions WHERE castell_id = ?').run(target.id);
+  const ins = db.prepare('INSERT INTO castell_positions (castell_id, pos_key, person_id, guest_name, guest_id) VALUES (?, ?, ?, ?, ?)');
+  for (const r of rows) if (positionOf(target, r.pos_key)) ins.run(target.id, r.pos_key, r.person_id, r.guest_name, r.guest_id);
+}
+
 route('POST', '/api/events/:id/castells', ({ params, body }) => {
   if (getEvent(params.id).type === 'musics') fail(400, 'Els assajos de músics no tenen castells');
   const position = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(params.id).p;
-  const id = insertRow('castells', { event_id: Number(params.id), position, ...castellInput(body) });
-  return getCastell(id);
+  return transaction(() => {
+    const id = insertRow('castells', { event_id: Number(params.id), position, ...castellInput(body) });
+    if (body.copy_from) copyLineup(getCastell(id), Number(body.copy_from));
+    return getCastell(id);
+  });
 }, 'admin');
 
 route('GET', '/api/castells/:id', ({ params, user }) => {
@@ -877,6 +916,7 @@ route('PUT', '/api/castells/:id', ({ params, body }) => {
         if (!keep.has(pos_key)) db.prepare('DELETE FROM castell_positions WHERE castell_id = ? AND pos_key = ?').run(castell.id, pos_key);
       }
     }
+    if (body.copy_from) copyLineup(getCastell(castell.id), Number(body.copy_from));
   });
   return getCastell(castell.id);
 }, 'admin');

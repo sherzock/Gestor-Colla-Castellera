@@ -96,6 +96,11 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 - **Revisió de l'alineació** (admins): a cada castell, avisos de gent col·locada que ha dit que no ve o
   que no ha contestat; posicions buides al tronc; pisos amb més de 5 cm de diferència d'alçada d'espatlles; i algú que
   pesa més de 3 kg més que qui el porta. Tocant un nom es va a la seva posició.
+- **Omplir com un castell anterior** (admins): en afegir o editar un castell, el formulari ofereix els 6 castells
+  més recents del mateix tipus (de qualsevol sessió fins a la data d'aquesta) que tinguin gent col·locada. Si en tries
+  un, se'n copien la gent de cada posició, els cordons, la música i els pisos de la prova. En editar, substitueix
+  l'alineació que hi havia (abans es demana confirmació). No es copia gent donada de baixa ni persones temporals d'una
+  altra sessió.
 - **Muntador automàtic** (admins): proposa una alineació amb qui ha confirmat, tenint en
   compte l'historial (la mateixa posició en el mateix castell i, en segon terme, la categoria en qualsevol castell, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
   (la canalla només al pom de dalt). Pots muntar només el tronc, només la pinya o tot, i mantenir el que ja hi ha.

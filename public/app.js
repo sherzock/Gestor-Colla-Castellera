@@ -1021,6 +1021,10 @@ function castellModal(eventId, castell, onLost) {
   openModal(`${modalHead(castell ? t('Edita el castell') : t('Nou castell'))}
     <form id="castell-form">
       <div class="castell-title" id="cname" style="text-align:center;margin-bottom:12px">${castellName(c)}</div>
+      <div class="copy-from hidden" id="copy-wrap">
+        <label class="field">${t('Omple-ho com un castell anterior')}<select name="copy_from"></select></label>
+        <p class="small muted" style="margin:0" id="copy-note">${castell ? t("Es substituirà l'alineació actual per la del castell triat.") : t("Es copiaran les persones de cada posició, els cordons i la música.")}</p>
+      </div>
       <div class="form-grid">
         <label class="field">${t('Persones per pis')}<select name="width">${WIDTHS.map((w) => `<option value="${w.value}" ${Number(c.width) === w.value ? 'selected' : ''}>${w.label}</option>`).join('')}</select></label>
         <label class="field">${t('Pisos')}<input name="height" type="number" min="3" max="11" value="${c.height}" required></label>
@@ -1110,14 +1114,61 @@ function castellModal(eventId, castell, onLost) {
       form.elements.height.min = d.width === 1 ? 3 : 4;
       qs('#cname', m).textContent = castellName(d);
     };
-    form.oninput = sync;
+    // Castells anteriors del mateix tipus per copiar-ne l'alineació (els més recents).
+    const sourceCache = new Map();
+    let sources = [];
+    const copySel = form.elements.copy_from;
+    const loadSources = async () => {
+      const name = castellName(read());
+      if (!sourceCache.has(name)) {
+        sourceCache.set(name, api('GET', `/events/${castell?.event_id ?? eventId}/castell-sources?name=${encodeURIComponent(name)}${castell ? `&exclude=${castell.id}` : ''}`).catch(() => []));
+      }
+      const list = await sourceCache.get(name);
+      if (castellName(read()) !== name) return; // ha canviat mentre es carregava
+      const keep = copySel.value;
+      sources = list;
+      copySel.innerHTML = `<option value="">${t('No, deixa-ho com està')}</option>` + list.map((x) => `<option value="${x.id}">${esc([
+        fmt(x.event_date, { day: 'numeric', month: 'short', year: 'numeric' }), x.event_title, x.label, resultLabel(x.result), t('{n} persones', { n: x.placed }),
+      ].filter(Boolean).join(' · '))}</option>`).join('');
+      copySel.value = list.some((x) => String(x.id) === keep) ? keep : '';
+      qs('#copy-wrap', m).classList.toggle('hidden', !list.length);
+    };
+    // En triar-ne un, el formulari agafa els cordons, la música i els pisos d'aquell castell.
+    copySel.onchange = () => {
+      const x = sources.find((y) => String(y.id) === copySel.value);
+      if (!x) return;
+      form.elements.cordons.value = x.cordons;
+      form.elements.gralles.value = x.gralles || 0;
+      form.elements.timbals.value = x.timbals || 0;
+      const partial = (x.from_level || 1) > 1 || !!x.to_level;
+      form.elements.partial.checked = partial;
+      levelsKey = '';
+      syncLevels(formData(form));
+      if (partial) {
+        form.elements.from_level.value = String(x.from_level || 1);
+        form.elements.to_level.value = String(x.to_level || Number(form.elements.height.value));
+      }
+      sync();
+    };
+    let lastName = '';
+    form.oninput = (e) => {
+      sync();
+      const name = castellName(read());
+      if (e?.target !== copySel && name !== lastName) { lastName = name; loadSources(); }
+    };
     sync();
+    lastName = castellName(read());
+    loadSources();
     form.onsubmit = async (e) => {
       e.preventDefault();
       const d = read();
+      if (copySel.value) {
+        d.copy_from = Number(copySel.value);
+        if (castell && !confirm(t("Es substituirà l'alineació actual d'aquest castell per la del castell triat. Continuar?"))) return;
+      }
       if (castell) {
         const keys = [...buildStructure(d).positions.keys()];
-        const lost = onLost?.(new Set(keys)) || 0;
+        const lost = d.copy_from ? 0 : onLost?.(new Set(keys)) || 0;
         if (lost && !confirm(t('Amb aquest canvi es perdran {n} persones assignades a posicions que ja no existeixen. Continuar?', { n: lost }))) return;
         d.validKeys = keys;
       }
