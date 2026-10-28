@@ -2632,7 +2632,6 @@ async function pageTecnica(tabs) {
     <div class="page-head"><h1>${t('Estadístiques')}</h1><div class="actions">${tabs}</div></div>
     ${statsFilters(st.seasons)}
     <div class="stats-body">
-      <p class="muted" style="margin:0">${t("Un castell és cosa de tota la colla. Aquí no es mira qui ha fallat, sinó què acompanya els bons resultats, com avança cada castell i on cal reforçar.")}</p>
       ${prepRows ? `<div class="card">
         <h2 style="margin-bottom:6px">${t('Preparació de les properes diades')}</h2>
         <p class="small muted" style="margin:0 0 12px">${t("Quanta gent del tronc ha assajat la seva posició d'aquest castell les últimes 6 setmanes.")}</p>
