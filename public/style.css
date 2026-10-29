@@ -91,10 +91,8 @@ h3 { font-size: .95rem; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); text-decoration: none; }
 .brand-mark { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); display: inline-block;
   mask: none; position: relative; }
-.brand-mark::after { content: ""; position: absolute; inset: 5px 6px; border-radius: 2px;
-  background: linear-gradient(var(--accent-ink) 0 0) 50% 0 / 30% 22% no-repeat,
-              linear-gradient(var(--accent-ink) 0 0) 50% 50% / 60% 22% no-repeat,
-              linear-gradient(var(--accent-ink) 0 0) 50% 100% / 100% 22% no-repeat; }
+.brand-mark::after { content: ""; position: absolute; inset: 3px; background: var(--accent-ink);
+  -webkit-mask: url(/icons/mark.svg) center / contain no-repeat; mask: url(/icons/mark.svg) center / contain no-repeat; }
 .nav { margin-left: auto; display: flex; gap: 4px; }
 .nav a, .nav button {
   display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 8px; border: 0; background: none;
@@ -329,7 +327,11 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .login .card { width: 100%; max-width: 380px; padding: 28px 22px; }
 .login h1 { text-align: center; margin: 14px 0 4px; }
 .login .brand-mark { width: 48px; height: 48px; border-radius: 12px; display: block; margin: 0 auto; }
-.login .brand-mark::after { inset: 10px 11px; }
+.login .brand-mark::after { inset: 6px; }
+/* El nom de l'app, discret, a sota de les pantalles d'entrada (el protagonista és el nom de la colla). */
+.made-with { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .8rem; color: var(--muted); }
+.made-with .brand-mark { width: 16px; height: 16px; border-radius: 4px; margin: 0; }
+.made-with .brand-mark::after { inset: 1px; }
 .error { color: var(--bad); font-size: .9rem; min-height: 1.2em; }
 
 .toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); opacity: 0;

@@ -2,7 +2,7 @@
 // alineacions). Sempre es prova primer la xarxa: amb connexió no es veu mai res antic.
 // En sortir o canviar de persona, l'app esborra les dades desades (OFFLINE_DATA) d'aquest dispositiu.
 // També rep els avisos al mòbil: l'avís arriba buit i el text es demana a l'app (veure push.js).
-const VERSION = 1;
+const VERSION = 2;
 const SHELL = `colla-app-${VERSION}`;
 const DATA = 'colla-dades';
 
@@ -11,7 +11,7 @@ const FILES = ['/', '/index.html', '/style.css', '/theme.js', '/app.js', '/caste
   '/i18n.js', '/import.js', '/muntador.js', '/privacy.js', '/zoom.js', '/ui/accounts.js', '/ui/calendar.js',
   '/ui/castell-form.js', '/ui/core.js', '/ui/event.js', '/ui/login.js', '/ui/news.js', '/ui/notifications.js',
   '/ui/people.js', '/ui/sessions.js', '/ui/shell.js', '/ui/stats.js', '/ui/templates.js', '/ui/viewer.js',
-  '/manifest.webmanifest', '/icons/icon-192.png'];
+  '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg', '/icons/mark.svg'];
 
 // Només es desen les respostes que calen per veure sessions i castells; mai còpies de seguretat, calendaris, etc.
 const SAVED_API = /^\/api\/(config|me|events|events\/\d+|castells\/\d+(\/history|\/prep)?|templates|announcements)$/;

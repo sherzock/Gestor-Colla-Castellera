@@ -48,7 +48,7 @@ async function renderPage({ keepScroll = false } = {}) {
   const args = hash.match(re)?.slice(1) || [];
   try {
     await page(...args);
-    document.title = `${config.collaName}`;
+    document.title = `${config.collaName} · Appinya't`;
   } catch (err) {
     $app.innerHTML = `<div class="empty"><h2>${t("No s'ha pogut carregar")}</h2><p>${esc(err.message)}</p><a class="btn" href="#/">${t("Torna a l'inici")}</a></div>`;
   }

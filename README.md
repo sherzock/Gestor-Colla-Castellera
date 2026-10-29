@@ -1,8 +1,12 @@
-# Colla castellera
+<img src="public/icons/icon.svg" alt="" width="72" align="right">
+
+# Appinya't
 
 [![Proves](https://github.com/sherzock/Gestor-Colla-Castellera/actions/workflows/tests.yml/badge.svg)](https://github.com/sherzock/Gestor-Colla-Castellera/actions/workflows/tests.yml)
 
-Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
+**Appinya't** és l'aplicació (mòbil i ordinador) per organitzar una colla castellera. «Apinyar-se» és ajuntar-se ben
+atapeïts, com a la pinya; la icona és una pinya vista des de dalt. A l'app, el protagonista és el nom de cada colla:
+Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pestanya.
 
 - **Sessions**: assajos, diades, esdeveniments i **assajos de músics**, amb data, hora, lloc i descripció.
   Els assajos de músics només els veuen els músics (i els administradors); no tenen castells, i l'assistència
@@ -386,7 +390,7 @@ seed.js            Dades de demostració
 public/index.html  Pàgina única
 public/theme.js    Aplica el tema i l'idioma abans de pintar la pàgina
 public/sw.js       Service worker: app instal·lable i consulta sense connexió
-public/icons/      Icones de l'app (el manifest el genera el servidor amb el nom de la colla)
+public/icons/      Icones de l'app (icon.svg i les PNG, la marca mark.svg; el manifest el genera el servidor amb el nom de la colla)
 public/app.js      Punt d'entrada de la interfície: rutes i arrencada
 public/ui/         Una pantalla per fitxer:
   core.js          estat compartit, crides a l'API, utilitats, icones i finestres

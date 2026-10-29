@@ -79,12 +79,14 @@ test('cada pantalla importa les funcions dels altres fitxers que crida', () => {
   assert.deepEqual([...new Set(missing)], []);
 });
 
-test('app instal·lable: manifest amb el nom de la colla, icones i tots els fitxers per obrir-la sense connexió', async () => {
+test('app instal·lable: manifest amb el nom de la colla (i d\'Appinya\'t), icones i tots els fitxers per obrir-la sense connexió', async () => {
   const ROOT = path.join(import.meta.dirname, '..');
   const m = await fetch(`${server.url}/manifest.webmanifest`);
   assert.match(m.headers.get('content-type'), /manifest\+json/);
   const manifest = await m.json();
-  assert.equal(manifest.name, (await s.admin('GET', '/config')).d.collaName);
+  const colla = (await s.admin('GET', '/config')).d.collaName;
+  assert.equal(manifest.short_name, colla, 'a la pantalla del mòbil hi surt el nom de la colla');
+  assert.equal(manifest.name, `${colla} · Appinya't`);
   assert.equal(manifest.display, 'standalone');
   for (const icon of manifest.icons) assert.equal((await fetch(server.url + icon.src)).headers.get('content-type'), 'image/png', icon.src);
   assert.match(fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8'), /rel="manifest" href="\/manifest.webmanifest"/);

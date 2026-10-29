@@ -2176,7 +2176,7 @@ route('GET', '/api/calendar.ics', ({ req, res, query }) => {
   const events = one ? [visibleEvent(one, null)]
     : db.prepare(`SELECT * FROM events WHERE hidden = 0 AND date >= date('now','localtime','-90 days')${query.get('musics') === '1' ? '' : " AND type != 'musics'"}
         ORDER BY date, start_time`).all();
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Colla castellera//CA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', "PRODID:-//Appinya't//CA", 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     `X-WR-CALNAME:${icsText(COLLA_NAME)}`, 'X-WR-TIMEZONE:Europe/Madrid', ...ICS_TZ, ...events.flatMap((e) => icsEvent(e, origin)), 'END:VCALENDAR'];
   res.writeHead(200, {
     'Content-Type': 'text/calendar; charset=utf-8',
@@ -2219,7 +2219,7 @@ function sendBody(req, res, status, headers, body, encoded = null) {
 function sendManifest(req, res) {
   const icon = (src, size, purpose = 'any') => ({ src, sizes: `${size}x${size}`, type: 'image/png', purpose });
   sendBody(req, res, 200, { 'Content-Type': MIME['.webmanifest'], 'Cache-Control': 'no-cache' }, JSON.stringify({
-    name: COLLA_NAME, short_name: COLLA_NAME, lang: 'ca', start_url: '/', scope: '/', display: 'standalone',
+    name: `${COLLA_NAME} · Appinya't`, short_name: COLLA_NAME, lang: 'ca', start_url: '/', scope: '/', display: 'standalone',
     background_color: '#f6f5f3', theme_color: '#9b1c2c',
     icons: [icon('/icons/icon-192.png', 192), icon('/icons/icon-512.png', 512), icon('/icons/icon-maskable-512.png', 512, 'maskable')],
   }));

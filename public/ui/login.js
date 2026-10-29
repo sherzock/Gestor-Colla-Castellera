@@ -7,6 +7,9 @@ import { bindSettings, settingsControls } from './shell.js';
 // ---------- Entrada de membres: «Qui ets?» ----------
 // Els membres no tenen contrasenya: només trien el seu nom perquè l'app sàpiga
 // qui confirma l'assistència i on ressaltar-los als castells.
+// El nom de l'app (és un nom propi: no es tradueix).
+const MADE_WITH = '<div class="made-with"><span class="brand-mark" aria-hidden="true"></span>Appinya\'t</div>';
+
 export async function pageIdentify() {
   let code = store.get('collaCode', '');
   const shell = (inner) => `
@@ -18,6 +21,7 @@ export async function pageIdentify() {
       <a href="#/admin" class="small" style="display:block;text-align:center">${t('Entrar com a administrador/a')}</a>
       <a href="#/privadesa" class="small muted" style="display:block;text-align:center">${t('Protecció de dades')}</a>
       <div class="login-settings">${settingsControls()}</div>
+      ${MADE_WITH}
     </div></div>`;
   const bind = (rerun) => bindSettings($app, rerun);
 
@@ -100,6 +104,7 @@ export async function pageAdminLogin() {
       <button class="btn primary" style="width:100%">${t('Entra')}</button>
       <p class="small muted" style="text-align:center;margin:0">${t("El compte d'administració només serveix per editar. Per dir si vens a les sessions, entra com a membre amb el teu nom.")}</p>
       <a href="${me ? '#/' : '#/login'}" class="small" style="display:block;text-align:center">${me ? t("Tornar a l'aplicació") : t('Tornar a «Qui ets?»')}</a>
+      ${MADE_WITH}
     </form></div>`;
   qs('#login-form').onsubmit = async (e) => {
     e.preventDefault();
