@@ -800,12 +800,19 @@ function eventInput(body) {
     escoleta, escoleta_time: escoleta ? str(body.escoleta_time, 5) : null,
     ...('hidden' in body ? { hidden: bool(body.hidden) } : {}),
     ...('ask_companions' in body ? { ask_companions: bool(body.ask_companions) } : {}),
+    ...('address' in body ? { address: str(body.address, 200) } : {}),
   };
 }
 
 route('POST', '/api/events', ({ body }) => {
   atMost(LIMITS.events, 'Com a molt {n} sessions', 'SELECT COUNT(*) AS n FROM events');
-  const id = insertRow('events', eventInput(body));
+  const data = eventInput(body);
+  // Una sessió nova al mateix lloc que una d'anterior en recorda l'adreça del mapa, si no se n'hi posa cap.
+  if (data.location && !data.address) {
+    data.address = db.prepare(`SELECT address FROM events WHERE location = ? AND address IS NOT NULL ORDER BY date DESC, id DESC LIMIT 1`)
+      .get(data.location)?.address ?? null;
+  }
+  const id = insertRow('events', data);
   return getEvent(id);
 }, 'admin');
 
@@ -2181,7 +2188,9 @@ function icsEvent(e, origin) {
   const notes = [ICS_TYPES[e.type], e.escoleta ? `Escoleta${e.escoleta_time ? ` a les ${e.escoleta_time}` : ''}` : null, e.description, `${origin}/#/sessio/${e.id}`];
   lines.push(`SUMMARY:${icsText(e.title)}`, `CATEGORIES:${icsText(ICS_TYPES[e.type])}`, `DESCRIPTION:${icsText(notes.filter(Boolean).join('\n'))}`,
     `URL:${origin}/#/sessio/${e.id}`);
-  if (e.location) lines.push(`LOCATION:${icsText(e.location)}`);
+  // Les apps de calendari busquen el lloc al mapa: hi va també l'adreça, si n'hi ha.
+  const where = [e.location, e.address].filter(Boolean).join(', ');
+  if (where) lines.push(`LOCATION:${icsText(where)}`);
   lines.push('END:VEVENT');
   return lines;
 }

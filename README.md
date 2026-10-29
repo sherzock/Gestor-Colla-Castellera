@@ -22,6 +22,9 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   **enviar un recordatori per WhatsApp** o copiar-lo. El recordatori és general (no diu qui falta, perquè ningú quedi
   assenyalat davant del grup) i porta l'enllaç a la sessió i, si n'hi ha, el lloc i la data límit.
 - **El lloc obre el mapa**: a la pàgina de cada sessió, prémer el lloc l'obre a Google Maps (al mòbil, a l'app de mapes).
+  Si el lloc és un nom que el mapa no coneix («Local de la colla»), a la sessió es pot posar a part l'**adreça per al
+  mapa**: es continua veient el nom, però s'obre l'adreça. Les sessions noves al mateix lloc la recorden, i el
+  calendari la porta al lloc perquè el mòbil la trobi.
 - **Sessions pendents**: a l'inici, cada sessió porta una franja de color segons la teva resposta, i un avís si en tens
   sense respondre. Es pot dir *Vinc* o *No vinc* des de la mateixa llista; si la sessió té preguntes obligatòries,
   *Vinc* porta a la sessió per respondre-les.

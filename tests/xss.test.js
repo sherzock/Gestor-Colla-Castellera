@@ -19,7 +19,7 @@ before(async () => {
   const A = s.admin;
   const date = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
   ids.person = (await A('POST', '/people', { name: `Xènia ${X}`, alias: `X${X}`.slice(0, 30), notes: X })).d.id;
-  ids.event = (await A('POST', '/events', { type: 'diada', title: `Diada ${X}`, date, location: X, description: X, ask_companions: true })).d.id;
+  ids.event = (await A('POST', '/events', { type: 'diada', title: `Diada ${X}`, date, location: X, address: `Adreça ${X}`, description: X, ask_companions: true })).d.id;
   const text = (await A('POST', `/events/${ids.event}/fields`, { label: `Text ${X}`, kind: 'text' })).d.at(-1);
   const sel = (await A('POST', `/events/${ids.event}/fields`, { label: `Llista ${X}`, kind: 'select', options: [`a${X}`, 'b'] })).d.at(-1);
   ids.castell = (await A('POST', `/events/${ids.event}/castells`, { width: 3, height: 7, label: X, notes: X })).d.id;
@@ -156,7 +156,7 @@ test('el recordatori per WhatsApp és general: no diu el nom de ningú', async (
   // I a la pàgina, el lloc obre Google Maps (amb el text codificat dins de l'adreça).
   const map = html.match(/<a class="map-link" href="([^"]+)"/);
   assert.ok(map, 'el lloc és un enllaç');
-  assert.equal(map[1].replace(/&#39;/g, "'").replace(/&amp;/g, '&'), `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(X)}`);
+  assert.equal(map[1].replace(/&#39;/g, "'").replace(/&amp;/g, '&'), `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`Adreça ${X}`)}`);
   const people = (await s.admin('GET', '/people')).d.people;
   const names = people.flatMap((p) => [p.name, p.alias, p.name.replace(/^(\S+)\s+(\S).*$/, '$1 $2.')]).filter((n) => n && n.length > 3);
   assert.deepEqual(names.filter((n) => text.includes(n)), []);

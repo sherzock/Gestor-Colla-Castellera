@@ -103,6 +103,8 @@ export function eventModal(event, defaults = {}) {
         <label class="field">${t('Inici')}<input name="start_time" type="time" value="${esc(e.start_time)}"></label>
         <label class="field">${t('Final')}<input name="end_time" type="time" value="${esc(e.end_time)}"></label>
         <label class="field full">${t('Lloc')}<input name="location" maxlength="150" value="${esc(e.location)}" placeholder="${t('Local, plaça…')}"></label>
+        <label class="field full">${t('Adreça per al mapa (opcional)')}<input name="address" maxlength="200" value="${esc(e.address)}" placeholder="${t('p. ex. Carrer Major, 12, Vilafranca del Penedès')}">
+          <span class="small muted">${t("El lloc és el que es veu; en prémer-lo s'obre aquesta adreça al mapa. Si no en poses, s'obre el lloc. Es recorda per a les sessions noves al mateix lloc.")}</span></label>
         <div class="full escoleta-opt" id="esc-wrap">
           <label class="check"><input type="checkbox" name="escoleta" ${e.escoleta ? 'checked' : ''}> ${t("Hi ha escoleta abans de l'assaig")}</label>
           <label class="field" id="esc-time">${t("Hora de l'escoleta")}<input name="escoleta_time" type="time" value="${esc(e.escoleta_time || '19:00')}"></label>

@@ -259,7 +259,7 @@ export async function pageEvent(id) {
     <div class="page-head"><div class="event-hero">
         <div>${typeBadge(event.type)}${event.hidden ? ` ${hiddenBadge(t('Oculta'))}` : ''}</div>
         <h1>${esc(event.title)}</h1>
-        <div class="meta"><span>${icon.calendar}${fmtLong(event.date)}</span>${time(event) ? `<span>${icon.clock}${time(event)}</span>` : ''}${event.location ? `<a class="map-link" href="${esc(mapsUrl(event.location))}" target="_blank" rel="noopener noreferrer" title="${t('Obre-ho al mapa')}">${icon.pin}${esc(event.location)}</a>` : ''}${event.escoleta ? `<span class="badge escoleta">${t('Escoleta')}${escTime}</span>` : ''}</div>
+        <div class="meta"><span>${icon.calendar}${fmtLong(event.date)}</span>${time(event) ? `<span>${icon.clock}${time(event)}</span>` : ''}${event.location ? `<a class="map-link" href="${esc(mapsUrl(event.address || event.location))}" target="_blank" rel="noopener noreferrer" title="${esc(event.address || t('Obre-ho al mapa'))}">${icon.pin}${esc(event.location)}</a>` : ''}${event.escoleta ? `<span class="badge escoleta">${t('Escoleta')}${escTime}</span>` : ''}</div>
       </div>
       <div class="actions">
         ${event.date >= todayIso() && !event.hidden ? `<a class="btn sm" href="/api/calendar.ics?event=${event.id}${calendarCode('&')}" download>${icon.calAdd}${t('Al meu calendari')}</a>` : ''}

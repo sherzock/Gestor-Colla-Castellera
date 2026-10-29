@@ -241,3 +241,24 @@ test('previsió d\'assistència: només a la tècnica, només per a sessions que
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });
+
+// ---------- Adreça del mapa ----------
+test('el lloc es pot mostrar amb un nom i obrir una altra adreça al mapa, que es recorda per al mateix lloc', async () => {
+  const A = s.admin;
+  const date = new Date(Date.now() + 9 * 86400000).toISOString().slice(0, 10);
+  const base = { type: 'assaig', title: 'Assaig', date, start_time: '20:00', end_time: '22:00', escoleta_time: '19:00' };
+  const first = (await A('POST', '/events', { ...base, location: 'Local de proves', address: 'Carrer Major, 12, Vilafranca' })).d;
+  assert.equal(first.address, 'Carrer Major, 12, Vilafranca');
+  // Una sessió nova al mateix lloc, amb l'adreça buida (com surt del formulari), la recorda.
+  const second = (await A('POST', '/events', { ...base, location: 'Local de proves', address: '' })).d;
+  assert.equal(second.address, 'Carrer Major, 12, Vilafranca');
+  assert.equal((await A('POST', '/events', { ...base, location: 'Un altre lloc', address: '' })).d.address, null);
+  // En editar-la, es pot treure, i si el canvi no en diu res, es queda com estava.
+  assert.equal((await A('PUT', `/events/${second.id}`, { ...second, address: '' })).d.address, null);
+  const { address, ...noAddress } = first;
+  void address;
+  assert.equal((await A('PUT', `/events/${first.id}`, noAddress)).d.address, 'Carrer Major, 12, Vilafranca');
+  // El membre la rep per obrir el mapa, i el calendari la porta al lloc.
+  assert.equal((await s.member('GET', `/events/${first.id}`)).d.event.address, 'Carrer Major, 12, Vilafranca');
+  assert.match((await A('GET', '/calendar.ics')).text, /LOCATION:Local de proves\\, Carrer Major\\, 12\\, Vilafranca/);
+});
