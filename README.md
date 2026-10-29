@@ -334,7 +334,21 @@ db.js              Esquema SQLite i contrasenyes (scrypt)
 seed.js            Dades de demostració
 public/index.html  Pàgina única
 public/theme.js    Aplica el tema i l'idioma abans de pintar la pàgina
-public/app.js      Interfície (sessions, assistència, persones, perfil, visualitzador)
+public/app.js      Punt d'entrada de la interfície: rutes i arrencada
+public/ui/         Una pantalla per fitxer:
+  core.js          estat compartit, crides a l'API, utilitats, icones i finestres
+  shell.js         ajustos i barra de navegació
+  login.js         entrada (membres i administradors)
+  sessions.js      llista de sessions i formulari de sessió
+  event.js         detall d'una sessió: respostes, assistència, temporals, exportació
+  castell-form.js  formulari d'un castell
+  viewer.js        visualitzador del castell (tronc, pinya, llista, mides, historial) i assignar posicions
+  people.js        persones, importar-ne i perfil del membre
+  news.js          altaveu
+  templates.js     pinyes de la colla
+  accounts.js      comptes d'administració, còpies de seguretat i protecció de dades
+  calendar.js      calendari i subscripció
+  stats.js         estadístiques
 public/castell.js  Generador de l'estructura de cada castell (posicions i planta de la pinya)
 public/editor.js   Editor visual de pinyes de la colla (plantilles)
 public/export.js   Exportació d'una sessió en ZIP (CSV + imatge PNG de cada castell)

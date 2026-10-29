@@ -45,7 +45,8 @@ test('tots els textos tenen traducció al castellà i a l\'anglès', () => {
   const keys = new Set();
   const unq = (str) => str.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
   const STR = String.raw`('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")`;
-  for (const f of ['public/app.js', 'public/editor.js', 'public/castell.js', 'public/export.js']) {
+  const ui = fs.readdirSync(path.join(ROOT, 'public/ui')).filter((f) => f.endsWith('.js')).map((f) => `public/ui/${f}`);
+  for (const f of ['public/app.js', ...ui, 'public/editor.js', 'public/castell.js', 'public/export.js']) {
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
     for (const m of src.matchAll(new RegExp(String.raw`\bt\(\s*${STR}`, 'g'))) keys.add(unq(m[1]));
     for (const m of src.matchAll(new RegExp(String.raw`\btn\(\s*[^,]+,\s*${STR}\s*,\s*${STR}`, 'g'))) { keys.add(unq(m[1])); keys.add(unq(m[2])); }
