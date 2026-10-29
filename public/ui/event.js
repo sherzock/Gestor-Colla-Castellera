@@ -1,7 +1,7 @@
 // Detall d'una sessió: respostes, assistència, persones temporals, acompanyants i exportació.
 import { buildStructure, castellName } from '../castell.js';
 import { boxShort } from '../editor.js';
-import { castellPng, download, fileSafe, zip } from '../export.js';
+import { castellPng, download, fileSafe, xlsx } from '../export.js';
 import { calendarCode } from './calendar.js';
 import { castellModal } from './castell-form.js';
 import { $app, INSTRUMENTS, MEASURES, api, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
@@ -61,35 +61,43 @@ function extraValue(f, v) {
   return esc(v);
 }
 
-// ZIP amb l'assistència (el mateix CSV) i una imatge PNG de cada castell de la sessió, amb les persones col·locades.
+// Excel de la sessió: una pestanya amb l'assistència (les mateixes columnes que el CSV) i una per castell, amb qui hi
+// ha a cada posició i la imatge del castell (tronc, pom de dalt i pinya).
 async function exportSession(event, castells, button) {
   button.disabled = true;
   const label = button.textContent;
   button.textContent = t('Preparant…');
   try {
     // L'assistència i les alineacions es demanen alhora; les imatges es dibuixen després, una rere l'altra.
-    const [csv, details] = await Promise.all([
-      fetch(`/api/events/${event.id}/attendance.csv`, { headers: { 'X-Lang': lang } }),
+    const [table, details] = await Promise.all([
+      api('GET', `/events/${event.id}/attendance`),
       Promise.all(castells.map((c) => api('GET', `/castells/${c.id}`))),
     ]);
-    if (!csv.ok) throw new Error(t("No s'ha pogut exportar"));
-    const files = [{ name: `assistencia-${event.date}.csv`, data: new Uint8Array(await csv.arrayBuffer()) }];
-    const used = new Map();
+    const sheets = [{ name: t('Assistència'), rows: [table.columns, ...table.rows], header: true }];
     for (const [i, { castell, positions }] of details.entries()) {
       const s = buildStructure(castell);
       const byKey = new Map(positions.filter((p) => s.positions.has(p.pos_key)).map((p) => [p.pos_key, p]));
       const extra = [castell.label, partialLabel(castell), resultLabel(castell.result)].filter(Boolean).join(' · ');
-      const data = await castellPng({
-        s, byKey, nameOf: assignedName,
-        title: `${s.name}${castell.label ? ` · ${castell.label}` : ''}`,
-        subtitle: `${event.title} · ${fmtLong(event.date)}${extra ? ` · ${extra}` : ''} · ${t('{a}/{b} posicions cobertes', { a: byKey.size, b: s.positions.size })}`,
-        labels: { tronc: t('Tronc i pom de dalt'), musica: t('Música'), short: boxShort },
+      const title = `${s.name}${castell.label ? ` · ${castell.label}` : ''}`;
+      const subtitle = `${event.title} · ${fmtLong(event.date)}${extra ? ` · ${extra}` : ''} · ${t('{a}/{b} posicions cobertes', { a: byKey.size, b: s.positions.size })}`;
+      const image = await castellPng({ s, byKey, nameOf: assignedName, title, subtitle,
+        labels: { tronc: t('Tronc i pom de dalt'), musica: t('Música'), short: boxShort } });
+      // Qui hi ha a cada posició, de baix a dalt i després la música i la pinya (per buscar-hi o imprimir-ho).
+      const who = (key) => (byKey.has(key) ? assignedName(byKey.get(key), false) : '');
+      const list = [
+        ...s.levels.flatMap((l) => l.cells), ...s.agulla, ...s.musica,
+      ].map((p) => [p.role, who(p.key)]);
+      for (const layer of s.layers) {
+        for (const item of layer.items.filter((x) => !x.shared && !x.off)) list.push([`${layer.label} · ${item.role}`, who(item.key)]);
+      }
+      sheets.push({
+        name: `${i + 1} ${s.name}${castell.label ? ` ${castell.label}` : ''}`,
+        rows: [[title], [subtitle], [], [t('Posició'), t('Persona')], ...list],
+        bold: [0, 3], widths: [30, 28, 3],
+        image: { data: image, col: 3, row: 0, maxWidth: 1000 },
       });
-      const base = `${String(i + 1).padStart(2, '0')}-${fileSafe(s.name + (castell.label ? `-${castell.label}` : ''))}`;
-      used.set(base, (used.get(base) || 0) + 1);
-      files.push({ name: `${base}${used.get(base) > 1 ? `-${used.get(base)}` : ''}.png`, data });
     }
-    download(zip(files), `sessio-${event.date}-${fileSafe(event.title)}.zip`);
+    download(xlsx(sheets), `sessio-${event.date}-${fileSafe(event.title)}.xlsx`);
   } catch (err) {
     toast(err.message, true);
   } finally {
@@ -165,7 +173,7 @@ export async function pageEvent(id) {
         <div class="actions">
           ${passList ? `<button class="btn sm primary" id="add-walkin">${icon.plus}${t('Afegeix qui ha vingut')}</button>` : ''}
           <a class="btn sm" href="/api/events/${event.id}/attendance.csv">${t('Exporta CSV')}</a>
-          ${castells.length ? `<button class="btn sm" id="export-zip" title="${t("L'assistència (CSV) i una imatge de cada castell, en un ZIP")}">${t('Exporta amb castells')}</button>` : ''}
+          ${castells.length ? `<button class="btn sm" id="export-xlsx" title="${t("L'assistència i cada castell amb la seva imatge, en un full de càlcul")}">${t('Excel amb castells')}</button>` : ''}
         </div>
       </div>
       <div class="counts" style="margin-bottom:10px">
@@ -334,7 +342,7 @@ export async function pageEvent(id) {
   };
   qs('#add-castell')?.addEventListener('click', () => castellModal(event.id));
   qs('#add-walkin')?.addEventListener('click', () => walkinModal(event, attendance, reload));
-  qs('#export-zip')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
+  qs('#export-xlsx')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
 
   const ff = qs('#field-form');
   ff.elements.kind.onchange = () => qs('#opts').classList.toggle('hidden', ff.elements.kind.value !== 'select');
@@ -396,14 +404,16 @@ function pendingPeople(event, attendance) {
     .sort((a, b) => shortName(a).localeCompare(shortName(b)));
 }
 
-// Missatge per enganxar al grup de WhatsApp: només malnoms, com a la resta de l'app.
-function reminderText(event, pending) {
+// Missatge per enganxar al grup de WhatsApp: un recordatori general, sense dir qui falta (ningú queda assenyalat
+// davant de tot el grup; la llista de qui falta només la veu l'administració).
+function reminderText(event) {
   const when = `${fmtLong(event.date)}${event.start_time ? ` · ${event.start_time}` : ''}`;
   return [
     `📣 ${event.title} · ${when}`,
-    t('Encara no heu contestat: {names}.', { names: pending.map(shortName).join(', ') }),
+    t("Si encara no heu dit si veniu, digueu-ho a l'app:"),
+    `${location.origin}/#/sessio/${event.id}`,
     event.rsvp_until ? t('Podeu respondre fins al {when}.', { when: fmtDeadline(event.rsvp_until) }) : null,
-    t("Entreu a {url} i digueu si veniu. Gràcies!", { url: `${location.origin}/#/sessio/${event.id}` }),
+    t('Gràcies!'),
   ].filter(Boolean).join('\n');
 }
 
@@ -420,16 +430,16 @@ function answersCard(event, attendance) {
     ${pending.length ? `<h3 class="instr-h">${tn(pending.length, 'Falta {n} persona per contestar', 'Falten {n} persones per contestar')}</h3>
       <div class="names">${pending.map((a) => `<span>${esc(shortName(a))}</span>`).join('')}</div>
       ${event.hidden ? `<p class="small muted" style="margin:8px 0 0">${t('Quan la mostris als membres, podràs enviar el recordatori per WhatsApp.')}</p>` : `<div class="share-row">
-        <a class="btn sm primary" id="wa-send" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(reminderText(event, pending))}">${icon.share}${t('Envia per WhatsApp')}</a>
+        <a class="btn sm primary" id="wa-send" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(reminderText(event))}">${icon.share}${t('Envia per WhatsApp')}</a>
         <button class="btn sm" id="copy-reminder">${icon.copy}${t('Copia el missatge')}</button>
       </div>
-      <p class="small muted" style="margin:8px 0 0">${t('El missatge porta la llista de malnoms i l\'enllaç a la sessió, per enviar-lo al grup.')}</p>`}`
+      <p class="small muted" style="margin:8px 0 0">${t('El missatge és un recordatori general per al grup, sense noms, amb l\'enllaç a la sessió.')}</p>`}`
     : `<div class="all-answered" style="margin:0">${icon.check}${t('Tothom ha contestat.')}</div>`}
   </div>`;
 }
 
 function bindAnswersCard(event, attendance) {
-  qs('#copy-reminder')?.addEventListener('click', () => copyText(reminderText(event, pendingPeople(event, attendance))));
+  qs('#copy-reminder')?.addEventListener('click', () => copyText(reminderText(event)));
   qs('#toggle-rsvp')?.addEventListener('click', async () => {
     if (event.rsvp_open && !confirm(t('Tancar les respostes? Els membres ja no podran canviar si vénen o no.'))) return;
     if (await attempt(() => api('POST', `/events/${event.id}/rsvp`, { open: !event.rsvp_open }))) {

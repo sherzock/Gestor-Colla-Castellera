@@ -18,8 +18,9 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   públic perquè les apps de calendari no poden identificar-se: només hi surten les sessions, cap persona.
 - **Data límit per respondre** (opcional, a cada sessió): després ja no es pot canviar la resposta. Sense data límit,
   es pot respondre fins al mateix dia. L'admin també pot tancar-les o tornar-les a obrir amb un botó.
-- **Qui falta per contestar** (admins): a cada sessió, la llista de malnoms que encara no han respost, amb un botó per
-  **enviar-la per WhatsApp** o copiar el missatge (porta l'enllaç a la sessió).
+- **Qui falta per contestar** (admins): a cada sessió, la llista de malnoms que encara no han respost, i un botó per
+  **enviar un recordatori per WhatsApp** o copiar-lo. El recordatori és general (no diu qui falta, perquè ningú quedi
+  assenyalat davant del grup) i porta l'enllaç a la sessió i, si n'hi ha, la data límit.
 - **Sessions pendents**: a l'inici, cada sessió porta una franja de color segons la teva resposta, i un avís si en tens
   sense respondre.
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
@@ -34,9 +35,10 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   **persona temporal** de la sessió («Acompanyant de …» si no hi ha nom) i la tècnica el pot col·locar als castells.
   Si la persona en diu menys o ja no ve, els que encara no són a cap castell s'esborren sols. Els que ja hi són es
   queden marcats «Ja no ve» i el castell en mostra un avís. El recompte surt com «40 vénen + 6 acompanyants», i el CSV
-  té una columna amb els noms. Els membres no veuen els acompanyants dels altres (als castells, com tothom, «Nom I.»). Amb «Exporta amb castells» es descarrega un
-  ZIP amb el mateix CSV i una imatge PNG de cada castell de la sessió (tronc, pom de dalt i pinya, amb qui hi ha a cada
-  posició). Les imatges es dibuixen al navegador.
+  té una columna amb els noms. Els membres no veuen els acompanyants dels altres (als castells, com tothom, «Nom I.»). Amb «Excel amb castells» es descarrega un
+  sol fitxer Excel (.xlsx): una pestanya amb l'assistència (les mateixes columnes que el CSV, amb filtres) i una per
+  castell, amb qui hi ha a cada posició i la imatge del castell (tronc, pom de dalt i pinya). S'obre amb Excel,
+  LibreOffice i Numbers; a Google Sheets les imatges poden no sortir. Les imatges es dibuixen al navegador.
 - **Passar llista**: el dia de la sessió (i després), qui havia dit «Vinc» compta com a present. L'admin només ha de
   marcar **qui no ha vingut** i, amb «Afegeix qui ha vingut», qui ha vingut **sense apuntar-se** (fins i tot algú que
   encara no és a l'app: es crea en aquell moment). Els qui no han vingut deixen de sortir com a disponibles per als
@@ -217,11 +219,11 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
 | Publicar, editar i esborrar missatges de l'altaveu | | ✓ |
 | Ocultar o mostrar sessions i castells als membres | | ✓ |
 | Col·locar persones (també temporals), muntador automàtic, duplicar castells | | ✓ |
-| Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV o ZIP amb els castells | | ✓ |
+| Taula d'assistència completa, passar llista (no presentats i gent no apuntada), exportar CSV o Excel amb els castells | | ✓ |
 | Editor de pinyes de la colla (plantilles per tipus de castell) | | ✓ |
 | Pàgina «Persones»: donar d'alta gent, desactivar | | ✓ |
 | Pàgina «Comptes»: crear, editar i esborrar comptes d'administració | | ✓ |
-| Data límit de respostes, llista de qui falta per contestar i missatge per WhatsApp | | ✓ |
+| Data límit de respostes, llista de qui falta per contestar i recordatori per WhatsApp | | ✓ |
 | Revisió de l'alineació (avisos) | | ✓ |
 | Veure noms complets i dades personals (edat, mides, contacte…) | | ✓ |
 | Crear sessions des del calendari | | ✓ |
@@ -409,7 +411,7 @@ public/ui/         Una pantalla per fitxer:
   stats.js         estadístiques
 public/castell.js  Generador de l'estructura de cada castell (posicions i planta de la pinya)
 public/editor.js   Editor visual de pinyes de la colla (plantilles)
-public/export.js   Exportació d'una sessió en ZIP (CSV + imatge PNG de cada castell)
+public/export.js   Exportació d'una sessió en Excel (.xlsx: assistència + cada castell amb la seva imatge)
 public/muntador.js Muntador automàtic d'alineacions
 public/zoom.js     Visor a pantalla completa (pinça, roda, arrossegar)
 public/import.js   Lectura de fitxers CSV i Excel (.xlsx) per importar persones

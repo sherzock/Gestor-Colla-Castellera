@@ -1,6 +1,6 @@
-// Exportació d'una sessió: un ZIP amb l'assistència (CSV) i una imatge PNG de cada castell (tronc i pinya).
-// Tot es fa al navegador: el CSV i les alineacions venen de l'API, el dibuix es fa en un <canvas> i el ZIP
-// s'empaqueta sense compressió (els PNG ja ho estan).
+// Exportació d'una sessió: un Excel (.xlsx) amb l'assistència i una pestanya per castell (qui hi ha a cada posició i
+// la imatge del castell, tronc i pinya). Tot es fa al navegador: les dades venen de l'API, el dibuix es fa en un
+// <canvas> i el fitxer (que és un ZIP de fitxers XML) s'empaqueta sense compressió (els PNG ja ho estan).
 
 // ---------- ZIP (mètode «store») ----------
 const CRC_TABLE = (() => {
@@ -67,6 +67,101 @@ export function zip(files) {
   end.setUint32(12, cdSize, true);
   end.setUint32(16, offset, true);
   return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+}
+
+// ---------- Excel (.xlsx) ----------
+// El mínim que cal perquè l'obrin Excel, LibreOffice i Numbers: text com a «inlineStr» (mai es llegeix com a fórmula),
+// la primera fila en negreta i, si es vol, fixada i amb filtres, amplades de columna i una imatge per pestanya.
+const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+const NS = 'http://schemas.openxmlformats.org';
+const REL = `${NS}/officeDocument/2006/relationships`;
+// Text vàlid dins d'un XML: s'escapen els caràcters especials i es treuen els de control que l'XML no admet.
+// eslint-disable-next-line no-control-regex
+const xmlText = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '')
+  .replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const colName = (i) => (i >= 26 ? colName(Math.floor(i / 26) - 1) : '') + String.fromCharCode(65 + (i % 26));
+
+// Mida d'un PNG (amplada i alçada són a la capçalera IHDR).
+export function pngSize(data) {
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return { width: v.getUint32(16), height: v.getUint32(20) };
+}
+
+// Noms de pestanya: com a molt 31 caràcters, sense []:*?/\ i sense repetir-se.
+function sheetNames(names) {
+  const used = new Set();
+  return names.map((n) => {
+    const base = String(n).replace(/[[\]:*?/\\]/g, '-').trim().slice(0, 31) || 'Full';
+    let name = base;
+    for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base.slice(0, 31 - String(i).length - 1)} ${i}`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+}
+
+// sheets: [{ name, rows: [[text]], header: la primera fila és capçalera (negreta, fixada i amb filtres),
+//            bold: índexs d'altres files en negreta, widths: [caràcters], image: { data: PNG, col, row, maxWidth } }]
+export function xlsx(sheets) {
+  const enc = new TextEncoder();
+  const names = sheetNames(sheets.map((s) => s.name));
+  const files = [];
+  const add = (name, text) => files.push({ name, data: enc.encode(XML_HEAD + text) });
+  let images = 0;
+  const overrides = [];
+
+  sheets.forEach((sheet, i) => {
+    const n = i + 1;
+    const rows = sheet.rows || [];
+    const bold = new Set(sheet.bold || []);
+    if (sheet.header) bold.add(0);
+    const widthsOf = sheet.widths || rows.reduce((w, r) => r.map((v, c) => Math.max(w[c] || 8, Math.min(50, String(v ?? '').length + 2))), []);
+    const cols = widthsOf.length ? `<cols>${widthsOf.map((w, c) => `<col min="${c + 1}" max="${c + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>` : '';
+    const data = rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, c) => (v === '' || v === null || v === undefined ? ''
+      : `<c r="${colName(c)}${ri + 1}" t="inlineStr"${bold.has(ri) ? ' s="1"' : ''}><is><t xml:space="preserve">${xmlText(v)}</t></is></c>`)).join('')}</row>`).join('');
+    const lastCol = colName(Math.max(1, ...rows.map((r) => r.length)) - 1);
+    const view = sheet.header && rows.length > 1
+      ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '';
+    const filter = sheet.header && rows.length > 1 ? `<autoFilter ref="A1:${lastCol}${rows.length}"/>` : '';
+    let drawing = '';
+    if (sheet.image) {
+      images++;
+      const { width, height } = pngSize(sheet.image.data);
+      const scale = Math.min(1, (sheet.image.maxWidth || width) / width);
+      const cx = Math.round(width * scale * 9525), cy = Math.round(height * scale * 9525); // 1 píxel = 9525 EMU
+      files.push({ name: `xl/media/image${images}.png`, data: sheet.image.data });
+      add(`xl/drawings/drawing${n}.xml`, `<xdr:wsDr xmlns:xdr="${NS}/drawingml/2006/spreadsheetDrawing" xmlns:a="${NS}/drawingml/2006/main" xmlns:r="${REL}">`
+        + `<xdr:oneCellAnchor><xdr:from><xdr:col>${sheet.image.col || 0}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${sheet.image.row || 0}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>`
+        + `<xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="${xmlText(names[i])}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`
+        + `<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`
+        + `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>`);
+      add(`xl/drawings/_rels/drawing${n}.xml.rels`, `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/image" Target="../media/image${images}.png"/></Relationships>`);
+      add(`xl/worksheets/_rels/sheet${n}.xml.rels`, `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/drawing" Target="../drawings/drawing${n}.xml"/></Relationships>`);
+      overrides.push(`<Override PartName="/xl/drawings/drawing${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`);
+      drawing = '<drawing r:id="rId1"/>';
+    }
+    add(`xl/worksheets/sheet${n}.xml`, `<worksheet xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${REL}">${view}${cols}<sheetData>${data}</sheetData>${filter}${drawing}</worksheet>`);
+    overrides.push(`<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+  });
+
+  add('xl/workbook.xml', `<workbook xmlns="${NS}/spreadsheetml/2006/main" xmlns:r="${REL}"><sheets>${names.map((name, i) => `<sheet name="${xmlText(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets>`
+    + (sheets.some((s) => s.header && s.rows?.length > 1) ? `<definedNames>${sheets.map((s, i) => (s.header && s.rows.length > 1
+      ? `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xmlText(names[i].replace(/'/g, "''"))}'!$A$1:$${colName(Math.max(1, ...s.rows.map((r) => r.length)) - 1)}$${s.rows.length}</definedName>` : '')).join('')}</definedNames>` : '')
+    + '</workbook>');
+  add('xl/_rels/workbook.xml.rels', `<Relationships xmlns="${NS}/package/2006/relationships">${names.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${REL}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}`
+    + `<Relationship Id="rId${names.length + 1}" Type="${REL}/styles" Target="styles.xml"/></Relationships>`);
+  add('xl/styles.xml', `<styleSheet xmlns="${NS}/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>`
+    + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>');
+  add('_rels/.rels', `<Relationships xmlns="${NS}/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+  add('[Content_Types].xml', `<Types xmlns="${NS}/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`
+    + '<Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    + `${overrides.join('')}</Types>`);
+  // [Content_Types].xml ha d'anar primer (alguns lectors ho esperen).
+  files.unshift(files.pop());
+  return new Blob([zip(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 // ---------- Dibuix del castell ----------

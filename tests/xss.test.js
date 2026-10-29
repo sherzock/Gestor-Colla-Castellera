@@ -144,6 +144,19 @@ test('els enllaços dels missatges només poden ser http o https', async () => {
   assert.ok(!/href="(?!https?:)/i.test(html.replace(/href="#\/[^"]*"/g, '')), 'cap enllaç javascript: ni data:');
 });
 
+test('el recordatori per WhatsApp és general: no diu el nom de ningú', async () => {
+  await as('admin');
+  const event = await ui('event');
+  const html = await paint(() => event.pageEvent(ids.event));
+  const href = html.match(/href="https:\/\/wa\.me\/\?text=([^"]+)"/);
+  assert.ok(href, 'hi ha el botó de WhatsApp (falta gent per contestar)');
+  const text = decodeURIComponent(href[1]);
+  assert.match(text, new RegExp(`/#/sessio/${ids.event}`));
+  const people = (await s.admin('GET', '/people')).d.people;
+  const names = people.flatMap((p) => [p.name, p.alias, p.name.replace(/^(\S+)\s+(\S).*$/, '$1 $2.')]).filter((n) => n && n.length > 3);
+  assert.deepEqual(names.filter((n) => text.includes(n)), []);
+});
+
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });

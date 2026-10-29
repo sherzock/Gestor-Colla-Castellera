@@ -1027,13 +1027,11 @@ route('PUT', '/api/events/:id/attendance/:personId', ({ params, body }) => {
   return { ok: true };
 }, 'admin');
 
-route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
-  const event = getEvent(params.id);
+// Taula d'assistència d'una sessió (la mateixa per al CSV i per a l'Excel que es fa a l'app): capçalera i files de text.
+function attendanceTable(event) {
   const fields = loadFields(event.id);
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, a.status, a.escoleta, a.extra, a.comment, ${CAME_SQL} AS present
     FROM attendance a JOIN people p ON p.id = a.person_id WHERE a.event_id = ? ORDER BY p.name COLLATE NOCASE`).all(event.id);
-  // Els comentaris els escriu qualsevol: es neutralitza el que un full de càlcul llegiria com a fórmula.
-  const cell = (v) => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
   const yesNo = (v) => (v ? 'sí' : v === 0 ? 'no' : '');
   const companionsBy = new Map();
   if (event.ask_companions) {
@@ -1041,14 +1039,25 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
       ORDER BY id`).all(event.id)) companionsBy.set(g.companion_of, [...(companionsBy.get(g.companion_of) || []), g.name]);
   }
   const companions = (id) => (event.ask_companions ? [(companionsBy.get(id) || []).join(', ')] : []);
-  const lines = [['Nom', 'Malnom', 'Estat', 'Ha vingut', ...(event.escoleta ? ['Escoleta'] : []), ...(event.ask_companions ? ['Acompanyants'] : []),
-    ...fields.map((f) => f.label), 'Comentari'].map(cell).join(';')];
-  for (const r of rows) {
-    const extra = parseJSON(r.extra, {});
-    lines.push([r.name, r.alias, r.status, r.present ? 'sí' : 'no', ...(event.escoleta ? [yesNo(r.escoleta)] : []), ...companions(r.id),
-      ...fields.map((f) => (f.kind === 'bool' ? (extra[f.id] ? 'sí' : extra[f.id] === false ? 'no' : '') : extra[f.id])),
-      r.comment].map(cell).join(';'));
-  }
+  const columns = ['Nom', 'Malnom', 'Estat', 'Ha vingut', ...(event.escoleta ? ['Escoleta'] : []), ...(event.ask_companions ? ['Acompanyants'] : []),
+    ...fields.map((f) => f.label), 'Comentari'];
+  return {
+    columns,
+    rows: rows.map((r) => {
+      const extra = parseJSON(r.extra, {});
+      return [r.name, r.alias, r.status, r.present ? 'sí' : 'no', ...(event.escoleta ? [yesNo(r.escoleta)] : []), ...companions(r.id),
+        ...fields.map((f) => (f.kind === 'bool' ? (extra[f.id] ? 'sí' : extra[f.id] === false ? 'no' : '') : extra[f.id])),
+        r.comment].map((v) => (v === null || v === undefined ? '' : String(v)));
+    }),
+  };
+}
+
+route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
+  const event = getEvent(params.id);
+  const { columns, rows } = attendanceTable(event);
+  // Els comentaris els escriu qualsevol: es neutralitza el que un full de càlcul llegiria com a fórmula.
+  const cell = (v) => `"${String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&").replaceAll('"', '""')}"`;
+  const lines = [columns, ...rows].map((r) => r.map(cell).join(';'));
   res.writeHead(200, {
     'Content-Type': 'text/csv; charset=utf-8',
     'Content-Disposition': `attachment; filename="assistencia-${event.date}.csv"`,
@@ -1057,6 +1066,9 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
   res.end('﻿' + lines.join('\r\n'));
   return undefined;
 }, 'admin');
+
+// La mateixa taula en JSON, per a l'Excel de la sessió (a l'Excel, el text no es pot llegir com a fórmula).
+route('GET', '/api/events/:id/attendance', ({ params }) => attendanceTable(getEvent(params.id)), 'admin');
 
 // ---------- Rutes: camps extra ----------
 function fieldInput(body) {
