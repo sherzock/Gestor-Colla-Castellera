@@ -1,12 +1,12 @@
 // Visualitzador d'un castell: tronc, pinya, llista, mides, historial, revisió de l'alineació i assignar posicions.
-import { LEVEL_PLURAL, RESULTS, SHOULDER_GAP_CM, buildStructure, castellName, inTroncView, levelGaps, troncLoad,
-  weightInversions } from '../castell.js';
+import { LEVEL_PLURAL, RESULTS, SHOULDER_GAP_CM, buildStructure, castellName, inTroncView, levelGaps, levelNames, levelRange,
+  troncLoad, weightInversions } from '../castell.js';
 import { boxShort } from '../editor.js';
 import { proposeLineup } from '../muntador.js';
 import { openZoom } from '../zoom.js';
 import { castellModal } from './castell-form.js';
-import { $app, INSTRUMENTS, age, api, attempt, closeModal, day, esc, fmt, fullName, hiddenBadge, hiddenToggle, icon,
-  isAdmin, me, modalHead, norm, openModal, partialLabel, qs, qsa, render, resultClass, resultLabel, resultPill,
+import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, day, esc, failCauseLabel, fmt, fullName, hiddenBadge,
+  hiddenToggle, icon, isAdmin, me, modalHead, norm, openModal, partialLabel, qs, qsa, render, resultClass, resultLabel, resultPill,
   shortName, statusPill, store, t, tn, toast, todayIso } from './core.js';
 import { guestModal } from './event.js';
 
@@ -352,6 +352,13 @@ export async function pageCastell(id) {
     </div>
     ${admin ? `<div class="result-bar"><span class="small muted">${t('Com ha acabat?')}</span>
       <div class="tabs seg" id="result-seg">${Object.keys(RESULTS).map((r) => `<button type="button" data-v="${r}" class="${resultClass(r)} ${castell.result === r ? 'on' : ''}">${resultLabel(r)}</button>`).join('')}</div>
+      ${castell.result !== 'previst' && castell.result !== 'descarregat' ? `<div class="fail-bar">
+        <label><span class="small muted">${t('On va fallar?')}</span>
+          <select id="fail-level"><option value="0">${t('No consta')}</option>${levelNames(castell).filter((l) => l.level >= levelRange(castell).from && l.level <= levelRange(castell).to).reverse()
+            .map((l) => `<option value="${l.level}" ${castell.fail_level === l.level ? 'selected' : ''}>${esc(l.label)}</option>`).join('')}</select></label>
+        <label><span class="small muted">${t('Què va passar?')}</span>
+          <select id="fail-cause"><option value="">${t('No consta')}</option>${FAIL_CAUSES.map((c) => `<option value="${c}" ${castell.fail_cause === c ? 'selected' : ''}>${failCauseLabel(c)}</option>`).join('')}</select></label>
+      </div>` : ''}
       <label class="tech-notes"><span class="small muted">${t('Notes de la tècnica')} · ${t('només les veuen els administradors')}</span>
         <textarea id="tech-notes" rows="2" maxlength="1000" placeholder="${t('Com ha anat? Què cal assajar?')}">${esc(castell.tech_notes || '')}</textarea></label>
     </div>` : ''}
@@ -493,6 +500,10 @@ export async function pageCastell(id) {
   if (!admin) return;
   qsa('#result-seg button').forEach((b) => (b.onclick = async () => {
     if (await attempt(() => api('PUT', `/castells/${castell.id}`, { result: b.dataset.v }))) { toast(t('Resultat desat')); reload(); }
+  }));
+  qsa('#fail-level, #fail-cause').forEach((sel) => sel.addEventListener('change', async () => {
+    const body = sel.id === 'fail-level' ? { fail_level: Number(sel.value) } : { fail_cause: sel.value || null };
+    if (await attempt(() => api('PUT', `/castells/${castell.id}`, body))) { Object.assign(castell, body); toast(t('Desat')); }
   }));
   qs('#tech-notes').addEventListener('change', async (e) => {
     if (await attempt(() => api('PUT', `/castells/${castell.id}`, { tech_notes: e.target.value }))) { castell.tech_notes = e.target.value; toast(t('Desat')); }

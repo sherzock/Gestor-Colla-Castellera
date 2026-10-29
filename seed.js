@@ -283,6 +283,15 @@ transaction(() => {
   for (const c of db.prepare("SELECT id FROM castells WHERE result != 'previst'").all()) {
     if (rand() < 0.25) db.prepare('UPDATE castells SET tech_notes = ? WHERE id = ?').run(pick(NOTES), c.id);
   }
+  // On van fallar els que no es van descarregar: els carregats, a la baixada (a dalt); els intents, a qualsevol pis.
+  const setFail = db.prepare('UPDATE castells SET fail_level = ?, fail_cause = ? WHERE id = ?');
+  for (const c of db.prepare("SELECT id, height, from_level, to_level, result FROM castells WHERE result IN ('carregat', 'intent', 'intent desfet')").all()) {
+    if (rand() < 0.2) continue; // no consta
+    const top = c.to_level || c.height;
+    const low = c.result === 'carregat' ? Math.max(c.from_level, top - 2) : Math.max(c.from_level, 2);
+    const level = low + Math.floor(rand() * (top - low + 1));
+    setFail.run(level, rand() < 0.15 ? null : pick(['obert', 'obert', 'decantat', 'cedit', 'cedit', 'altre']), c.id);
+  }
   const diada = db.prepare("SELECT id FROM events WHERE title = 'Diada de Tots Sants'").get();
   const insGuest = db.prepare('INSERT INTO event_guests (event_id, name, colla, shoulder_height_cm, weight_kg) VALUES (?, ?, ?, ?, ?)');
   insGuest.run(diada.id, 'Rovelló', 'Colla convidada', 142, 66);

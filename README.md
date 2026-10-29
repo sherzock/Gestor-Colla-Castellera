@@ -50,7 +50,9 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
     el folre, les manilles i els puntals hi són igual. Si no hi ha baixos, el pis més baix que es fa (segons, terços…)
     ocupa el seu lloc a la pinya.
   - **Com ha acabat**: els administradors el marquen amb un toc a la pàgina del castell (previst, descarregat,
-    carregat, intent, intent desfet). Es veu a la llista de sessions i a l'historial.
+    carregat, intent, intent desfet). Es veu a la llista de sessions i a l'historial. Si no es va descarregar, s'hi pot
+    apuntar **on va fallar** (el pis) i què va passar (es va obrir, es va decantar, va cedir un pis o una altra cosa);
+    això només ho veuen els administradors.
   - Tot això queda guardat per separat a la base de dades (`net`, `from_level`, `to_level`, `result`) per poder fer
     estadístiques més endavant.
 - **Visualitzador** de cada castell amb el nom de cada persona a la seva posició:
@@ -76,7 +78,8 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
       (≤5 cm de diferència d'espatlles) o desnivellat, i algú que pesa més que qui el porta o no (amb les mides actuals);
     - **com avança cada castell**: es tria un castell i es veu un gràfic de columnes per mes (separat per anys) amb
       quants intents n'hi ha de cada resultat, quants intents sencers i parcials s'han fet, quants han calgut fins al
-      primer descarregat, el percentatge de descarregats a assajos i a diades, els últims intents i les notes de la tècnica;
+      primer descarregat, el percentatge de descarregats a assajos i a diades, **on falla** (a quin pis van fallar els
+      intents no descarregats i què hi va passar), els últims intents i les notes de la tècnica;
     - **preparació de les properes diades**: per a cada castell, quanta gent del tronc ha assajat la seva posició
       d'aquell castell les últimes 6 setmanes, i quantes posicions no tenen relleu (ningú més actiu les ha fet
       descarregant o carregant aquell castell);
@@ -235,7 +238,7 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
   castell té. Els valors són a `LIMITS` i `MEASURES` (a `server.js`; l'app fa servir els mateixos).
 - Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
   dir qui va a l'escoleta, sense comentaris ni respostes als camps extra dels altres, i sense les
-  notes de la tècnica. Les persones temporals també surten com a «Nom I.». Les sessions i els castells ocults no
+  notes de la tècnica ni on va fallar cada castell. Les persones temporals també surten com a «Nom I.». Les sessions i els castells ocults no
   arriben als membres per cap camí (llistes, fitxes, calendari, historial ni estadístiques).
 
 Una limitació que ve del disseny (entrar sense codis): qualsevol persona amb l'enllaç pot triar un nom i contestar

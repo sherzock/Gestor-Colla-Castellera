@@ -188,6 +188,35 @@ test('tècnica: espatlles i pes com a factors, i relleus de les properes diades'
   assert.equal(card.noRelief, 1);
 });
 
+test('on va fallar: es desa amb el resultat, només ho veu la tècnica i surt a les estadístiques', async () => {
+  const c = (await s.admin('POST', `/events/${s.pastEvent.id}/castells`, { width: 2, height: 7, label: 'Prova on falla' })).d;
+  const put = (body) => s.admin('PUT', `/castells/${c.id}`, body);
+  assert.equal((await put({ result: 'intent', fail_level: 4, fail_cause: 'obert' })).s, 200);
+  let got = (await s.admin('GET', `/castells/${c.id}`)).d.castell;
+  assert.deepEqual([got.fail_level, got.fail_cause], [4, 'obert']);
+  assert.equal((await put({ fail_level: 8 })).s, 400, 'un pis que el castell no té');
+  assert.equal((await put({ fail_cause: 'invent' })).s, 200);
+  assert.equal((await s.admin('GET', `/castells/${c.id}`)).d.castell.fail_cause, null, 'un motiu desconegut no es desa');
+  await put({ fail_cause: 'cedit' });
+  // Els membres no ho veuen: podria assenyalar qui hi havia en aquell pis.
+  const asMember = (await s.member('GET', `/castells/${c.id}`)).d.castell;
+  assert.ok(!('fail_level' in asMember) && !('fail_cause' in asMember) && !('tech_notes' in asMember));
+  assert.ok((await s.member('GET', `/events/${s.pastEvent.id}`)).d.castells.every((x) => !('fail_level' in x)));
+  const fails = (await s.admin('GET', '/stats/tecnica?season=all')).d.castells.find((x) => x.castell === '2d7').fails;
+  assert.ok(fails.failed >= 1);
+  assert.ok(fails.levels.find((l) => l.level === 4 && l.label === 'Quarts' && l.causes.cedit >= 1));
+  assert.equal(fails.failed, fails.unknown + fails.levels.reduce((n, l) => n + l.n, 0));
+  // Un duplicat comença de nou, i un castell descarregat no ha fallat enlloc.
+  const dup = (await s.admin('POST', `/castells/${c.id}/duplicate`, {})).d;
+  got = (await s.admin('GET', `/castells/${dup.id}`)).d.castell;
+  assert.deepEqual([got.result, got.fail_level, got.fail_cause], ['previst', 0, null]);
+  await put({ result: 'descarregat' });
+  got = (await s.admin('GET', `/castells/${c.id}`)).d.castell;
+  assert.deepEqual([got.fail_level, got.fail_cause], [0, null]);
+  await s.admin('DELETE', `/castells/${c.id}`);
+  await s.admin('DELETE', `/castells/${dup.id}`);
+});
+
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });

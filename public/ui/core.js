@@ -175,6 +175,9 @@ export function partialLabel(c) {
 }
 export const resultLabel = (r) => (r === 'previst' ? t('Previst') : RESULTS[r] || r);
 export const resultClass = (r) => `r-${String(r || 'previst').replace(' ', '-')}`;
+// Què va passar quan un castell no es va descarregar (els mateixos valors que al servidor).
+export const FAIL_CAUSES = ['obert', 'decantat', 'cedit', 'altre'];
+export const failCauseLabel = (c) => ({ obert: t('Es va obrir'), decantat: t('Es va decantar'), cedit: t('Va cedir un pis'), altre: t('Una altra cosa') })[c] || '';
 export const resultPill = (r) => (r && r !== 'previst' ? `<span class="result ${resultClass(r)}">${resultLabel(r)}</span>` : '');
 
 export function castellTags(summary) {

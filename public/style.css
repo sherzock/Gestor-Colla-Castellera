@@ -497,6 +497,9 @@ body.no-scroll { overflow: hidden; }
 .castell-card .parts { margin-top: -2px; }
 .result-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -6px 0 16px; }
 .result-bar .tabs { flex-wrap: wrap; }
+.result-bar .fail-bar { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.result-bar .fail-bar label { display: flex; align-items: center; gap: 6px; }
+.result-bar .fail-bar select { width: auto; }
 .result-bar .tabs button.on.r-descarregat { background: var(--ok-soft); color: var(--ok); }
 .result-bar .tabs button.on.r-carregat { background: var(--warn-soft); color: var(--warn); }
 .result-bar .tabs button.on.r-intent, .result-bar .tabs button.on.r-intent-desfet { background: var(--bad-soft); color: var(--bad); }

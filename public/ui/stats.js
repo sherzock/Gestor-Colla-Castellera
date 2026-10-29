@@ -1,7 +1,7 @@
 // Estadístiques: temporada, tècnica, castells i persones.
 import { RESULTS } from '../castell.js';
-import { $app, TYPES, api, day, esc, fmt, fullName, icon, isAdmin, me, modalHead, norm, openModal, qs, qsa, render,
-  resultClass, resultPill, store, t, tn, todayIso, typeLabel } from './core.js';
+import { $app, TYPES, api, day, esc, failCauseLabel, fmt, fullName, icon, isAdmin, me, modalHead, norm, openModal, qs, qsa,
+  render, resultClass, resultPill, store, t, tn, todayIso, typeLabel } from './core.js';
 
 // ---------- Estadístiques ----------
 // Per temporades (cada any natural) o de tota la història, i de totes les sessions, només diades o només assajos.
@@ -192,6 +192,19 @@ async function pageTecnica(tabs) {
     return `<div class="tl-chart">${[...byYear].map(([y, list]) => `<div class="tl-year" style="flex:${list.length}">
       ${byYear.size > 1 ? `<div class="tl-year-label">${y}</div>` : ''}<div class="tl-cols">${list.map(col).join('')}</div></div>`).join('')}</div>`;
   };
+  // On falla: a quin pis van fallar els intents no descarregats, de dalt a baix, i què hi va passar.
+  const failText = (f) => [f.label, failCauseLabel(f.cause)].filter(Boolean).join(', ');
+  const failBody = (f) => {
+    if (!f?.failed) return '';
+    const max = Math.max(1, ...f.levels.map((l) => l.n));
+    const causes = (c) => Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${failCauseLabel(k)} ${n}`).join(' · ');
+    return `<h3 style="margin:16px 0 6px">${t('On falla')}</h3>
+      ${f.levels.length ? `<div class="bars">${f.levels.map((l) => `<div class="bar-row">
+        <span class="nm">${esc(l.label || String(l.level))}</span><span class="bar"><i style="width:${(l.n / max) * 100}%;background:var(--c-bad)"></i></span><span class="num">${l.n}×</span><span></span>
+        ${Object.keys(l.causes).length ? `<span class="small muted last">${causes(l.causes)}</span>` : ''}
+      </div>`).join('')}</div>` : ''}
+      <p class="small muted" style="margin:8px 0 0">${tn(f.failed, '{n} intent no descarregat', '{n} intents no descarregats')}${f.unknown ? ` · ${t('a {n} no consta on va fallar', { n: f.unknown })}` : ''}</p>`;
+  };
   // Com avança un castell concret (es tria al desplegable).
   if (!st.castells.some((c) => c.castell === progressCastell)) progressCastell = st.castells[0]?.castell;
   const prog = st.castells.find((c) => c.castell === progressCastell);
@@ -209,10 +222,11 @@ async function pageTecnica(tabs) {
     </div>
     ${monthColumns(prog.attempts)}
     <div class="legend"><span><i style="background:var(--c-ok)"></i>${t('Descarregat')}</span><span><i style="background:var(--c-warn)"></i>${t('Carregat')}</span><span><i style="background:var(--c-bad)"></i>${t('Caigut')}</span><span><i style="background:transparent;outline:2px solid var(--ink-3);outline-offset:1px"></i>${t('Mes amb diada')}</span></div>
+    ${failBody(prog.fails)}
     <h3 style="margin:16px 0 6px">${t('Últims intents')}</h3>
     <ul class="recent-attempts">${recent.map((a) => `<li><a href="#/castell/${a.castell_id}">
       <span class="small muted">${fmt(a.date, a.date.slice(0, 4) === todayIso().slice(0, 4) ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: '2-digit' })}</span>
-      <span>${esc(a.title)}${a.range ? ` <span class="small muted">· ${esc(a.range)}</span>` : ''}</span>${resultPill(a.result)}</a>
+      <span>${esc(a.title)}${a.range ? ` <span class="small muted">· ${esc(a.range)}</span>` : ''}${a.fail && a.result !== 'descarregat' ? ` <span class="small muted">· ${esc(failText(a.fail))}</span>` : ''}</span>${resultPill(a.result)}</a>
       ${a.notes ? `<div class="small muted">${esc(a.notes)}</div>` : ''}</li>`).join('')}</ul>
     ${olderNotes.length ? `<h3 style="margin:16px 0 6px">${t('Notes anteriors')}</h3>
       <ul class="tech-note-list">${olderNotes.map((a) => `<li><a href="#/castell/${a.castell_id}" class="muted">${fmt(a.date, { day: 'numeric', month: 'short' })}</a> ${esc(a.notes)}</li>`).join('')}</ul>` : ''}` : '';

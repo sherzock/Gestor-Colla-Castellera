@@ -219,6 +219,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS event_guests (
 addColumn('castell_positions', 'guest_id', 'INTEGER REFERENCES event_guests(id) ON DELETE CASCADE');
 // Nota de la tècnica sobre com ha anat l'intent (només la veuen els administradors).
 addColumn('castells', 'tech_notes', 'TEXT');
+// On va fallar (només per als administradors): pis (0 = no consta) i què va passar.
+addColumn('castells', 'fail_level', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('castells', 'fail_cause', 'TEXT');
 // Una versió anterior guardava «on ha fallat»: es va treure perquè sovint no es pot saber.
 if (columns('castells').includes('fail_point')) db.exec('ALTER TABLE castells DROP COLUMN fail_point');
 

@@ -54,6 +54,10 @@ const FIELD_KINDS = ['number', 'text', 'bool', 'select'];
 const STATUSES = ['si', 'no'];
 const WIDTHS = [1, 2, 3, 4, 5, 7, 9];
 const RESULTS = ['previst', 'descarregat', 'carregat', 'intent', 'intent desfet'];
+// Què va passar quan un castell no es va descarregar.
+const FAIL_CAUSES = ['obert', 'decantat', 'cedit', 'altre'];
+// El que només veuen els administradors d'un castell: les notes i on va fallar podrien assenyalar algú.
+const ADMIN_ONLY_CASTELL = { tech_notes: undefined, fail_level: undefined, fail_cause: undefined };
 const NUMERIC_PERSON_FIELDS = ['height_cm', 'shoulder_height_cm', 'shoulder_width_cm', 'weight_kg'];
 const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', ...NUMERIC_PERSON_FIELDS, 'notes', 'instrument'];
 
@@ -232,6 +236,8 @@ function castellInput(body, existing = {}) {
     notes: str(merged.notes, 2000),
     result: RESULTS.includes(merged.result) ? merged.result : 'previst',
     tech_notes: str(merged.tech_notes, 1000),
+    fail_level: int(merged.fail_level, 0, 11, 0),
+    fail_cause: FAIL_CAUSES.includes(merged.fail_cause) ? merged.fail_cause : null,
     hidden: bool(merged.hidden),
   };
   if (out.folre && height < 6) fail(400, 'El folre necessita un castell de 6 pisos o més');
@@ -240,6 +246,9 @@ function castellInput(body, existing = {}) {
   if (out.to_level >= height) out.to_level = 0;
   if (out.from_level > height) fail(400, 'El pis inicial no pot ser més amunt que el castell');
   if (out.to_level && out.to_level < out.from_level) fail(400, 'El pis final ha de ser igual o més amunt que el pis inicial');
+  // Un castell descarregat (o que encara no s'ha fet) no ha fallat enlloc.
+  if (out.result === 'previst' || out.result === 'descarregat') { out.fail_level = 0; out.fail_cause = null; }
+  if (out.fail_level > out.height) fail(400, 'Aquest castell no té aquest pis');
   if (!buildStructure(out).positions.size) fail(400, 'Aquest castell no té cap posició');
   return out;
 }
@@ -783,7 +792,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   // Posicions ocupades: només les que el castell té ara (una plantilla pot haver-ne tret alguna).
   const keysOf = db.prepare('SELECT pos_key FROM castell_positions WHERE castell_id = ?');
   const castells = db.prepare(`SELECT c.* FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
-    .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : { tech_notes: undefined }) }));
+    .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : ADMIN_ONLY_CASTELL) }));
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
       ${CAME_SQL} AS present
     FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -1059,7 +1068,7 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
   const siblings = db.prepare(`SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level,
     label, result, hidden FROM castells WHERE event_id = ?${isAdmin ? '' : ' AND hidden = 0'} ORDER BY position, id`).all(event.id);
   // Les notes de la tècnica no les veuen els membres.
-  const result = { castell: isAdmin ? castell : { ...castell, tech_notes: undefined }, event, siblings,
+  const result = { castell: isAdmin ? castell : { ...castell, ...ADMIN_ONLY_CASTELL }, event, siblings,
     positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null }
       : { ...p, guest_name: p.guest_name ? publicName({ name: p.guest_name }) : null })) };
   if (isAdmin) {
@@ -1102,7 +1111,7 @@ route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
   return transaction(() => {
     const { id, event_id, position, ...rest } = castell;
     const nextPos = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(target.id).p;
-    const newId = insertRow('castells', { ...rest, result: 'previst', tech_notes: null, event_id: target.id, position: nextPos });
+    const newId = insertRow('castells', { ...rest, result: 'previst', tech_notes: null, fail_level: 0, fail_cause: null, event_id: target.id, position: nextPos });
     // Les persones temporals són d'una sessió: només es copien si el castell queda a la mateixa sessió.
     db.prepare(`INSERT INTO castell_positions (castell_id, pos_key, person_id, guest_name, guest_id)
       SELECT ?, pos_key, person_id, guest_name, guest_id FROM castell_positions
@@ -1781,6 +1790,23 @@ function keysByPart(s) {
   return partsCache.get(s);
 }
 
+// On falla un castell: per a cada pis, quants intents no descarregats hi van fallar i per què (de dalt a baix).
+function failPoints(attempts) {
+  const failed = attempts.filter((a) => a.result !== 'descarregat' && a.result !== 'previst');
+  const levels = new Map();
+  const causes = {};
+  for (const a of failed) {
+    if (a.fail?.cause) causes[a.fail.cause] = (causes[a.fail.cause] || 0) + 1;
+    if (!a.fail?.level) continue;
+    const l = levels.get(a.fail.level) || { level: a.fail.level, label: a.fail.label, n: 0, causes: {} };
+    l.n++;
+    if (a.fail.cause) l.causes[a.fail.cause] = (l.causes[a.fail.cause] || 0) + 1;
+    levels.set(a.fail.level, l);
+  }
+  const located = [...levels.values()].reduce((sum, l) => sum + l.n, 0);
+  return { failed: failed.length, unknown: failed.length - located, causes, levels: [...levels.values()].sort((a, b) => b.level - a.level) };
+}
+
 route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
   const { where, args } = statsFilter(query);
   const inFilter = new Set(db.prepare(`SELECT c.id FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')}`)
@@ -1845,7 +1871,8 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
       const { from, to } = levelRange(c);
       const label = (L) => levels.find((l) => l.level === L)?.label;
       t.attempts.push({ castell_id: c.id, date: c.date, title: c.title, type: c.type, result: c.result, partial,
-        range: partial ? `${label(from)} – ${label(to)}` : null, notes: c.tech_notes || null });
+        range: partial ? `${label(from)} – ${label(to)}` : null, notes: c.tech_notes || null,
+        fail: c.fail_level || c.fail_cause ? { level: c.fail_level, label: label(c.fail_level) || null, cause: c.fail_cause } : null });
       types.set(name, t);
     }
     // Després de comptar-lo, aquest castell passa a ser experiència i «l'últim tronc» per als següents.
@@ -1865,6 +1892,7 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
       assajos: rate(full.filter((a) => a.type === 'assaig')),
       diades: rate(full.filter((a) => a.type !== 'assaig')),
       notes: t.attempts.filter((a) => a.notes).slice(-9).reverse(),
+      fails: failPoints(t.attempts),
     };
   }).sort((a, b) => b.attempts.length - a.attempts.length);
 
