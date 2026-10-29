@@ -144,10 +144,13 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   no es toca, tret que es marqui «actualitza-la»: llavors s'hi posen les dades del fitxer (les cel·les buides no
   esborren res). Hi ha una plantilla CSV per començar.
 - **Còpies de seguretat** (admins): el servidor en fa una cada dia (es guarden les últimes 14) i a «Comptes» →
-  «Descarrega una còpia» se'n baixa una per guardar-la fora del servidor. Les còpies no porten les sessions obertes.
+  «Descarrega una còpia» se'n baixa una per guardar-la fora del servidor. Les còpies no porten les sessions obertes
+  (ni de membres ni d'administració), els mòbils coneguts dels administradors ni els avisos per recollir: amb una còpia
+  a la mà no s'entra enlloc.
 - **Dades d'una persona** (admins): a la seva fitxa, «Descarrega les seves dades» dona un fitxer JSON amb tot el que
-  se'n guarda (fitxa, assistència i respostes, posicions, acompanyants i mòbils amb avisos), per si ho demana (dret
-  d'accés i de portabilitat). Els membres no se les poden baixar ells mateixos: entren sense contrasenya.
+  se'n guarda (fitxa, assistència i respostes, posicions, acompanyants, mòbils amb avisos i recordatoris enviats), per
+  si ho demana (dret d'accés i de portabilitat). Els membres no se les poden baixar ells mateixos: entren sense
+  contrasenya. Una prova comprova que cada columna i cada taula amb dades de la gent hi surt.
 - **Protecció de dades**: una nota per als membres (què es guarda, per a què, qui ho veu, quant de temps i com
   exercir els drets), en català, castellà i anglès. Es pot llegir abans d'entrar i des d'«Ajustos», i imprimir per
   signar-la a paper (els menors de 14 anys, amb la signatura del pare, mare o tutor/a). És un model: la junta l'ha de
@@ -234,25 +237,30 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
   ha entrat bé no se'ls aplica el bloqueig per compte (sí el de cada lloc).
 - Crear, canviar o esborrar comptes d'administració i canviar la contrasenya demana la contrasenya de qui ho fa, i els
   errors compten com a intents d'entrar: amb una sessió oberta en un mòbil aliè no es pot prendre el control dels
-  comptes ni anar provant contrasenyes. En canviar la contrasenya d'un compte, se'n tanquen les altres sessions.
+  comptes ni anar provant contrasenyes. En canviar la contrasenya d'un compte, se'n tanquen les altres sessions i
+  se n'obliden els altres mòbils coneguts.
 - El codi de la colla (`COLLA_CODE`) es compara sempre en el mateix temps i, després de 20 errors des d'un mateix lloc,
   cal esperar 15 minuts.
 - L'entrada de membres (sense contrasenya) té un límit de 150 entrades cada 10 minuts per adreça i com a molt 20
   sessions obertes per persona, perquè ningú pugui omplir la base de dades; quan algú canvia de persona al mateix mòbil,
-  la sessió anterior s'esborra, i les sessions caducades es netegen soles.
+  la sessió anterior s'esborra, i les sessions caducades es netegen soles. Qui es dona de baixa perd les sessions i
+  deixa de rebre avisos al mòbil.
 - Sessions en cookies `HttpOnly` i `SameSite=Lax` (i `Secure` amb HTTPS). A la base de dades només se'n guarda un resum
   (SHA-256): amb una còpia de la base de dades no es pot entrar a l'app. El fitxer de la base de dades només el pot llegir
   l'usuari que fa anar el servidor.
 - Les peticions que canvien dades han de venir de la mateixa web (es comprova `Origin` i `Sec-Fetch-Site`) i en format
   JSON (un objecte), cosa que un formulari d'una altra web no pot enviar.
-- Les connexions que envien la petició a poc a poc es tallen (15 s per a les capçaleres, 30 s per a tota la petició).
+- Les connexions que envien la petició a poc a poc es tallen (15 s per a les capçaleres, 30 s per a tota la petició),
+  i una petició de més d'1 MB es rebutja (amb un error que l'app pot explicar, no tallant la connexió).
 - Capçaleres de seguretat: només es carreguen scripts de la mateixa app (CSP), no es pot posar dins d'un marc d'una
   altra web, la càmera, el micròfon i la ubicació queden desactivats (`Permissions-Policy`), i amb HTTPS s'activa HSTS.
 - Només se serveixen els fitxers de `public/` (ni la base de dades, ni el codi del servidor, ni fitxers ocults), i
   una adreça mal formada no pot aturar el servidor.
 - L'exportació CSV neutralitza el text que un full de càlcul podria executar com a fórmula i no es guarda a la memòria
   cau del navegador. Al calendari (`.ics`), el text de les sessions no pot afegir línies.
-- Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML).
+- Tot el text que escriu la gent es mostra escapat (no es pot injectar HTML). Una prova posa codi HTML a cada camp
+  (noms, malnoms, títols, comentaris, respostes, temporals, acompanyants, missatges, notes, plantilles…) i pinta totes
+  les pantalles, com a administració i com a membre, per comprovar que no n'arriba cap tros sense escapar.
 - Límits per al que no té sentit: textos tallats (noms 100, malnoms 40, comentaris 300, caixes de plantilla 30…),
   alçades i pesos possibles, dates i hores que existeixen, i com a molt 6 acompanyants per persona, 30 castells,
   15 camps extra i 200 persones temporals per sessió, 200 caixes per capa de plantilla i només posicions que el
@@ -260,7 +268,11 @@ de protecció, definiu `COLLA_CODE`: la primera vegada es demanarà aquest codi 
 - Privadesa: als membres no els arriba cap dada personal (ni la pròpia): de la gent només el malnom o «Nom I.», sense
   dir qui va a l'escoleta, sense comentaris ni respostes als camps extra dels altres, i sense les
   notes de la tècnica ni on va fallar cada castell. Les persones temporals també surten com a «Nom I.». Les sessions i els castells ocults no
-  arriben als membres per cap camí (llistes, fitxes, calendari, historial ni estadístiques).
+  arriben als membres per cap camí (llistes, fitxes, calendari, historial ni estadístiques), i una sessió oculta respon
+  igual que una que no existeix. Qui diu que no ve no surt enlloc per als altres.
+- Esborrar una persona l'esborra de debò: amb les respostes, posicions, acompanyants, mòbils i avisos, i també de
+  dins del fitxer de la base de dades (el que s'esborra se sobreescriu amb zeros i el diari de canvis es buida). Les
+  còpies de seguretat diàries la conserven fins que es renoven (la nota de privadesa ho diu).
 
 Una limitació que ve del disseny (entrar sense codis): qualsevol persona amb l'enllaç pot triar un nom i contestar
 l'assistència en nom d'aquella persona. No pot veure cap dada personal ni canviar res més; si es vol posar una mica més
@@ -303,9 +315,22 @@ npm test
 ```
 
 Cada fitxer de `tests/` arrenca el seu propi servidor amb les dades de demostració, en una base de dades temporal i un
-port lliure (no toca `data/colla.db`). Comproven els permisos de totes les rutes, la privadesa del que veuen els
-membres, els límits, les funcionalitats principals i que el servidor no faci servir valors que el SQLite de Node 22
-(el de Render) no accepta. A GitHub es passen soles a cada push (`.github/workflows/tests.yml`), amb Node 22.13,
+port lliure (no toca `data/colla.db`). Comproven:
+
+- **Permisos i sessions**: totes les rutes sense sessió i com a membre; galetes; sortir, sessions caducades, baixes i
+  canvis de contrasenya que tanquen les altres sessions; camps que no es poden tocar des de fora (rol, id, qui ha
+  vingut…); respostes tancades.
+- **Atacs**: XSS a totes les pantalles (amb un navegador de mentida, `tests/fakedom.js`), CSRF, fitxers fora de
+  `public/`, peticions massa grans, JSON estrany (`__proto__`…), i que cap resposta ni el registre del servidor porti
+  contrasenyes, sessions ni la clau dels avisos.
+- **Robustesa**: totes les rutes amb adreces, consultes i cossos mal fets o d'un tipus que no toca (milers de
+  peticions) sense cap error intern.
+- **Privadesa**: què veu un membre, sessions ocultes, el calendari públic, la descàrrega de dades d'una persona i que
+  esborrar-la no en deixi rastre (ni als bytes del fitxer).
+- **Castells i muntador**: claus úniques i noms coherents per a tots els castells possibles, proves parcials, i que el
+  muntador posi cadascú un sol cop, la canalla només a dalt i cada músic al seu instrument.
+- Els límits, les funcionalitats principals, que les traduccions tinguin els mateixos buits (`{n}`…) que l'original, i
+  que el servidor no faci servir valors que el SQLite de Node 22 (el de Render) no accepta. A GitHub es passen soles a cada push (`.github/workflows/tests.yml`), amb Node 22.13,
 22 i 24.
 
 ### Configuració (variables d'entorn)

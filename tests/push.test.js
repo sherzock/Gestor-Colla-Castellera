@@ -109,6 +109,21 @@ test('qui surt o es dona de baixa deixa de rebre avisos', async () => {
   assert.equal((await other('POST', '/push/subscribe', { endpoint: endpoint('a1') })).s, 401);
 });
 
+test('qui es dona de baixa de la colla deixa de rebre els missatges al mòbil', async () => {
+  const id = (await s.admin('POST', '/people', { name: 'Baixa Avisos' })).d.id;
+  const m = client(`${server.url}/api`);
+  await m('POST', '/identify', { person_id: id });
+  assert.equal((await m('POST', '/push/subscribe', { endpoint: endpoint('baixa') })).s, 200);
+  await s.admin('PUT', `/people/${id}`, { active: false });
+  hits = [];
+  await s.admin('POST', '/announcements', { title: 'Només per a la colla' });
+  await until(() => hits.length >= 1);
+  await wait(100);
+  assert.ok(!hits.some((h) => h.path === '/baixa'), 'no rep l\'avís');
+  assert.deepEqual(await inbox('baixa'), [], 'ni el text a la bústia');
+  await s.admin('DELETE', `/people/${id}`);
+});
+
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });

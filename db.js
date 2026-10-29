@@ -8,7 +8,8 @@ export const DB_PATH = process.env.DB_PATH || path.join(import.meta.dirname, 'da
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 export const db = new DatabaseSync(DB_PATH);
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+// secure_delete: el que s'esborra se sobreescriu amb zeros, perquè no quedi llegible a l'espai lliure del fitxer.
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON;');
 // Hi ha dades personals: només l'usuari que fa anar el servidor pot llegir la base de dades.
 for (const f of [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`]) try { fs.chmodSync(f, 0o600); } catch { /* no existeix o no es pot */ }
 

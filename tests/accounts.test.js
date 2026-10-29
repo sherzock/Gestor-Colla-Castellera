@@ -1,6 +1,7 @@
 // Fora de la demo, amb codi de la colla i darrere d'un proxy: comptes d'administració, codi i límits d'intents.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
 import { startServer, client } from './helpers.js';
 
 const CODE = 'pinya2026';
@@ -54,6 +55,28 @@ test("contrasenya d'administració: 10 errors per adreça i es bloqueja", async 
   for (let i = 0; i < 11; i++) last = await anon('POST', '/login', { username: 'admin', password: `dolenta${i}` }, from('10.9.9.9'));
   assert.equal(last.s, 429);
   assert.equal((await anon('POST', '/login', { username: 'admin', password: 'admin1234' }, from('10.9.9.8'))).s, 200);
+});
+
+// L'última: canvia la contrasenya d'«admin» (i «admin1234» no es pot tornar a posar, és massa comuna).
+test('canviar una contrasenya tanca les altres sessions i els mòbils coneguts d\'aquell compte', async () => {
+  const devices = (id) => new DatabaseSync(server.dbPath, { readOnly: true }).prepare('SELECT COUNT(*) AS n FROM admin_devices WHERE admin_id = ?').get(id).n;
+  const me = client(api), other = client(api);
+  for (const [c, ip] of [[me, '10.0.1.1'], [other, '10.0.1.2']]) {
+    assert.equal((await c('POST', '/login', { username: 'admin', password: 'admin1234' }, from(ip))).s, 200);
+  }
+  const NEW = 'pinya-folre-manilles-9';
+  assert.equal((await me('PUT', '/me', { currentPassword: 'admin1234', newPassword: NEW })).s, 200);
+  assert.equal((await me('GET', '/people')).s, 200, 'qui l\'ha canviada segueix dins');
+  assert.equal((await other('GET', '/people')).s, 401, 'l\'altra sessió s\'ha tancat');
+  assert.equal(devices(1), 1, 'només queda el mòbil de qui l\'ha canviada');
+  assert.equal((await client(api)('POST', '/login', { username: 'admin', password: 'admin1234' }, from('10.0.1.3'))).s, 401);
+  // La d'un altre compte: se'n tanquen totes les sessions.
+  const marta = (await me('POST', '/admins', { name: 'Marta', username: 'marta-c', password: 'castells-de-nou-2026', currentPassword: NEW })).d;
+  const m = client(api);
+  assert.equal((await m('POST', '/login', { username: 'marta-c', password: 'castells-de-nou-2026' }, from('10.0.1.4'))).s, 200);
+  assert.equal((await me('PUT', `/admins/${marta.id}`, { password: 'un-altre-castell-2027', currentPassword: NEW })).s, 200);
+  assert.equal((await m('GET', '/people')).s, 401);
+  assert.equal(devices(marta.id), 0);
 });
 
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {

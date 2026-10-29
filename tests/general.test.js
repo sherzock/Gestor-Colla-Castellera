@@ -52,7 +52,7 @@ test('tots els textos tenen traducció al castellà i a l\'anglès', () => {
     for (const m of src.matchAll(new RegExp(String.raw`\btn\(\s*[^,]+,\s*${STR}\s*,\s*${STR}`, 'g'))) { keys.add(unq(m[1])); keys.add(unq(m[2])); }
   }
   const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  for (const m of server.matchAll(new RegExp(String.raw`fail\(\s*\d+\s*,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
+  for (const m of server.matchAll(new RegExp(String.raw`(?:fail|new HttpError)\(\s*\d+\s*,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
   for (const m of server.matchAll(new RegExp(String.raw`atMost\([^,]+,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
   const missing = [...keys].filter((k) => !(k in DICTS.es) || !(k in DICTS.en));
   assert.ok(keys.size > 300, `${keys.size} textos`);

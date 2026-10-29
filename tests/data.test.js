@@ -94,6 +94,11 @@ test('importar: límits i dades que no són persones', async () => {
 
 // ---------- Còpies de seguretat ----------
 test('descarregar una còpia: és la base de dades sencera, sense sessions obertes, i se\'n pot arrencar', async () => {
+  // Un mòbil amb un avís per recollir (directament a la base de dades: cap avís surt cap a un servei de debò).
+  await s.member('POST', '/push/subscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/copia' });
+  const live = new DatabaseSync(server.dbPath);
+  live.prepare(`INSERT INTO push_inbox (subscription_id, title) SELECT id, 'Per a la còpia' FROM push_subscriptions`).run();
+  live.close();
   const r = await fetch(`${server.url}/api/backup`, { headers: { cookie: Object.entries(s.admin.jar).map(([k, v]) => `${k}=${v}`).join('; ') } });
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-disposition'), /attachment; filename="colla-\d{4}-\d{2}-\d{2}\.db"/);
@@ -102,7 +107,11 @@ test('descarregar una còpia: és la base de dades sencera, sense sessions obert
   const file = path.join(dir, 'copia.db');
   fs.writeFileSync(file, Buffer.from(await r.arrayBuffer()));
   const copy = new DatabaseSync(file, { readOnly: true });
-  assert.equal(copy.prepare('SELECT COUNT(*) AS n FROM auth_tokens').get().n, 0);
+  // Cap sessió oberta (de membre ni d'administració), cap mòbil conegut i cap avís per recollir: amb la còpia no es
+  // pot entrar enlloc ni llegir res que no sigui a l'app.
+  for (const table of ['auth_tokens', 'admin_tokens', 'admin_devices', 'push_inbox']) {
+    assert.equal(copy.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0, table);
+  }
   assert.equal(copy.prepare('SELECT COUNT(*) AS n FROM people').get().n, await count());
   copy.close();
   // Restaurar-la: el servidor arrenca amb la còpia, hi ha la mateixa gent i es pot entrar.

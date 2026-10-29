@@ -408,8 +408,9 @@ route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_C
 
 // ---------- Còpies de seguretat ----------
 // Una còpia diària de la base de dades a BACKUP_DIR (es guarden les últimes BACKUP_KEEP), i els administradors en
-// poden baixar una en qualsevol moment per guardar-la fora del servidor. Les sessions obertes no es copien: qui
-// restauri una còpia només haurà de tornar a entrar.
+// poden baixar una en qualsevol moment per guardar-la fora del servidor. Les sessions obertes (de membre i
+// d'administració), els mòbils coneguts dels administradors i els avisos encara per recollir no es copien: qui
+// restauri una còpia només haurà de tornar a entrar, i amb la còpia a la mà no s'entra enlloc.
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(path.dirname(DB_PATH), 'backups');
 const BACKUP_KEEP = Math.max(1, Math.min(365, Number(process.env.BACKUP_KEEP) || 14));
 const BACKUP_AUTO = !DEMO || !!process.env.BACKUP_DIR; // a la demo les dades es reinicien: no cal
@@ -417,7 +418,7 @@ const BACKUP_FILE = /^colla-\d{4}-\d{2}-\d{2}\.db$/;
 function writeBackup(file) {
   db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
   const copy = new DatabaseSync(file);
-  copy.exec('DELETE FROM auth_tokens; VACUUM;');
+  copy.exec('DELETE FROM auth_tokens; DELETE FROM admin_tokens; DELETE FROM admin_devices; DELETE FROM push_inbox; VACUUM;');
   copy.close();
   fs.chmodSync(file, 0o600);
 }
@@ -544,7 +545,9 @@ route('PUT', '/api/me', async ({ user, body, req }) => {
     noDemoAccounts();
     await confirmPassword(req, user, body.currentPassword);
     db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(newPassword(body.newPassword, user.username), user.admin_id);
+    // Les altres sessions i els altres mòbils coneguts s'han de tornar a fer (com quan es canvia la d'un altre compte).
     db.prepare('DELETE FROM admin_tokens WHERE admin_id = ? AND token != ?').run(user.admin_id, user.tokenHash);
+    db.prepare('DELETE FROM admin_devices WHERE admin_id = ? AND token != ?').run(user.admin_id, hashToken(cookies(req).adev || ''));
   }
   db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, user.admin_id);
   return { ok: true, name };
@@ -640,12 +643,21 @@ route('PUT', '/api/people/:id', ({ params, body }) => {
   const data = pickPersonFields(body, [...PROFILE_FIELDS, 'active']);
   checkAliasUnique(data.alias, person.id);
   updateRow('people', person.id, data);
-  if (data.active === 0) db.prepare('DELETE FROM auth_tokens WHERE person_id = ?').run(person.id);
+  // Qui es dona de baixa perd les sessions i deixa de rebre avisos al mòbil (si hi havia entrat també un compte
+  // d'administració, el mòbil continua lligat a aquest compte).
+  if (data.active === 0) {
+    db.prepare('DELETE FROM auth_tokens WHERE person_id = ?').run(person.id);
+    db.prepare('DELETE FROM push_subscriptions WHERE person_id = ? AND admin_id IS NULL').run(person.id);
+    db.prepare('UPDATE push_subscriptions SET person_id = NULL WHERE person_id = ?').run(person.id);
+  }
   return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(person.id));
 }, 'admin');
 
 route('DELETE', '/api/people/:id', ({ params }) => {
   db.prepare('DELETE FROM people WHERE id = ?').run(params.id);
+  // El diari de canvis (WAL) encara té les pàgines d'abans d'esborrar-la: es passa al fitxer (ja amb zeros, veure
+  // secure_delete a db.js) i es buida, perquè no en quedi res llegible.
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   return { ok: true };
 }, 'admin');
 
@@ -669,6 +681,8 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     WHERE g.companion_of = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title, acompanyant: r.name }));
   const devices = db.prepare('SELECT endpoint, lang, created_at FROM push_subscriptions WHERE person_id = ?').all(p.id)
     .map((d) => ({ servei: new URL(d.endpoint).hostname, idioma: d.lang, des_de: d.created_at }));
+  const reminders = db.prepare(`SELECT e.date, e.title FROM push_reminders r JOIN events e ON e.id = r.event_id
+    WHERE r.person_id = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title }));
   const out = {
     colla: COLLA_NAME, contacte: PRIVACY_CONTACT || null, generat: nowLocal(),
     persona: { nom: p.name, malnom: p.alias, correu: p.email, telefon: p.phone, data_naixement: p.birthdate, alcada_cm: p.height_cm,
@@ -678,6 +692,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     posicions: positions,
     acompanyants: companions,
     mobils_amb_avisos: devices,
+    recordatoris: reminders,
     sessions_obertes: db.prepare('SELECT COUNT(*) AS n FROM auth_tokens WHERE person_id = ? AND expires_at > ?').get(p.id, Date.now()).n,
   };
   const slug = String(p.alias || p.name).normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'persona';
@@ -1289,7 +1304,9 @@ route('POST', '/api/announcements', ({ body, user }) => {
   const id = insertRow('announcements', { ...announcementInput(body), author: user.name, created_at: nowUtc() });
   const a = getAnnouncement(id);
   if (body.notify !== false) {
-    notify(db.prepare('SELECT * FROM push_subscriptions').all(),
+    // Només als mòbils d'algú de la colla que encara hi és, o d'un compte d'administració.
+    notify(db.prepare(`SELECT s.* FROM push_subscriptions s LEFT JOIN people p ON p.id = s.person_id
+      WHERE s.admin_id IS NOT NULL OR p.active = 1`).all(),
       (lang) => ({ title: translate(lang, 'Altaveu: {title}', { title: a.title }), body: a.body, url: '#/altaveu' }));
   }
   return a;
@@ -2230,16 +2247,20 @@ function serveStatic(req, res, pathname) {
   send(file);
 }
 
+// Una petició massa gran es llegeix fins al final sense guardar-la i es respon 413: si es tallés la connexió, l'app
+// diria «Sense connexió» en lloc de dir què passa. Si és enorme, sí que es talla.
+const BODY_MAX = 1_000_000;
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > 1_000_000) { reject(new HttpError(413, 'Petició massa gran')); req.destroy(); return; }
-      chunks.push(c);
+      if (size > 20 * BODY_MAX) { reject(new HttpError(413, 'Petició massa gran')); req.destroy(); return; }
+      if (size <= BODY_MAX) chunks.push(c);
     });
     req.on('end', () => {
+      if (size > BODY_MAX) return reject(new HttpError(413, 'Petició massa gran'));
       if (!chunks.length) return resolve({});
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* es rebutja a sota */ }
