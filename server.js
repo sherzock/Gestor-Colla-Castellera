@@ -649,6 +649,43 @@ route('DELETE', '/api/people/:id', ({ params }) => {
   return { ok: true };
 }, 'admin');
 
+// Totes les dades d'una persona en un fitxer (dret d'accés i de portabilitat del RGPD): el que diu la nota de
+// privadesa que es guarda. Només ho poden fer els administradors: els membres entren sense contrasenya.
+route('GET', '/api/people/:id/export', ({ params, res }) => {
+  const p = db.prepare('SELECT * FROM people WHERE id = ?').get(params.id) || fail(404, 'Persona no trobada');
+  const labels = new Map(db.prepare(`SELECT f.id, f.label FROM event_fields f JOIN attendance a ON a.event_id = f.event_id
+    WHERE a.person_id = ?`).all(p.id).map((f) => [String(f.id), f.label]));
+  const yesNo = (v) => (v === null || v === undefined ? null : !!v);
+  const attendance = db.prepare(`SELECT e.date, e.title, e.type, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at
+    FROM attendance a JOIN events e ON e.id = a.event_id WHERE a.person_id = ? ORDER BY e.date, e.start_time`).all(p.id)
+    .map((r) => ({ data: r.date, sessio: r.title, tipus: r.type, resposta: r.status, ha_vingut: yesNo(r.came), escoleta: yesNo(r.escoleta),
+      camps: Object.fromEntries(Object.entries(parseJSON(r.extra, {})).map(([k, v]) => [labels.get(k) || k, v])), comentari: r.comment,
+      actualitzat: r.updated_at }));
+  const positions = db.prepare(`SELECT c.*, cp.pos_key, e.date, e.title FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id
+    JOIN events e ON e.id = c.event_id WHERE cp.person_id = ? ORDER BY e.date, c.position`).all(p.id)
+    .map((r) => ({ data: r.date, sessio: r.title, castell: castellName(r), posicio: positionOf(r, r.pos_key)?.role || r.pos_key,
+      resultat: r.result }));
+  const companions = db.prepare(`SELECT e.date, e.title, g.name FROM event_guests g JOIN events e ON e.id = g.event_id
+    WHERE g.companion_of = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title, acompanyant: r.name }));
+  const devices = db.prepare('SELECT endpoint, lang, created_at FROM push_subscriptions WHERE person_id = ?').all(p.id)
+    .map((d) => ({ servei: new URL(d.endpoint).hostname, idioma: d.lang, des_de: d.created_at }));
+  const out = {
+    colla: COLLA_NAME, contacte: PRIVACY_CONTACT || null, generat: nowLocal(),
+    persona: { nom: p.name, malnom: p.alias, correu: p.email, telefon: p.phone, data_naixement: p.birthdate, alcada_cm: p.height_cm,
+      alcada_espatlles_cm: p.shoulder_height_cm, amplada_espatlles_cm: p.shoulder_width_cm, pes_kg: p.weight_kg, notes: p.notes,
+      instrument: p.instrument, activa: !!p.active, alta: p.created_at },
+    assistencia: attendance,
+    posicions: positions,
+    acompanyants: companions,
+    mobils_amb_avisos: devices,
+    sessions_obertes: db.prepare('SELECT COUNT(*) AS n FROM auth_tokens WHERE person_id = ? AND expires_at > ?').get(p.id, Date.now()).n,
+  };
+  const slug = String(p.alias || p.name).normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'persona';
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
+    'Content-Disposition': `attachment; filename="dades-${slug}-${nowLocal().slice(0, 10)}.json"` });
+  res.end(JSON.stringify(out, null, 2));
+}, 'admin');
+
 // Importar persones d'un full de càlcul. L'app llegeix el fitxer i envia cada fila amb els camps ja triats.
 // És tot o res: si una fila té un error no s'importa cap, i es diu quines fallen. Amb «check» només es comprova.
 // Una persona que ja hi és (mateix nom) no es toca, tret que es demani «update»: llavors s'hi posen les dades del fitxer.
@@ -819,8 +856,71 @@ route('GET', '/api/events/:id', ({ params, user }) => {
     mine: mine ? { ...mine, came: flag(mine.came), escoleta: flag(mine.escoleta), extra: parseJSON(mine.extra, {}),
       companions: event.ask_companions ? companionsOf(event.id, user.id) : [] } : null,
     attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [] })) : attendance.filter((a) => a.present),
+    forecast: isAdmin ? attendanceForecast(event, castells) : undefined,
   };
 });
+
+// Previsió d'assistència d'una sessió que encara no s'ha fet. Per a cada persona: com de sovint ha vingut l'últim any
+// a sessions del mateix tipus quan havia dit que sí, que no o quan no havia respost. Amb poca història, la seva xifra
+// s'acosta a la de tota la colla. Només es dona el total (amb un marge): cap nom ni cap xifra per persona.
+const FORECAST_DAYS = 365, FORECAST_MIN = 4, FORECAST_PRIOR = 3;
+function attendanceForecast(event, castells) {
+  const today = nowLocal().slice(0, 10);
+  if (event.date < today) return null;
+  const since = new Date(); since.setDate(since.getDate() - FORECAST_DAYS);
+  const past = (types) => db.prepare(`SELECT id FROM events WHERE type IN (SELECT value FROM json_each(?)) AND hidden = 0
+    AND date >= ? AND date < ? ORDER BY date`).all(JSON.stringify(types), localStamp(since).slice(0, 10), today).map((e) => e.id);
+  const musics = event.type === 'musics';
+  let ids = past([event.type]);
+  if (ids.length < FORECAST_MIN && !musics) ids = past(['assaig', 'diada', 'esdeveniment']);
+  if (ids.length < FORECAST_MIN) return { basis: ids.length, enough: false };
+
+  // Respostes i assistència de cada persona a les sessions passades (des de la primera en què consta).
+  const tally = () => ({ si: [0, 0], no: [0, 0], none: [0, 0] });
+  const byPerson = new Map(), all = tally(), first = new Map();
+  const rows = db.prepare(`SELECT a.person_id, a.event_id, a.status, ${CAME_SQL} AS came FROM attendance a
+    WHERE a.event_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(ids));
+  const order = new Map(ids.map((id, i) => [id, i]));
+  const seen = new Map();
+  for (const r of rows) {
+    seen.set(`${r.person_id}|${r.event_id}`, r);
+    first.set(r.person_id, Math.min(first.get(r.person_id) ?? Infinity, order.get(r.event_id)));
+  }
+  const people = db.prepare(`SELECT p.id, a.status FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
+    WHERE p.active = 1${musics ? ' AND p.instrument IS NOT NULL' : ''}`).all(event.id);
+  for (const p of people) {
+    const t = tally();
+    for (let i = first.get(p.id) ?? ids.length; i < ids.length; i++) {
+      const r = seen.get(`${p.id}|${ids[i]}`);
+      const cat = r?.status === 'si' ? 'si' : r?.status === 'no' ? 'no' : 'none';
+      for (const x of [t[cat], all[cat]]) { x[0]++; x[1] += r?.came ? 1 : 0; }
+    }
+    byPerson.set(p.id, t);
+  }
+  const prior = (cat) => (all[cat][1] + 1) / (all[cat][0] + 2);
+  const chance = (id, cat) => { const [n, c] = byPerson.get(id)[cat]; return (c + FORECAST_PRIOR * prior(cat)) / (n + FORECAST_PRIOR); };
+
+  const groups = { si: { n: 0, e: 0 }, no: { n: 0, e: 0 }, none: { n: 0, e: 0 } };
+  let variance = 0;
+  for (const p of people) {
+    const cat = p.status === 'si' ? 'si' : p.status === 'no' ? 'no' : 'none';
+    const q = chance(p.id, cat);
+    groups[cat].n++; groups[cat].e += q; variance += q * (1 - q);
+  }
+  // Les persones temporals i els acompanyants ja apuntats es compten com a segurs.
+  const guests = db.prepare('SELECT COUNT(*) AS n FROM event_guests WHERE event_id = ? AND companion_dropped = 0').get(event.id).n;
+  const expected = groups.si.e + groups.no.e + groups.none.e + guests;
+  const margin = 1.645 * Math.sqrt(variance); // ~90 %
+  // El castell més gran de la sessió: quanta gent cal per fer-lo sencer (sense comptar la música).
+  const needed = Math.max(0, ...castells.map((c) => [...structureOf(c).positions.values()].filter((p) => p.group !== 'musica').length));
+  return {
+    enough: true, basis: ids.length,
+    expected: Math.round(expected), low: Math.max(0, Math.floor(expected - margin)), high: Math.ceil(expected + margin),
+    yes: groups.si.n, yesExpected: Math.round(groups.si.e),
+    unanswered: groups.none.n, unansweredExpected: Math.round(groups.none.e),
+    no: groups.no.n, guests, needed: needed || null,
+  };
+}
 
 function upsertAttendance(eventId, personId, patch) {
   const current = db.prepare('SELECT * FROM attendance WHERE event_id = ? AND person_id = ?').get(eventId, personId);

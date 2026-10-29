@@ -143,6 +143,27 @@ test('còpia diària: es fa en arrencar, és privada i només se\'n guarden les 
   assert.equal((await s.admin('GET', '/backup/status')).d.auto, false, 'a la demo no se\'n fan si no es demana');
 });
 
+// ---------- Dades d'una persona ----------
+test('descarregar les dades d\'una persona: fitxa, assistència, posicions i acompanyants, només per a la tècnica', async () => {
+  const r = await fetch(`${server.url}/api/people/${s.personId}/export`, { headers: { cookie: Object.entries(s.admin.jar).map(([k, v]) => `${k}=${v}`).join('; ') } });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-disposition'), /attachment; filename="dades-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.json"/);
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  const d = await r.json();
+  const p = (await s.admin('GET', '/people')).d.people.find((x) => x.id === s.personId);
+  assert.equal(d.persona.nom, p.name);
+  assert.equal(d.persona.pes_kg, p.weight_kg);
+  assert.equal(d.contacte, 'junta@colla.cat');
+  assert.ok(d.assistencia.length > 0 && d.assistencia.every((a) => a.data && a.sessio));
+  const history = (await s.admin('GET', `/people/${s.personId}/history`)).d;
+  assert.ok(d.posicions.length >= history.total, 'també les dels castells que encara no s\'han fet');
+  assert.ok(d.posicions.every((x) => x.castell && x.posicio && !x.posicio.includes('-')), 'el nom de la posició, no la clau');
+  assert.ok(Array.isArray(d.acompanyants) && Array.isArray(d.mobils_amb_avisos));
+  assert.ok(!JSON.stringify(d).includes('password'), 'res de contrasenyes');
+  assert.equal((await s.member('GET', `/people/${s.personId}/export`)).s, 403, 'tampoc les pròpies: els membres entren sense contrasenya');
+  assert.equal((await s.admin('GET', '/people/999999/export')).s, 404);
+});
+
 // ---------- Privadesa ----------
 test('la nota de privadesa té el contacte de la colla, i tothom la pot llegir', async () => {
   assert.equal((await client(server.url)('GET', '/api/config')).d.privacyContact, 'junta@colla.cat');

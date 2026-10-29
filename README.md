@@ -145,6 +145,9 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   esborren res). Hi ha una plantilla CSV per començar.
 - **Còpies de seguretat** (admins): el servidor en fa una cada dia (es guarden les últimes 14) i a «Comptes» →
   «Descarrega una còpia» se'n baixa una per guardar-la fora del servidor. Les còpies no porten les sessions obertes.
+- **Dades d'una persona** (admins): a la seva fitxa, «Descarrega les seves dades» dona un fitxer JSON amb tot el que
+  se'n guarda (fitxa, assistència i respostes, posicions, acompanyants i mòbils amb avisos), per si ho demana (dret
+  d'accés i de portabilitat). Els membres no se les poden baixar ells mateixos: entren sense contrasenya.
 - **Protecció de dades**: una nota per als membres (què es guarda, per a què, qui ho veu, quant de temps i com
   exercir els drets), en català, castellà i anglès. Es pot llegir abans d'entrar i des d'«Ajustos», i imprimir per
   signar-la a paper (els menors de 14 anys, amb la signatura del pare, mare o tutor/a). És un model: la junta l'ha de
@@ -159,6 +162,11 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   administradors.
 - **Preparació del tronc** (admins): a la revisió de l'alineació d'una diada surt qui no ha fet mai la seva posició en
   aquell castell i qui no l'ha assajada les últimes 6 setmanes.
+- **Previsió d'assistència** (admins): a cada sessió que encara no s'ha fet, quanta gent vindrà probablement (amb un
+  marge). Es calcula amb el que ha passat l'últim any a sessions del mateix tipus: quanta gent ha vingut quan havia
+  dit que sí i quanta quan no havia respost (per a cada persona, i s'acosta a la mitjana de la colla quan hi ha poca
+  història). S'hi sumen les persones temporals i els acompanyants, i es compara amb la gent que cal per al castell més
+  gran. Només es mostra el total: cap nom ni cap xifra per persona.
 
 - **Idioma i aparença**: català, castellà o anglès, i tema automàtic, clar o fosc (es recorda a cada dispositiu).
   Els termes castellers (baix, pinya, enxaneta, folre…) es mantenen en català a tots els idiomes.

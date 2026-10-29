@@ -99,7 +99,7 @@ async function exportSession(event, castells, button) {
 }
 
 export async function pageEvent(id) {
-  const { event, fields, castells, mine, attendance, counts, guests = [] } = await api('GET', `/events/${id}`);
+  const { event, fields, castells, mine, attendance, counts, guests = [], forecast } = await api('GET', `/events/${id}`);
   const admin = isAdmin();
   let status = mine?.status ?? null;
   let escoleta = mine?.escoleta ?? null;
@@ -145,6 +145,19 @@ export async function pageEvent(id) {
   };
   const escValue = (v) => (v === true ? `<span class="status si">${t('Sí')}</span>` : v === false ? `<span class="status no">${t('No')}</span>` : '');
   const sortedAttendance = [...attendance].sort((a, b) => (b.present - a.present) || STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.name.localeCompare(b.name));
+
+  // Previsió d'assistència (només administradors, només sessions que encara no s'han fet).
+  const fc = forecast;
+  const enoughFor = (n) => (fc.high < n ? ['bad', t("Probablement no n'hi haurà prou")] : fc.low < n ? ['warn', t('Pot anar just')] : ['ok', t("N'hi hauria d'haver prou")]);
+  const forecastCard = admin && fc ? `<div class="card forecast">
+      <h2>${t("Previsió d'assistència")}</h2>
+      ${fc.enough ? `<div class="forecast-main"><strong>${t('Unes {n} persones', { n: fc.expected })}</strong>
+          <span class="muted">${t('entre {low} i {high}', { low: fc.low, high: fc.high })}</span></div>
+        <p class="small" style="margin:6px 0">${t("{yes} han dit que vénen; de les {u} que encara no han respost, en solen venir unes {x}.", { yes: fc.yes, u: fc.unanswered, x: fc.unansweredExpected })}${fc.guests ? ` ${tn(fc.guests, 'A més, {n} persona temporal o acompanyant.', 'A més, {n} persones temporals o acompanyants.')}` : ''}</p>
+        ${fc.needed ? `<p class="small forecast-need ${enoughFor(fc.needed)[0]}" style="margin:6px 0">${t('El castell més gran en necessita {n}', { n: fc.needed })} · <strong>${enoughFor(fc.needed)[1]}</strong></p>` : ''}
+        <p class="small muted" style="margin:6px 0 0">${t("Segons qui ha vingut a les últimes {n} sessions quan havia dit que sí o quan no havia respost.", { n: fc.basis })}</p>`
+      : `<p class="small muted" style="margin:0">${t("Encara no hi ha prou sessions passades per fer una previsió.")}</p>`}
+    </div>` : '';
 
   const adminTable = admin ? `
     <div class="card">
@@ -271,7 +284,7 @@ export async function pageEvent(id) {
         ${guestsCard}
         ${fieldsCard}
       </div>
-      <div class="stack">${admin ? answersCard(event, attendance) : ''}${adminTable}</div>
+      <div class="stack">${forecastCard}${admin ? answersCard(event, attendance) : ''}${adminTable}</div>
     </div>`;
 
   // Confirmació pròpia

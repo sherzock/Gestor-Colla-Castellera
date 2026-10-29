@@ -178,7 +178,10 @@ function personModal(person) {
         <button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${person ? t('Desa') : t('Crea')}</button></div>
     </form>
     ${person ? `<fieldset style="margin-top:18px"><legend>${t('Historial de posicions')}</legend><div id="person-history" class="muted small">${t('Carregant…')}</div>
-      <a class="btn sm" href="#/estadistiques/persona/${person.id}" style="margin-top:12px">${icon.chart}${t('Estadístiques')}</a></fieldset>` : ''}`, (m) => {
+      <a class="btn sm" href="#/estadistiques/persona/${person.id}" style="margin-top:12px">${icon.chart}${t('Estadístiques')}</a></fieldset>
+      <fieldset style="margin-top:12px"><legend>${t('Protecció de dades')}</legend>
+        <p class="small muted" style="margin:0 0 8px">${t("Si ho demana, pots donar-li totes les seves dades en un fitxer: fitxa, assistència, respostes, posicions i acompanyants.")}</p>
+        <a class="btn sm" href="/api/people/${person.id}/export" download>${t('Descarrega les seves dades')}</a></fieldset>` : ''}`, (m) => {
     if (person) {
       api('GET', `/people/${person.id}/history`)
         .then((h) => { const el = qs('#person-history', m); if (el) { el.className = ''; el.innerHTML = personHistoryHtml(h); } })

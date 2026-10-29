@@ -839,3 +839,10 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
   body { background: #fff; color: #000; }
   .privacy { box-shadow: none; border: 0; max-width: none; padding: 0; }
 }
+
+/* Previsió d'assistència d'una sessió */
+.forecast-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 20px; }
+.forecast-main .muted { font-size: 14px; }
+.forecast-need.ok strong { color: var(--ok); }
+.forecast-need.warn strong { color: var(--warn); }
+.forecast-need.bad strong { color: var(--bad); }

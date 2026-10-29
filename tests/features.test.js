@@ -217,6 +217,27 @@ test('on va fallar: es desa amb el resultat, només ho veu la tècnica i surt a 
   await s.admin('DELETE', `/castells/${dup.id}`);
 });
 
+test('previsió d\'assistència: només a la tècnica, només per a sessions que vindran, i sense noms', async () => {
+  const future = (await s.admin('GET', '/events')).d.find((e) => e.type === 'diada');
+  const d = (await s.admin('GET', `/events/${future.id}`)).d;
+  const f = d.forecast;
+  assert.ok(f.enough, JSON.stringify(f));
+  assert.ok(f.basis >= 4);
+  assert.ok(f.low <= f.expected && f.expected <= f.high, JSON.stringify(f));
+  assert.ok(f.expected >= f.yesExpected && f.yesExpected <= f.yes);
+  assert.ok(f.needed > 20, 'el castell més gran de la diada');
+  assert.deepEqual(Object.keys(f).sort(), ['basis', 'enough', 'expected', 'guests', 'high', 'low', 'needed', 'no', 'unanswered', 'unansweredExpected', 'yes', 'yesExpected']);
+  // Si algú més diu que sí, la previsió no baixa.
+  const someone = d.attendance.find((a) => !a.status);
+  await s.admin('PUT', `/events/${future.id}/attendance/${someone.id}`, { status: 'si' });
+  const after = (await s.admin('GET', `/events/${future.id}`)).d.forecast;
+  assert.equal(after.yes, f.yes + 1);
+  assert.ok(after.expected >= f.expected);
+  await s.admin('PUT', `/events/${future.id}/attendance/${someone.id}`, { status: null });
+  assert.equal((await s.member('GET', `/events/${future.id}`)).d.forecast, undefined);
+  assert.equal((await s.admin('GET', `/events/${s.pastEvent.id}`)).d.forecast, null);
+});
+
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });
