@@ -809,3 +809,24 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 /* Omplir un castell com un d'anterior */
 .copy-from { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin-bottom: 14px; border: 1px dashed var(--accent); border-radius: 10px; background: var(--accent-soft); }
 .copy-from select { width: 100%; }
+
+/* ---------- Importar persones ---------- */
+.import-map td, .import-map th { padding: 6px 8px; vertical-align: middle; }
+.import-map td:nth-child(2) { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.import-map select { width: 100%; min-width: 150px; }
+.import-errors { background: var(--bad-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: .9rem; }
+.import-errors ul { margin: 6px 0 0; padding-left: 18px; max-height: 200px; overflow: auto; }
+.import-ok { background: var(--ok-soft); color: var(--ok); border-radius: 10px; padding: 10px 12px; font-weight: 600; }
+
+/* ---------- Protecció de dades ---------- */
+.privacy { max-width: 760px; margin: 0 auto; line-height: 1.55; }
+.privacy h2 { font-size: 1rem; margin: 18px 0 4px; }
+.privacy p { margin: 0 0 8px; }
+.privacy-sign { margin-top: 24px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.sign-line { border-bottom: 1px solid var(--ink-3); height: 44px; display: flex; align-items: flex-end; margin-top: 8px; }
+.sign-line span { font-size: .78rem; color: var(--ink-2); padding-bottom: 2px; }
+@media print {
+  #topbar, .no-print, .toast { display: none !important; }
+  body { background: #fff; color: #000; }
+  .privacy { box-shadow: none; border: 0; max-width: none; padding: 0; }
+}

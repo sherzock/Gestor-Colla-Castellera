@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-const DB_PATH = process.env.DB_PATH || path.join(import.meta.dirname, 'data', 'colla.db');
+export const DB_PATH = process.env.DB_PATH || path.join(import.meta.dirname, 'data', 'colla.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 export const db = new DatabaseSync(DB_PATH);

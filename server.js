@@ -4,7 +4,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import net from 'node:net';
 import zlib from 'node:zlib';
-import { db, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
+import os from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
+import { db, DB_PATH, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates,
   LAYER_PREFIX, TEMPLATE_KINDS, levelGaps, weightInversions, SHOULDER_GAP_CM } from './public/castell.js';
 import { translate } from './public/i18n.js';
@@ -17,6 +19,8 @@ const PUBLIC_DIR = path.join(import.meta.dirname, 'public');
 const COLLA_CODE = process.env.COLLA_CODE || '';
 // Mode demostració: la pantalla d'entrada explica com provar l'app (les dades es tornen a crear a cada arrencada amb «npm run demo»).
 const DEMO = process.env.DEMO === '1';
+// Adreça (o nom) a qui es pot escriure per les dades personals: surt a la nota de privadesa.
+const PRIVACY_CONTACT = String(process.env.PRIVACY_CONTACT || '').trim().slice(0, 200);
 // Només darrere d'un proxy (Render el posa sol) es pot fer cas de X-Forwarded-For; si no, el client se la pot inventar.
 const TRUST_PROXY = process.env.TRUST_PROXY === '1' || !!process.env.RENDER;
 const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;
@@ -117,19 +121,23 @@ function pickPersonFields(body, fields) {
   const out = {};
   for (const f of fields) {
     if (!(f in body)) continue;
-    if (NUMERIC_PERSON_FIELDS.includes(f)) out[f] = inRange(body[f], ...MEASURES[f]);
-    else if (f === 'birthdate') {
-      const v = str(body[f], 10);
-      if (v && (!isDate(v) || v < '1900-01-01' || v > nowLocal().slice(0, 10))) fail(400, 'Data de naixement no vàlida');
-      out[f] = v;
-    } else if (f === 'instrument') {
-      if (body.instrument && !INSTRUMENTS.includes(body.instrument)) fail(400, 'Instrument no vàlid');
-      out.instrument = body.instrument || null;
-    } else if (f === 'active') out.active = bool(body.active);
-    else out[f] = str(body[f], PERSON_TEXT[f] ?? 200);
+    // L'error recorda el camp (en importar un fitxer es diu a quina columna és).
+    try { pickPersonField(body, f, out); } catch (err) { err.field = f; throw err; }
   }
   if ('name' in out && !out.name) fail(400, 'El nom és obligatori');
   return out;
+}
+function pickPersonField(body, f, out) {
+  if (NUMERIC_PERSON_FIELDS.includes(f)) out[f] = inRange(body[f], ...MEASURES[f]);
+  else if (f === 'birthdate') {
+    const v = str(body[f], 10);
+    if (v && (!isDate(v) || v < '1900-01-01' || v > nowLocal().slice(0, 10))) fail(400, 'Data de naixement no vàlida');
+    out[f] = v;
+  } else if (f === 'instrument') {
+    if (body.instrument && !INSTRUMENTS.includes(body.instrument)) fail(400, 'Instrument no vàlid');
+    out.instrument = body.instrument || null;
+  } else if (f === 'active') out.active = bool(body.active);
+  else out[f] = str(body[f], PERSON_TEXT[f] ?? 200);
 }
 
 // El malnom serveix per distingir persones amb el mateix nom: no es pot repetir.
@@ -386,7 +394,66 @@ const meResponse = (user) => (user.mode === 'admin'
   : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member', sessions: user.sessions, latestNews: latestNews() });
 
 // ---------- Rutes: autenticació i perfil ----------
-route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO }), 'public');
+route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO, privacyContact: PRIVACY_CONTACT }), 'public');
+
+// ---------- Còpies de seguretat ----------
+// Una còpia diària de la base de dades a BACKUP_DIR (es guarden les últimes BACKUP_KEEP), i els administradors en
+// poden baixar una en qualsevol moment per guardar-la fora del servidor. Les sessions obertes no es copien: qui
+// restauri una còpia només haurà de tornar a entrar.
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(path.dirname(DB_PATH), 'backups');
+const BACKUP_KEEP = Math.max(1, Math.min(365, Number(process.env.BACKUP_KEEP) || 14));
+const BACKUP_AUTO = !DEMO || !!process.env.BACKUP_DIR; // a la demo les dades es reinicien: no cal
+const BACKUP_FILE = /^colla-\d{4}-\d{2}-\d{2}\.db$/;
+function writeBackup(file) {
+  db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+  const copy = new DatabaseSync(file);
+  copy.exec('DELETE FROM auth_tokens; VACUUM;');
+  copy.close();
+  fs.chmodSync(file, 0o600);
+}
+const backupList = () => (fs.existsSync(BACKUP_DIR) ? fs.readdirSync(BACKUP_DIR).filter((f) => BACKUP_FILE.test(f)).sort() : []);
+function dailyBackup() {
+  try {
+    const name = `colla-${nowLocal().slice(0, 10)}.db`;
+    if (backupList().includes(name)) return;
+    fs.mkdirSync(BACKUP_DIR, { recursive: true, mode: 0o700 });
+    const tmp = path.join(BACKUP_DIR, `.${name}.tmp`);
+    fs.rmSync(tmp, { force: true });
+    writeBackup(tmp);
+    fs.renameSync(tmp, path.join(BACKUP_DIR, name));
+    for (const old of backupList().slice(0, -BACKUP_KEEP)) fs.rmSync(path.join(BACKUP_DIR, old));
+  } catch (err) {
+    console.error('No s\'ha pogut fer la còpia de seguretat:', err.message);
+  }
+}
+if (BACKUP_AUTO) {
+  dailyBackup();
+  setInterval(dailyBackup, 60 * 60 * 1000).unref();
+}
+
+route('GET', '/api/backup/status', () => {
+  const list = backupList();
+  return { auto: BACKUP_AUTO, keep: BACKUP_KEEP, count: list.length, last: list.at(-1)?.slice(6, 16) ?? null };
+}, 'admin');
+
+route('GET', '/api/backup', ({ res }) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'colla-backup-'));
+  try {
+    const file = path.join(dir, 'colla.db');
+    writeBackup(file);
+    const data = fs.readFileSync(file);
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.sqlite3',
+      'Content-Disposition': `attachment; filename="colla-${nowLocal().slice(0, 10)}.db"`,
+      'Content-Length': data.length,
+      'Cache-Control': 'no-store',
+    });
+    res.end(data);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return undefined;
+}, 'admin');
 
 // Es compara en temps constant (pels resums, que tenen la mateixa llargada) i amb límit d'errors.
 function checkCollaCode(req, code) {
@@ -570,6 +637,59 @@ route('PUT', '/api/people/:id', ({ params, body }) => {
 route('DELETE', '/api/people/:id', ({ params }) => {
   db.prepare('DELETE FROM people WHERE id = ?').run(params.id);
   return { ok: true };
+}, 'admin');
+
+// Importar persones d'un full de càlcul. L'app llegeix el fitxer i envia cada fila amb els camps ja triats.
+// És tot o res: si una fila té un error no s'importa cap, i es diu quines fallen. Amb «check» només es comprova.
+// Una persona que ja hi és (mateix nom) no es toca, tret que es demani «update»: llavors s'hi posen les dades del fitxer.
+const IMPORT_ERRORS = 50;
+// Per dir a quina columna és l'error (són els mateixos noms que a la fitxa de l'app).
+const IMPORT_LABELS = { alias: 'Malnom', email: 'Correu', phone: 'Telèfon', birthdate: 'Data de naixement', height_cm: 'Alçada',
+  shoulder_height_cm: "Alçada d'espatlles", shoulder_width_cm: "Amplada d'espatlles", weight_kg: 'Pes', instrument: 'Músic/a' };
+route('POST', '/api/people/import', ({ req, body }) => {
+  const rows = Array.isArray(body.people) ? body.people : fail(400, 'Dades no vàlides');
+  if (!rows.length) fail(400, 'El fitxer no té cap persona');
+  if (rows.length > LIMITS.people) fail(400, 'Com a molt {n} persones', { n: LIMITS.people });
+  const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
+  const existing = db.prepare('SELECT id, name, alias FROM people').all();
+  const byName = new Map(existing.map((p) => [normName(p.name), p]));
+  const byAlias = new Map(existing.filter((p) => p.alias).map((p) => [normName(p.alias), p]));
+  const seen = new Set();
+  const create = [], update = [], errors = [];
+  let skip = 0;
+  rows.forEach((row, index) => {
+    try {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) fail(400, 'Dades no vàlides');
+      const data = pickPersonFields(row, PROFILE_FIELDS);
+      if (!data.name) fail(400, 'El nom és obligatori');
+      const key = normName(data.name);
+      if (seen.has(key)) fail(400, '«{name}» surt més d\'un cop al fitxer', { name: data.name });
+      seen.add(key);
+      const match = byName.get(key);
+      const self = match || { name: data.name };
+      if (data.alias) {
+        const owner = byAlias.get(normName(data.alias));
+        if (owner && owner !== self) fail(400, 'El malnom «{alias}» ja el fa servir {name}', { alias: data.alias, name: owner.name });
+        byAlias.set(normName(data.alias), self);
+      }
+      if (!match) create.push(data);
+      else if (body.update) update.push([match.id, data]);
+      else skip++;
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err;
+      const message = translate(lang, err.message, err.params);
+      const label = err.field && IMPORT_LABELS[err.field] ? translate(lang, IMPORT_LABELS[err.field]) : '';
+      errors.push({ index, error: label && !message.includes(label) ? `${label}: ${message}` : message });
+    }
+  });
+  if (existing.length + create.length > LIMITS.people) fail(400, 'Com a molt {n} persones', { n: LIMITS.people });
+  const summary = { create: create.length, update: update.length, skip, errorCount: errors.length, errors: errors.slice(0, IMPORT_ERRORS) };
+  if (body.check || errors.length) return summary;
+  transaction(() => {
+    for (const data of create) insertRow('people', data);
+    for (const [id, data] of update) updateRow('people', id, data);
+  });
+  return { ...summary, done: true };
 }, 'admin');
 
 // ---------- Rutes: sessions (assajos, diades, esdeveniments) ----------

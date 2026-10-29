@@ -1,5 +1,7 @@
 # Colla castellera
 
+[![Proves](https://github.com/sherzock/Gestor-Colla-Castellera/actions/workflows/tests.yml/badge.svg)](https://github.com/sherzock/Gestor-Colla-Castellera/actions/workflows/tests.yml)
+
 Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 
 - **Sessions**: assajos, diades, esdeveniments i **assajos de músics**, amb data, hora, lloc i descripció.
@@ -127,6 +129,19 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 - **Fitxa de cada persona**: alçada, alçada i amplada d'espatlles, pes, data de naixement (edat), contacte i notes.
   A la llista de persones, l'assistència és la de la temporada actual (sense comptar els assajos de músics).
   Només la veuen els administradors.
+- **Importar persones d'un Excel** (admins): a «Persones» → «Importa des d'un Excel» es tria un fitxer `.xlsx` o
+  `.csv` (també el CSV amb «;» i la codificació de Windows que fa Excel) amb una persona per fila. L'app endevina
+  quin camp és cada columna pel títol (Nom, Cognoms, Malnom, Alçada, Pes… en català, castellà o anglès) i es pot
+  corregir. Entén dates com `15/06/2010` i alçades en metres (`1,62`). Primer es comprova i es diu què passarà
+  (persones noves, les que ja hi són i, si n'hi ha, les files amb errors); és tot o res. Qui ja hi és (mateix nom)
+  no es toca, tret que es marqui «actualitza-la»: llavors s'hi posen les dades del fitxer (les cel·les buides no
+  esborren res). Hi ha una plantilla CSV per començar.
+- **Còpies de seguretat** (admins): el servidor en fa una cada dia (es guarden les últimes 14) i a «Comptes» →
+  «Descarrega una còpia» se'n baixa una per guardar-la fora del servidor. Les còpies no porten les sessions obertes.
+- **Protecció de dades**: una nota per als membres (què es guarda, per a què, qui ho veu, quant de temps i com
+  exercir els drets), en català, castellà i anglès. Es pot llegir abans d'entrar i des d'«Ajustos», i imprimir per
+  signar-la a paper (els menors de 14 anys, amb la signatura del pare, mare o tutor/a). És un model: la junta l'ha de
+  revisar, i cal posar-hi el contacte (`PRIVACY_CONTACT`).
 - **Malnoms**: cada persona pot tenir un malnom únic; és el que surt a la pinya, al tronc i a les llistes.
   Sense malnom, es mostra «Nom I.» (nom i inicial del cognom).
 - **Persones temporals** de cada sessió: gent que no és de la colla (d'una altra colla, de prova…). Es creen a la
@@ -266,7 +281,8 @@ npm test
 Cada fitxer de `tests/` arrenca el seu propi servidor amb les dades de demostració, en una base de dades temporal i un
 port lliure (no toca `data/colla.db`). Comproven els permisos de totes les rutes, la privadesa del que veuen els
 membres, els límits, les funcionalitats principals i que el servidor no faci servir valors que el SQLite de Node 22
-(el de Render) no accepta.
+(el de Render) no accepta. A GitHub es passen soles a cada push (`.github/workflows/tests.yml`), amb Node 22.13,
+22 i 24.
 
 ### Configuració (variables d'entorn)
 
@@ -278,6 +294,9 @@ membres, els límits, les funcionalitats principals i que el servidor no faci se
 | `ADMIN_PASSWORD` | aleatòria | Contrasenya de l'`admin` inicial (només si encara no n'hi ha cap) |
 | `COLLA_CODE` | (cap) | Codi compartit que es demana als membres abans de «Qui ets?» |
 | `TZ` | `Europe/Madrid` | Zona horària de les sessions i de les dates límit |
+| `PRIVACY_CONTACT` | (cap) | Contacte per a les dades personals que surt a la nota de privadesa (p. ex. el correu de la junta) |
+| `BACKUP_DIR` | `backups` al costat de `DB_PATH` | Carpeta de les còpies de seguretat diàries (a la demo només se'n fan si es posa) |
+| `BACKUP_KEEP` | `14` | Quantes còpies diàries es guarden |
 | `TRUST_PROXY` | (no; sí a Render) | Posa-ho a `1` si l'app és darrere d'un proxy (Nginx, Caddy…), perquè el límit d'intents sàpiga l'adreça real de cada persona. Sense proxy, deixa-ho buit: si no, qualsevol es podria saltar el límit |
 
 ## Versió de prova gratuïta (Render)
@@ -296,8 +315,16 @@ segons a tornar a arrencar; aleshores les dades es reinicien. **No ho feu servir
 
 Qualsevol servidor amb Node (un VPS, Railway, Fly.io, Render amb disc persistent…) serveix. Posa-hi HTTPS
 davant (Caddy, Nginx o el del proveïdor) amb `TRUST_PROXY=1` i assegura't que el fitxer `DB_PATH` està en un disc que no s'esborri.
-Fes còpies de seguretat del fitxer `.db` periòdicament i guarda-les en un lloc privat: hi ha les dades personals de la
-colla (les sessions i les contrasenyes no hi són tal com són, però la resta sí).
+El servidor fa una còpia de seguretat cada dia a `BACKUP_DIR`, però si el disc es perd, es perden amb ell: baixa'n
+una de tant en tant des de «Comptes» → «Descarrega una còpia» (o copia la carpeta a un altre lloc) i guarda-la en un
+lloc privat: hi ha les dades personals de la colla (les contrasenyes no hi són tal com són, però la resta sí).
+
+Per **restaurar una còpia**: atura el servidor, substitueix el fitxer de la base de dades per la còpia i esborra els
+fitxers `-wal` i `-shm` que hi pugui haver al costat, i torna'l a engegar. Tothom haurà de tornar a entrar.
+
+```bash
+cp data/backups/colla-2026-10-28.db data/colla.db && rm -f data/colla.db-wal data/colla.db-shm
+```
 
 ## Estructura
 
@@ -313,6 +340,8 @@ public/editor.js   Editor visual de pinyes de la colla (plantilles)
 public/export.js   Exportació d'una sessió en ZIP (CSV + imatge PNG de cada castell)
 public/muntador.js Muntador automàtic d'alineacions
 public/zoom.js     Visor a pantalla completa (pinça, roda, arrossegar)
+public/import.js   Lectura de fitxers CSV i Excel (.xlsx) per importar persones
+public/privacy.js  Nota de protecció de dades (català, castellà, anglès)
 public/i18n.js     Traduccions (català, castellà, anglès), també per als errors del servidor
 public/style.css   Estils (clar/fosc, responsive)
 tests/             Proves automàtiques (npm test)

@@ -2,6 +2,8 @@ import { buildStructure, castellName, levelNames, levelRange, inTroncView, WIDTH
   SHOULDER_GAP_CM, levelGaps, weightInversions, troncLoad } from './castell.js';
 import { createEditor, layerToTemplate, boxShort, MAX_BOXES } from './editor.js';
 import { castellPng, zip, fileSafe, download } from './export.js';
+import { readSpreadsheet, guessField, rowsToPeople, IMPORT_FIELDS } from './import.js';
+import { PRIVACY } from './privacy.js';
 import { proposeLineup } from './muntador.js';
 import { translate, LANGS } from './i18n.js';
 import { openZoom } from './zoom.js';
@@ -230,7 +232,8 @@ function settingsModal() {
              ? `<button class="btn block" data-mode="admin">${icon.lock}${t('Passa al mode administració')}</button>`
              : `<a class="btn ghost block" href="#/admin">${t('Entrar com a administrador/a')}</a>`}`}
     </div>
-    ${settingsControls()}`, (m) => {
+    ${settingsControls()}
+    <a href="#/privadesa" class="small muted" style="display:block;text-align:center;margin-top:14px">${t('Protecció de dades')}</a>`, (m) => {
     qs('#switch-person', m)?.addEventListener('click', switchPerson);
     qs('#admin-logout', m)?.addEventListener('click', adminLogout);
     qsa('[data-mode]', m).forEach((b) => (b.onclick = () => switchMode(b.dataset.mode)));
@@ -264,11 +267,12 @@ function renderNav() {
 }
 document.getElementById('me-chip').onclick = () => settingsModal();
 
-const PUBLIC_ROUTES = ['#/login', '#/admin'];
+const PUBLIC_ROUTES = ['#/login', '#/admin', '#/privadesa'];
 let templatesLoaded = false;
 const routes = [
   [/^#\/login$/, pageIdentify],
   [/^#\/admin$/, pageAdminLogin],
+  [/^#\/privadesa$/, pagePrivacy],
   [/^#\/?$/, pageHome],
   [/^#\/sessio\/(\d+)$/, pageEvent],
   [/^#\/castell\/(\d+)$/, pageCastell],
@@ -318,6 +322,7 @@ async function pageIdentify() {
       ${config.demo ? `<div class="demo-note">${t('Versió de prova: tria qualsevol nom per entrar com a membre, o entra com a administrador/a amb {user} / {pass}. Les dades són inventades i es reinicien de tant en tant.', { user: '<b>admin</b>', pass: '<b>admin1234</b>' })}</div>` : ''}
       ${inner}
       <a href="#/admin" class="small" style="display:block;text-align:center">${t('Entrar com a administrador/a')}</a>
+      <a href="#/privadesa" class="small muted" style="display:block;text-align:center">${t('Protecció de dades')}</a>
       <div class="login-settings">${settingsControls()}</div>
     </div></div>`;
   const bind = (rerun) => bindSettings($app, rerun);
@@ -364,6 +369,27 @@ async function pageIdentify() {
   };
 
   if (config.needsCode && !code) askCode(); else await load();
+}
+
+// ---------- Protecció de dades ----------
+// La pot llegir tothom (també abans d'entrar) i es pot imprimir per signar-la a paper.
+async function pagePrivacy() {
+  const p = PRIVACY[lang] || PRIVACY.ca;
+  const contact = config.privacyContact ? `<strong>${esc(config.privacyContact)}</strong>` : t('la junta de la colla');
+  const text = p({ colla: `<strong>${esc(config.collaName)}</strong>`, contact });
+  $app.innerHTML = `
+    ${me ? '' : `<a class="back no-print" href="#/login">${icon.back}${esc(config.collaName)}</a>`}
+    <article class="card privacy">
+      <div class="page-head"><h1>${text.title}</h1><div class="actions no-print"><button class="btn sm" id="print-privacy">${text.print}</button></div></div>
+      <p>${text.intro}</p>
+      ${text.sections.map(([h, body]) => `<h2>${h}</h2><p>${body}</p>`).join('')}
+      <section class="privacy-sign">
+        <h2>${text.paper}</h2>
+        <p>${text.paperText}</p>
+        ${text.sign.map((l) => `<div class="sign-line"><span>${l}</span></div>`).join('')}
+      </section>
+    </article>`;
+  qs('#print-privacy').onclick = () => window.print();
 }
 
 // ---------- Entrada d'administradors ----------
@@ -1917,7 +1943,7 @@ async function pagePeople() {
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Persones')}</h1>
-      <div class="actions"><button class="btn primary" id="new-person">${icon.plus}${t('Nova persona')}</button></div></div>
+      <div class="actions"><button class="btn" id="import-people">${t('Importa des d\'un Excel')}</button><button class="btn primary" id="new-person">${icon.plus}${t('Nova persona')}</button></div></div>
     <div class="toolbar">
       <input type="search" id="people-q" placeholder="${t('Cerca…')}" style="max-width:280px">
       <label class="check small" style="margin-left:auto">${t('Ordena per')}
@@ -1948,7 +1974,97 @@ async function pagePeople() {
     qsa('#people-table tbody tr').forEach((tr) => tr.classList.toggle('hidden', q && !tr.dataset.name.includes(q)));
   };
   qs('#new-person').onclick = () => personModal();
+  qs('#import-people').onclick = () => importModal();
   qsa('#people-table tbody tr').forEach((tr) => (tr.onclick = () => personModal(people.find((p) => String(p.id) === tr.dataset.id))));
+}
+
+// ---------- Importar persones d'un full de càlcul ----------
+const importFieldLabel = (f) => ({
+  name: t('Nom i cognoms'), surname: t('Cognoms'), alias: t('Malnom'), email: t('Correu'), phone: t('Telèfon'),
+  birthdate: t('Data de naixement'), height_cm: t('Alçada'), shoulder_height_cm: t("Alçada d'espatlles"),
+  shoulder_width_cm: t("Amplada d'espatlles"), weight_kg: t('Pes'), notes: t('Notes'), instrument: t('Músic/a'),
+}[f]);
+
+function importModal() {
+  let rows = null, fields = [], fileName = '';
+  const template = () => {
+    const header = ['Nom', 'Cognoms', 'Malnom', 'Correu', 'Telèfon', 'Data de naixement', 'Alçada', "Alçada d'espatlles", "Amplada d'espatlles", 'Pes', 'Notes'];
+    const example = ['Maria', 'Puig Soler', 'Pruna', 'maria@exemple.cat', '600000000', '15/06/1990', '165', '138', '40', '58', ''];
+    download(new Blob(['\uFEFF' + [header, example].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(';')).join('\r\n')], { type: 'text/csv' }), 'persones.csv');
+  };
+  const draw = (m) => {
+    const body = qs('#import-body', m);
+    if (!rows) {
+      body.innerHTML = `<p class="muted" style="margin-top:0">${t("Tria un fitxer d'Excel (.xlsx) o CSV amb una persona per fila. La primera fila han de ser els títols de les columnes (Nom, Cognoms, Malnom, Alçada…).")}</p>
+        <label class="field">${t('Fitxer')}<input type="file" id="import-file" accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+        <p class="small muted">${t('Pots començar per la plantilla:')} <button type="button" class="btn sm" id="import-template">${t('Descarrega la plantilla')}</button></p>
+        <div class="error" id="import-error"></div>`;
+      qs('#import-template', m).onclick = template;
+      qs('#import-file', m).onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const all = await readSpreadsheet(file);
+          if (all.length < 2) throw new Error(t('El fitxer no té cap persona'));
+          fileName = file.name;
+          fields = all[0].map(guessField);
+          // Una columna per camp: si dues s'assemblen al mateix, la segona no s'importa (tret de nom i cognoms).
+          fields = fields.map((f, i) => (f && f !== 'surname' && fields.indexOf(f) !== i ? '' : f));
+          rows = all;
+          draw(m);
+        } catch (err) {
+          qs('#import-error', m).textContent = err.message && !['zip', 'xlsx'].includes(err.message) ? err.message : t("No s'ha pogut llegir el fitxer. Desa'l com a Excel (.xlsx) o CSV.");
+        }
+      };
+      return;
+    }
+    const [header, ...data] = rows;
+    const options = (sel) => `<option value="">${t('No importar')}</option>${IMPORT_FIELDS.map((f) => `<option value="${f}" ${f === sel ? 'selected' : ''}>${importFieldLabel(f)}</option>`).join('')}`;
+    body.innerHTML = `<p class="muted" style="margin-top:0"><strong>${esc(fileName)}</strong> · ${tn(data.length, '{n} persona', '{n} persones')}. ${t('Comprova quin camp és cada columna.')}</p>
+      <div class="table-wrap"><table class="import-map"><thead><tr><th>${t('Columna')}</th><th>${t('Exemple')}</th><th>${t('Camp')}</th></tr></thead>
+        <tbody>${header.map((h, i) => `<tr><td>${esc(h) || `<span class="muted">${i + 1}</span>`}</td>
+          <td class="muted small">${esc(data.find((r) => r[i])?.[i] ?? '')}</td>
+          <td><select data-col="${i}">${options(fields[i])}</select></td></tr>`).join('')}</tbody></table></div>
+      <label class="check" style="margin-top:12px"><input type="checkbox" id="import-update"> ${t('Si una persona ja hi és (mateix nom), actualitza-la amb les dades del fitxer')}</label>
+      <div id="import-result" style="margin-top:12px"></div>
+      <div class="form-actions"><button type="button" class="btn" id="import-again" style="margin-right:auto">${t('Un altre fitxer')}</button>
+        <button type="button" class="btn" data-close>${t('Cancel·la')}</button><button type="button" class="btn primary" id="import-go">${t('Comprova')}</button></div>`;
+    let checked = null;
+    const reset = () => { checked = null; qs('#import-go', m).textContent = t('Comprova'); qs('#import-result', m).innerHTML = ''; };
+    qsa('select[data-col]', m).forEach((s) => (s.onchange = () => { fields[Number(s.dataset.col)] = s.value; reset(); }));
+    qs('#import-update', m).onchange = reset;
+    qs('#import-again', m).onclick = () => { rows = null; draw(m); };
+    qs('#import-go', m).onclick = async () => {
+      if (!fields.includes('name')) { toast(t('Tria quina columna és el nom'), true); return; }
+      const people = rowsToPeople(data, fields);
+      const update = qs('#import-update', m).checked;
+      const go = qs('#import-go', m);
+      go.disabled = true;
+      const r = await attempt(() => api('POST', '/people/import', { people, update, check: !checked }));
+      go.disabled = false;
+      if (!r) return;
+      if (r.done) {
+        closeModal();
+        toast(t('Importat: {a} noves, {b} actualitzades', { a: r.create, b: r.update }));
+        render();
+        return;
+      }
+      const out = qs('#import-result', m);
+      if (r.errorCount) {
+        out.innerHTML = `<div class="import-errors"><strong>${tn(r.errorCount, '{n} fila té errors. Corregeix el fitxer i torna-ho a provar:', '{n} files tenen errors. Corregeix el fitxer i torna-ho a provar:')}</strong>
+          <ul>${r.errors.map((e) => `<li>${t('Fila {n}', { n: e.index + 2 })}: ${esc(e.error)}</li>`).join('')}</ul>
+          ${r.errorCount > r.errors.length ? `<p class="small muted">${t('+{n} més', { n: r.errorCount - r.errors.length })}</p>` : ''}</div>`;
+        return;
+      }
+      checked = r;
+      out.innerHTML = `<div class="import-ok">${[tn(r.create, "S'afegirà {n} persona nova", "S'afegiran {n} persones noves"),
+        r.update ? tn(r.update, "s'actualitzarà {n} que ja hi era", "s'actualitzaran {n} que ja hi eren") : '',
+        r.skip ? tn(r.skip, '{n} ja hi era i no es toca', '{n} ja hi eren i no es toquen') : ''].filter(Boolean).join(' · ')}</div>`;
+      go.textContent = r.create + r.update ? t('Importa') : t('Tanca');
+      if (!(r.create + r.update)) go.onclick = closeModal;
+    };
+  };
+  openModal(`${modalHead(t('Importa persones'))}<div id="import-body"></div>`, draw);
 }
 
 function personModal(person) {
@@ -2241,19 +2357,36 @@ async function pageTemplate(name) {
 
 async function pageAccounts() {
   if (!isAdmin()) { location.hash = '#/perfil'; return; }
-  const admins = await api('GET', '/admins');
+  const [admins, backup] = await Promise.all([api('GET', '/admins'), api('GET', '/backup/status')]);
   $app.innerHTML = `
     <div class="page-head"><h1>${t("Comptes d'administració")}</h1>
       <div class="actions"><button class="btn primary" id="new-admin">${icon.plus}${t('Nou compte')}</button></div></div>
     ${config.demo ? `<div class="demo-note">${t("A la versió de prova no es poden canviar els comptes d'administració")}.</div>` : ''}
     <p class="muted" style="margin-top:0">${t("Aquests comptes només serveixen per editar: sessions, castells i persones. No surten a les llistes ni responen a les sessions. Qui també fa castells respon amb la seva fitxa de membre (des d'«Ajustos» → «Respon com a…»).")}</p>
     <div class="grid-2">
-      <div class="card">
-        <h2 style="margin-bottom:12px">${t('Comptes')}</h2>
-        <ul class="account-list">${admins.map((a) => `<li>
-          <span class="avatar admin">${esc(initial(a))}</span>
-          <div class="who"><strong>${esc(a.name)}</strong><span class="small muted">${t('Usuari')}: ${esc(a.username)}${a.id === me.admin_id ? ` · ${t('ets tu')}` : ''}</span></div>
-          <button class="btn sm" data-edit="${a.id}">${t('Edita')}</button></li>`).join('')}</ul>
+      <div class="stack">
+        <div class="card">
+          <h2 style="margin-bottom:12px">${t('Comptes')}</h2>
+          <ul class="account-list">${admins.map((a) => `<li>
+            <span class="avatar admin">${esc(initial(a))}</span>
+            <div class="who"><strong>${esc(a.name)}</strong><span class="small muted">${t('Usuari')}: ${esc(a.username)}${a.id === me.admin_id ? ` · ${t('ets tu')}` : ''}</span></div>
+            <button class="btn sm" data-edit="${a.id}">${t('Edita')}</button></li>`).join('')}</ul>
+        </div>
+        <div class="card stack">
+          <h2>${t('Còpia de seguretat')}</h2>
+          <p class="small muted" style="margin:0">${backup.auto
+            ? (backup.last ? t('Cada dia es fa una còpia al servidor i se\'n guarden les últimes {n}. Última: {date}.', { n: backup.keep, date: fmt(backup.last, { day: 'numeric', month: 'long', year: 'numeric' }) })
+              : t('Cada dia es fa una còpia al servidor i se\'n guarden les últimes {n}.', { n: backup.keep }))
+            : t('A la versió de prova no es fan còpies automàtiques.')}
+            ${t("Per si el servidor es perd, baixa'n una de tant en tant i guarda-la fora (en un lloc segur: té dades personals).")}</p>
+          <div class="form-actions"><a class="btn" href="/api/backup" download>${t('Descarrega una còpia')}</a></div>
+        </div>
+        <div class="card stack">
+          <h2>${t('Protecció de dades')}</h2>
+          <p class="small muted" style="margin:0">${t("Nota per als membres: què es guarda, per a què i qui ho veu. També es pot imprimir per signar-la a paper (els menors de 14 anys, amb la signatura del pare, mare o tutor/a). És un model: reviseu-la a la junta.")}</p>
+          ${config.privacyContact ? '' : `<p class="small" style="margin:0">${t('Falta el contacte: poseu-lo a la variable PRIVACY_CONTACT del servidor (p. ex. el correu de la junta).')}</p>`}
+          <div class="form-actions"><a class="btn" href="#/privadesa">${t('Obre la nota')}</a></div>
+        </div>
       </div>
       <div class="stack">
         <form class="card stack" id="pw-form">

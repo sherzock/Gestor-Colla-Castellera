@@ -14,10 +14,12 @@ const freePort = () => new Promise((resolve) => {
   const s = net.createServer().listen(0, () => { const { port } = s.address(); s.close(() => resolve(port)); });
 });
 
-export async function startServer(env = {}) {
+// Amb «from» s'arrenca amb aquesta base de dades (p. ex. una còpia de seguretat) en lloc de les dades de demostració.
+export async function startServer(env = {}, { from } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'colla-test-'));
   const dbPath = path.join(dir, 'colla.db');
-  execFileSync(process.execPath, ['--import', NODE22, 'seed.js'], { cwd: ROOT, env: { ...process.env, DB_PATH: dbPath }, stdio: 'ignore' });
+  if (from) fs.copyFileSync(from, dbPath);
+  else execFileSync(process.execPath, ['--import', NODE22, 'seed.js'], { cwd: ROOT, env: { ...process.env, DB_PATH: dbPath }, stdio: 'ignore' });
   const port = await freePort();
   let log = '';
   const child = spawn(process.execPath, ['--import', NODE22, 'server.js'], {
@@ -31,7 +33,7 @@ export async function startServer(env = {}) {
     await new Promise((r) => setTimeout(r, 100));
   }
   return {
-    url, port, dbPath, pid: child.pid,
+    url, port, dir, dbPath, pid: child.pid,
     log: () => log,
     async stop() {
       child.kill();
