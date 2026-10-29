@@ -14,7 +14,7 @@ test('les rutes es llegeixen del codi (cap ruta nova queda fora)', () => {
   assert.ok(list.length > 50, `${list.length} rutes`);
   assert.ok(list.filter((r) => r.auth === 'admin').length > 35);
   assert.deepEqual(list.filter((r) => r.auth === 'public').map((r) => r.path).sort(),
-    ['/api/calendar.ics', '/api/config', '/api/directory', '/api/identify', '/api/login']);
+    ['/api/calendar.ics', '/api/config', '/api/directory', '/api/identify', '/api/login', '/api/push/inbox', '/api/push/unsubscribe']);
   assert.ok(list.some((r) => r.path.includes('castell-sources') && r.auth === 'admin'));
 });
 

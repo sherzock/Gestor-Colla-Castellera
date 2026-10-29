@@ -1,5 +1,5 @@
 // Formulari per crear o editar un castell.
-import { RESULTS, WIDTHS, castellName, levelNames, levelRange, templateOf } from '../castell.js';
+import { RESULTS, WIDTHS, buildStructure, castellName, levelNames, levelRange, templateOf } from '../castell.js';
 import { api, attempt, closeModal, day, esc, fmt, formData, icon, modalHead, openModal, qs, render, resultLabel, t } from './core.js';
 
 // ---------- Formulari de castell ----------

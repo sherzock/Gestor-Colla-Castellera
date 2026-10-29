@@ -56,7 +56,7 @@ export async function api(method, url, body) {
     throw new Error(t('Sense connexió. Torna-ho a provar quan en tinguis.'));
   }
   if (method === 'GET') showOffline(res.headers.get('X-Saved-At'));
-  if (res.ok && AUTH_URLS.includes(url)) clearOfflineData();
+  if (res.ok && AUTH_URLS.includes(url)) { clearOfflineData(); window.dispatchEvent(new Event('colla:auth')); }
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : null;
   if (res.status === 401 && url !== '/login') {
     clearOfflineData();

@@ -59,6 +59,26 @@ test('tots els textos tenen traducció al castellà i a l\'anglès', () => {
   assert.deepEqual(missing, []);
 });
 
+test('cada pantalla importa les funcions dels altres fitxers que crida', () => {
+  const ROOT = path.join(import.meta.dirname, '..', 'public');
+  const all = ['', 'ui/'].flatMap((d) => fs.readdirSync(path.join(ROOT, d)).filter((f) => f.endsWith('.js') && f !== 'sw.js').map((f) => d + f));
+  const DECL = /^(?:export )?(?:async function|function|const|let|class) ([A-Za-z_$][\w$]*)/gm;
+  const owner = new Map();
+  for (const f of all) for (const [, n] of fs.readFileSync(path.join(ROOT, f), 'utf8').matchAll(DECL)) if (!owner.has(n)) owner.set(n, f);
+  const missing = [];
+  for (const f of all.filter((x) => x.startsWith('ui/') || x === 'app.js')) {
+    const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    const known = new Set([...src.matchAll(/import \{([^}]*)\}/g)].flatMap((m) => m[1].split(',').map((x) => x.trim())));
+    for (const [, n] of src.matchAll(/(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) known.add(n);
+    // Crides (també darrere de «...»), sense comptar comentaris ni el text de les cadenes entre cometes.
+    const code = src.replace(/\/\/[^\n]*/g, '').replace(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g, "''");
+    for (const [, n] of code.matchAll(/(?:^|[^\w$.]|\.\.\.)([A-Za-z_$][\w$]*)\(/g)) {
+      if (owner.has(n) && owner.get(n) !== f && !known.has(n)) missing.push(`${f}: ${n}`);
+    }
+  }
+  assert.deepEqual([...new Set(missing)], []);
+});
+
 test('app instal·lable: manifest amb el nom de la colla, icones i tots els fitxers per obrir-la sense connexió', async () => {
   const ROOT = path.join(import.meta.dirname, '..');
   const m = await fetch(`${server.url}/manifest.webmanifest`);

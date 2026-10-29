@@ -116,6 +116,10 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 - **Muntador automàtic** (admins): proposa una alineació amb qui ha confirmat, tenint en
   compte l'historial (la mateixa posició en el mateix castell i, en segon terme, la categoria en qualsevol castell, p. ex. «Segon»), el pes, l'alçada d'espatlles del pis i l'edat
   (la canalla només al pom de dalt). Pots muntar només el tronc, només la pinya o tot, i mantenir el que ja hi ha.
+  Al tronc procura que cada pis quedi anivellat (≤5 cm d'espatlles, comptant també qui ja hi és) i que ningú pesi més
+  que qui el porta: després d'omplir-lo prova intercanvis (dins del tronc, amb la pinya o amb gent lliure) mentre
+  millori. El que no es pot evitar amb la gent que hi ha surt als avisos de la revisió. Opcionalment proposa un
+  **relleu** per a cada posició del tronc amb la gent que ha quedat lliure (no es desa: és per tenir-ho present).
   La proposta es veu marcada al castell i no es desa fins que no la apliques. La lògica és a `public/muntador.js`.
 - **Pinyes de la colla** (admins): cada colla fa la pinya a la seva manera. Des de «Comptes» → «Obre l'editor de
   pinyes» (o el botó «Pinya de la colla» d'un castell) es redibuixa la pinya, el folre, les manilles i els puntals de
@@ -162,6 +166,11 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
   icona). Sense connexió es pot consultar l'últim que s'hi ha vist (sessions, castells i alineacions), amb un avís
   que diu de quan és; per canviar res cal connexió. Amb connexió sempre es veu el més nou. En sortir o canviar de
   persona, el que s'havia desat al dispositiu s'esborra.
+- **Avisos al mòbil**: cadascú els activa als Ajustos (a l'iPhone, amb l'app afegida a la pantalla d'inici). Arriben
+  quan hi ha un missatge nou a l'Altaveu (es pot publicar sense avís) i, a qui encara no ha respost una sessió, un
+  recordatori 24 hores abans de la data límit (o el dia abans, si no en té). L'avís que passa pel servei del mòbil
+  (Google, Apple…) va buit: el text el recull el mòbil directament de l'app. El mòbil queda lligat a qui hi ha entrat;
+  en sortir o canviar de persona es torna a lligar o es dona de baixa. Cal que l'app sigui en https (a Render ja ho és).
 
 ## Com s'entra i tipus d'usuari
 
@@ -304,6 +313,7 @@ membres, els límits, les funcionalitats principals i que el servidor no faci se
 | `PRIVACY_CONTACT` | (cap) | Contacte per a les dades personals que surt a la nota de privadesa (p. ex. el correu de la junta) |
 | `BACKUP_DIR` | `backups` al costat de `DB_PATH` | Carpeta de les còpies de seguretat diàries (a la demo només se'n fan si es posa) |
 | `BACKUP_KEEP` | `14` | Quantes còpies diàries es guarden |
+| `PUSH_SUBJECT` | `mailto:` del `PRIVACY_CONTACT` | Contacte que es dona als serveis d'avisos (Google, Apple…) per si hi ha cap problema (`mailto:…` o `https://…`) |
 | `TRUST_PROXY` | (no; sí a Render) | Posa-ho a `1` si l'app és darrere d'un proxy (Nginx, Caddy…), perquè el límit d'intents sàpiga l'adreça real de cada persona. Sense proxy, deixa-ho buit: si no, qualsevol es podria saltar el límit |
 
 ## Versió de prova gratuïta (Render)
@@ -338,6 +348,7 @@ cp data/backups/colla-2026-10-28.db data/colla.db && rm -f data/colla.db-wal dat
 ```
 server.js          API REST i servidor de fitxers
 db.js              Esquema SQLite i contrasenyes (scrypt)
+push.js            Avisos al mòbil (Web Push): claus VAPID i enviament, sense dependències
 seed.js            Dades de demostració
 public/index.html  Pàgina única
 public/theme.js    Aplica el tema i l'idioma abans de pintar la pàgina
@@ -354,6 +365,7 @@ public/ui/         Una pantalla per fitxer:
   viewer.js        visualitzador del castell (tronc, pinya, llista, mides, historial) i assignar posicions
   people.js        persones, importar-ne i perfil del membre
   news.js          altaveu
+  notifications.js avisos al mòbil (activar-los als ajustos)
   templates.js     pinyes de la colla
   accounts.js      comptes d'administració, còpies de seguretat i protecció de dades
   calendar.js      calendari i subscripció

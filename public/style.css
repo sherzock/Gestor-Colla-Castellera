@@ -359,6 +359,9 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .pos .meta.warn { color: var(--warn); }
 .proposal-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; border-color: var(--accent); }
 .proposal-bar .actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.proposal-bar .reliefs { margin-top: 6px; }
+.proposal-bar .reliefs summary { cursor: pointer; font-weight: 600; }
+.proposal-bar .reliefs ul { margin: 6px 0; padding-left: 18px; columns: 2 220px; }
 .pos.hist { cursor: pointer; justify-content: flex-start; min-height: 72px; gap: 2px; }
 .pos.hist:hover { border-color: var(--accent); }
 .pos.hist .h { font-size: .74rem; display: flex; gap: 4px; justify-content: center; white-space: nowrap; }

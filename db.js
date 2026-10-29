@@ -305,6 +305,35 @@ db.exec(`CREATE TABLE IF NOT EXISTS announcements (
   updated_at TEXT
 )`);
 
+// Configuració que el servidor genera ell mateix i ha de mantenir (p. ex. les claus dels avisos al mòbil).
+db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+
+// Avisos al mòbil: cada mòbil subscrit (de qui és, el membre i/o el compte d'administració que hi ha entrat), els
+// missatges que encara ha de recollir i a qui ja s'ha recordat que respongui a cada sessió.
+db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY,
+  endpoint TEXT NOT NULL UNIQUE,
+  person_id INTEGER REFERENCES people(id) ON DELETE CASCADE,
+  admin_id INTEGER REFERENCES admins(id) ON DELETE CASCADE,
+  lang TEXT NOT NULL DEFAULT 'ca',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS push_inbox (
+  id INTEGER PRIMARY KEY,
+  subscription_id INTEGER NOT NULL REFERENCES push_subscriptions(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT,
+  url TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS push_reminders (
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS idx_push_inbox_sub ON push_inbox(subscription_id);
+CREATE INDEX IF NOT EXISTS idx_push_subs_person ON push_subscriptions(person_id);`);
+
 // Índexs perquè les persones temporals (i els acompanyants) d'una sessió i on estan col·locades es trobin sense
 // recórrer taules senceres. N'hi ha pocs a propòsit: sense estadístiques, SQLite tria un índex per persona encara
 // que sigui més lent (p. ex. l'assistència de tota la colla d'una temporada passa de 5 ms a 140 ms).

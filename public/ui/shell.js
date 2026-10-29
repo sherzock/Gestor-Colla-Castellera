@@ -3,6 +3,7 @@ import { LANGS } from '../i18n.js';
 import { api, applyTheme, attempt, closeModal, config, esc, icon, initial, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, render, setLang, setMe, setTheme, shortName, store, t, theme, toast } from './core.js';
 import { newsUnread } from './news.js';
+import { pushControls } from './notifications.js';
 
 // ---------- Ajustos: persona, idioma i tema ----------
 // Membre: «No sóc jo» torna a «Qui ets?». Administració: tanca només el compte d'administració.
@@ -68,11 +69,14 @@ function settingsModal() {
              : `<a class="btn ghost block" href="#/admin">${t('Entrar com a administrador/a')}</a>`}`}
     </div>
     ${settingsControls()}
+    <div class="set-group"><h3>${t('Avisos al mòbil')}</h3><div id="push-box"></div></div>
     <a href="#/privadesa" class="small muted" style="display:block;text-align:center;margin-top:14px">${t('Protecció de dades')}</a>`, (m) => {
     qs('#switch-person', m)?.addEventListener('click', switchPerson);
     qs('#admin-logout', m)?.addEventListener('click', adminLogout);
     qsa('[data-mode]', m).forEach((b) => (b.onclick = () => switchMode(b.dataset.mode)));
     bindSettings(m, () => { closeModal(); render({ keepScroll: true }); settingsModal(); });
+    const refreshPush = () => pushControls(m, refreshPush);
+    refreshPush();
   });
 }
 

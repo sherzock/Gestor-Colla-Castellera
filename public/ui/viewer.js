@@ -5,9 +5,9 @@ import { boxShort } from '../editor.js';
 import { proposeLineup } from '../muntador.js';
 import { openZoom } from '../zoom.js';
 import { castellModal } from './castell-form.js';
-import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, day, esc, failCauseLabel, fmt, fullName, hiddenBadge,
-  hiddenToggle, icon, isAdmin, me, modalHead, norm, openModal, partialLabel, qs, qsa, render, resultClass, resultLabel, resultPill,
-  shortName, statusPill, store, t, tn, toast, todayIso } from './core.js';
+import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, day, esc, failCauseLabel, fmt, formData,
+  fullName, hiddenBadge, hiddenToggle, icon, isAdmin, me, modalHead, norm, openModal, partialLabel, qs, qsa, render,
+  resultClass, resultLabel, resultPill, shortName, statusPill, store, t, tn, toast, todayIso } from './core.js';
 import { guestModal } from './event.js';
 
 // ---------- Visualitzador de castell ----------
@@ -366,7 +366,10 @@ export async function pageCastell(id) {
     ${castell.notes ? `<div class="card description" style="margin-bottom:14px">${esc(castell.notes)}</div>` : ''}
     ${proposal ? `<div class="card proposal-bar">
       <div><strong>${t('Proposta automàtica')}</strong> · ${t('{n} posicions omplertes', { n: proposal.filled })}${proposal.empty ? `, ${t('{n} sense cobrir', { n: proposal.empty })}` : ''}${proposal.unused.length ? ` · ${tn(proposal.unused.length, '{n} persona sense posició', '{n} persones sense posició')}` : ''}
-        <div class="small muted">${t('Encara no està desada. Les posicions proposades es marquen amb línia discontínua.')}</div></div>
+        <div class="small muted">${t('Encara no està desada. Les posicions proposades es marquen amb línia discontínua.')}</div>
+        ${proposal.reliefs?.size ? `<details class="reliefs"><summary class="small">${tn(proposal.reliefs.size, '{n} relleu proposat', '{n} relleus proposats')}</summary>
+          <ul class="small">${[...proposal.reliefs].map(([key, r]) => `<li><span class="muted">${esc(s.positions.get(key).role)}:</span> ${esc(shortName(r.person))}${r.exact ? ` <span class="muted">×${r.exact}</span>` : ''}</li>`).join('')}</ul>
+          <div class="small muted">${t("Els relleus no es desen: apunta'ls o col·loca'ls en un altre castell.")}</div></details>` : ''}</div>
       <div class="actions"><button class="btn sm primary" id="prop-apply">${t('Aplica')}</button><button class="btn sm" id="prop-again">${t('Torna a generar')}</button><button class="btn sm ghost" id="prop-discard">${t('Descarta')}</button></div>
     </div>` : ''}
     ${selectedPerson ? `<div class="card" style="margin-bottom:14px;border-color:var(--accent)">${t("{name} seleccionat/da: toca una posició per col·locar-l'hi.", { name: `<strong>${esc(fullName(selectedPerson))}</strong>` })} <button class="btn sm ghost" id="cancel-sel">${t('Cancel·la')}</button></div>` : ''}
@@ -592,11 +595,11 @@ function historyModal(castell, pos, list, current, admin, reload) {
 
 function autoBuildModal({ castell, s, candidates, saved, hist, onPropose }) {
   const count = (statuses) => candidates.filter((c) => statuses.includes(c.status)).length;
-  const opts = { tronc: true, pinya: true, musica: true, keep: saved.size > 0, ...JSON.parse(store.get('autoBuildOpts', '{}')) };
+  const opts = { tronc: true, pinya: true, musica: true, reliefs: true, keep: saved.size > 0, ...JSON.parse(store.get('autoBuildOpts', '{}')) };
   const musicians = candidates.filter((c) => c.instrument && c.status === 'si').length;
   openModal(`${modalHead(t('Muntador automàtic'))}
     <form id="auto-form" class="stack">
-      <p class="muted" style="margin:0">${t("Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició en aquest castell ({n} {castell} anteriors). Primer veuràs la proposta i després decideixes si l'apliques.", { n: hist.castellsCount, castell: s.name })}</p>
+      <p class="muted" style="margin:0">${t("Proposa una alineació amb la gent que ha confirmat, segons el pes, l'alçada d'espatlles, l'edat i l'historial de qui ha fet cada posició en aquest castell ({n} {castell} anteriors). Al tronc procura que cada pis quedi anivellat i que ningú pesi més que qui el porta. Primer veuràs la proposta i després decideixes si l'apliques.", { n: hist.castellsCount, castell: s.name })}</p>
       <fieldset class="stack"><legend>${t('Què vols muntar?')}</legend>
         <label class="check"><input type="checkbox" name="tronc" ${opts.tronc ? 'checked' : ''}> ${t('Tronc i pom de dalt')}${s.agulla.length ? ` + ${t('pilar central')}` : ''}</label>
         ${s.layers.length ? `<label class="check"><input type="checkbox" name="pinya" ${opts.pinya ? 'checked' : ''}> Pinya${s.layers.length > 1 ? ', folre, manilles' : ''}</label>` : ''}
@@ -604,6 +607,7 @@ function autoBuildModal({ castell, s, candidates, saved, hist, onPropose }) {
       </fieldset>
       <fieldset class="stack"><legend>${t('Opcions')}</legend>
         <label class="check"><input type="checkbox" name="keep" ${opts.keep ? 'checked' : ''}> ${t('Mantén les posicions que ja estan assignades ({n})', { n: saved.size })}</label>
+        <label class="check"><input type="checkbox" name="reliefs" ${opts.reliefs ? 'checked' : ''}> ${t('Proposa també un relleu per a cada posició del tronc')}</label>
       </fieldset>
       <p class="small muted" style="margin:0" id="auto-pool"></p>
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${t('Genera la proposta')}</button></div>
@@ -612,7 +616,7 @@ function autoBuildModal({ castell, s, candidates, saved, hist, onPropose }) {
     qs('#auto-pool', m).textContent = t('Persones disponibles: {n}.', { n: count(['si']) });
     form.onsubmit = (e) => {
       e.preventDefault();
-      const options = { musica: false, pinya: false, ...formData(form) };
+      const options = { musica: false, pinya: false, reliefs: false, ...formData(form) };
       if (!options.tronc && !options.pinya && !options.musica) { toast(t('Tria què vols muntar'), true); return; }
       store.set('autoBuildOpts', JSON.stringify(options));
       const result = proposeLineup({ structure: s, candidates, current: saved, exact: hist.exactMap, byCat: hist.byCat, options });

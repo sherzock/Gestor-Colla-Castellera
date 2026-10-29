@@ -48,6 +48,7 @@ function newsModal(a) {
       <label class="field">${t('Títol')}<input name="title" required maxlength="120" value="${esc(a?.title)}" placeholder="${t('p. ex. Canvi d\'hora de l\'assaig')}"></label>
       <label class="field">${t('Missatge')}<textarea name="body" rows="7" maxlength="4000" placeholder="${t('Les adreces web es converteixen en enllaços.')}">${esc(a?.body)}</textarea></label>
       <label class="check"><input type="checkbox" name="pinned" ${a?.pinned ? 'checked' : ''}> ${t('Fixa-ho a dalt de tot')}</label>
+      ${a ? '' : `<label class="check"><input type="checkbox" name="notify" checked> ${t('Envia un avís al mòbil de tothom que els té activats')}</label>`}
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${a ? t('Desa') : t('Publica')}</button></div>
     </form>`, (m) => {
     qs('#news-form', m).onsubmit = async (e) => {
