@@ -410,6 +410,7 @@ function reminderText(event) {
   const when = `${fmtLong(event.date)}${event.start_time ? ` · ${event.start_time}` : ''}`;
   return [
     `📣 ${event.title} · ${when}`,
+    event.location ? `📍 ${event.location}` : null,
     t("Si encara no heu dit si veniu, digueu-ho a l'app:"),
     `${location.origin}/#/sessio/${event.id}`,
     event.rsvp_until ? t('Podeu respondre fins al {when}.', { when: fmtDeadline(event.rsvp_until) }) : null,
