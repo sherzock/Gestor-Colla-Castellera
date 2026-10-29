@@ -144,6 +144,8 @@ if (oldLaterals.length) {
 }
 addColumn('people', 'instrument', 'TEXT');
 addColumn('people', 'section', 'TEXT');
+// Tronc i pinya ja no són grups (qui fa tronc en un castell sovint fa pinya en un altre).
+db.exec("UPDATE people SET section = NULL WHERE section IN ('tronc', 'pinya')");
 
 // La primera versió limitava els tipus de sessió amb un CHECK: es refà la taula per poder afegir-ne.
 if (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'events'").get().sql.includes('CHECK')) {
@@ -295,6 +297,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS castell_templates (
 addColumn('events', 'ask_companions', 'INTEGER NOT NULL DEFAULT 0');
 // Adreça que s'obre al mapa quan el lloc és un nom que el mapa no coneix («Local de la colla»).
 addColumn('events', 'address', 'TEXT');
+
+// Encarregats d'una sessió: qui porta el material, la farmaciola… (una feina pot tenir més d'una persona).
+db.exec(`CREATE TABLE IF NOT EXISTS event_roles (
+  id INTEGER PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE
+)`);
 addColumn('event_guests', 'companion_of', 'INTEGER REFERENCES people(id) ON DELETE CASCADE');
 addColumn('event_guests', 'companion_dropped', 'INTEGER NOT NULL DEFAULT 0');
 

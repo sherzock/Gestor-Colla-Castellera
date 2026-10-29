@@ -52,9 +52,13 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   o no, a part de l'assaig.
 - **Música**: cada persona pot ser músic (gralla o timbal). Cada castell pot tenir gralles i timbals: surten al
   tronc i a la llista, i el muntador automàtic hi posa músics de l'instrument corresponent.
-- **Grups**: a la fitxa de cada persona es pot posar el seu grup (tècnica, canalla, tronc o pinya; només un).
-  A cada sessió, «Qui hi va» surt separat per grups, amb els músics a part i qui no en té a «Altres», i
-  l'administració en veu els totals.
+- **Grups**: a la fitxa de cada persona es pot posar el seu grup (canalla, tècnica o junta; només un). Tronc i pinya
+  no ho són, perquè qui fa tronc en un castell sovint fa pinya en un altre. A cada sessió, «Qui hi va» surt separat
+  per grups, amb els músics a part i qui no en té a «Altres»; l'administració ho veu igual a la taula d'assistència,
+  amb quants en vénen de cada grup.
+- **Encarregats**: a cada sessió, l'administració pot posar qui s'encarrega de què (material, farmaciola, aigua… o el
+  que sigui; es proposen els que ja s'han fet servir). Tothom ho veu, amb el nom curt, i qui en té un ho veu a la seva
+  resposta. Surt també a la descàrrega de les dades de la persona.
 - **Castells** per sessió (pilars, torres, 3, 4, 5, 7, 9; amb agulla, folre, manilles i puntals; aixecats per sota;
   nombre de cordons de pinya). Nomenclatura: `3d6`, `4d7a`, `3d9fm`, `3d6n` (net), `pd4ps` (per sota).
   - **Castells nets** (`n`): la pinya no toca el tronc; només hi ha tronc, sense pinya, folre ni manilles.

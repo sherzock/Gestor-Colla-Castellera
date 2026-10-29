@@ -138,7 +138,7 @@ const ATTENDANCE_EXPORT = { status: 'resposta', came: 'ha_vingut', escoleta: 'es
 const ATTENDANCE_NOT_DATA = ['event_id', 'person_id', 'present'];
 // Cada taula que guarda alguna cosa d'una persona i on surt a la descàrrega.
 const PERSON_TABLES = { attendance: 'assistencia', castell_positions: 'posicions', event_guests: 'acompanyants',
-  push_subscriptions: 'mobils_amb_avisos', push_reminders: 'recordatoris', auth_tokens: 'sessions_obertes' };
+  push_subscriptions: 'mobils_amb_avisos', push_reminders: 'recordatoris', auth_tokens: 'sessions_obertes', event_roles: 'encarrecs' };
 
 test('la descàrrega de les dades d\'una persona porta tot el que se\'n guarda', async () => {
   const db = new DatabaseSync(server.dbPath, { readOnly: true });

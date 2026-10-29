@@ -113,8 +113,8 @@ export const statusPill = (s) => `<span class="status ${s || 'none'}">${s ? stat
 export const typeBadge = (type) => `<span class="badge ${type}">${typeLabel(type)}</span>`;
 export const INSTRUMENTS = { gralla: 'Gralla', timbal: 'Timbal' };
 // Grup de cada persona dins la colla (un de sol). L'ordre és el de les llistes de «Qui hi va».
-export const SECTIONS = ['tecnica', 'canalla', 'tronc', 'pinya'];
-export const sectionLabel = (k) => ({ tecnica: t('Tècnica'), canalla: t('Canalla'), tronc: t('Tronc'), pinya: t('Pinya') }[k] || t('Altres'));
+export const SECTIONS = ['canalla', 'tecnica', 'junta'];
+export const sectionLabel = (k) => ({ canalla: t('Canalla'), tecnica: t('Tècnica'), junta: t('Junta') }[k] || t('Altres'));
 // Nom curt per a la pinya i llistes: el malnom; si no en té, «Nom I.» per evitar confusions.
 export const shortName = (p) => p.alias || p.name?.replace(/^(\S+)\s+(\S).*$/, '$1 $2.') || '';
 export const fullName = (p) => (p.alias ? `${p.name} «${p.alias}»` : p.name);

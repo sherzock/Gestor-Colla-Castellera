@@ -533,6 +533,11 @@ body.no-scroll { overflow: hidden; }
 .result-bar .tabs button.on.r-intent, .result-bar .tabs button.on.r-intent-desfet { background: var(--bad-soft); color: var(--bad); }
 .instr-h { margin: 14px 0 0; font-size: .85rem; color: var(--ink-2); }
 .badge.section { background: var(--surface-2); color: var(--ink-2); }
+#att-table tr.group-row th { text-align: left; padding: 14px 0 6px; font-size: .85rem; color: var(--ink); border-bottom: 2px solid var(--line); }
+#att-table tr.group-row th span { font-weight: 500; color: var(--ink-3); margin-left: 6px; }
+@media (max-width: 700px) { #att-table tr.group-row { display: block; padding: 14px 0 0; border-bottom: 0; } #att-table tr.group-row th { display: block; } }
+.roles-list strong.me { color: var(--accent); }
+.rsvp-note.role { background: var(--ok-soft); color: var(--ok); }
 .counts .status svg { width: 12px; height: 12px; vertical-align: -1px; }
 
 /* ---------- Estadístiques ---------- */

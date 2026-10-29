@@ -52,7 +52,7 @@ const fail = (status, message, params) => { throw new HttpError(status, message,
 const EVENT_TYPES = ['assaig', 'diada', 'esdeveniment', 'musics'];
 const INSTRUMENTS = ['gralla', 'timbal'];
 // Grup de cada persona dins la colla (un de sol), per veure qui hi va per grups. Els músics van a part, per l'instrument.
-const SECTIONS = ['tecnica', 'canalla', 'tronc', 'pinya'];
+const SECTIONS = ['canalla', 'tecnica', 'junta'];
 const FIELD_KINDS = ['number', 'text', 'bool', 'select'];
 const STATUSES = ['si', 'no'];
 const WIDTHS = [1, 2, 3, 4, 5, 7, 9];
@@ -98,7 +98,7 @@ function inRange(value, min, max) {
 // Quantes coses hi pot haver com a molt: res d'això té sentit a milers (i la pàgina no ho podria mostrar).
 const LIMITS = {
   people: 2000, events: 5000, admins: 25, announcements: 300, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
-  guestsPerEvent: 200, companions: 6, templateBoxes: 200,
+  guestsPerEvent: 200, companions: 6, templateBoxes: 200, rolesPerEvent: 20,
 };
 // Mides humanes possibles (en cm i kg): un valor fora d'aquí és un error en escriure'l.
 const MEASURES = { height_cm: [50, 230], shoulder_height_cm: [30, 200], shoulder_width_cm: [15, 80], weight_kg: [10, 200] };
@@ -688,6 +688,8 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     .map((d) => ({ servei: new URL(d.endpoint).hostname, idioma: d.lang, des_de: d.created_at }));
   const reminders = db.prepare(`SELECT e.date, e.title FROM push_reminders r JOIN events e ON e.id = r.event_id
     WHERE r.person_id = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title }));
+  const roles = db.prepare(`SELECT e.date, e.title, r.label FROM event_roles r JOIN events e ON e.id = r.event_id
+    WHERE r.person_id = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title, encarrec: r.label }));
   const out = {
     colla: COLLA_NAME, contacte: PRIVACY_CONTACT || null, generat: nowLocal(),
     persona: { nom: p.name, malnom: p.alias, correu: p.email, telefon: p.phone, data_naixement: p.birthdate, alcada_cm: p.height_cm,
@@ -698,6 +700,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     acompanyants: companions,
     mobils_amb_avisos: devices,
     recordatoris: reminders,
+    encarrecs: roles,
     sessions_obertes: db.prepare('SELECT COUNT(*) AS n FROM auth_tokens WHERE person_id = ? AND expires_at > ?').get(p.id, Date.now()).n,
   };
   const slug = String(p.alias || p.name).normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'persona';
@@ -885,8 +888,34 @@ route('GET', '/api/events/:id', ({ params, user }) => {
       companions: event.ask_companions ? companionsOf(event.id, user.id) : [] } : null,
     attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [] })) : attendance.filter((a) => a.present),
     forecast: isAdmin ? attendanceForecast(event, castells) : undefined,
+    roles: rolesOf(event.id, isAdmin),
+    roleLabels: isAdmin ? db.prepare('SELECT label FROM event_roles GROUP BY label ORDER BY COUNT(*) DESC, label LIMIT 30').all().map((r) => r.label) : undefined,
   };
 });
+
+// ---------- Encarregats ----------
+// Els membres en veuen el nom curt, com a tot arreu.
+const rolesOf = (eventId, isAdmin) => db.prepare(`SELECT r.id, r.label, p.id AS person_id, p.name, p.alias FROM event_roles r
+  JOIN people p ON p.id = r.person_id WHERE r.event_id = ? ORDER BY r.label COLLATE NOCASE, r.id`).all(eventId)
+  .map((r) => (isAdmin ? r : { id: r.id, label: r.label, person_id: r.person_id, name: publicName(r), alias: null }));
+
+route('POST', '/api/events/:id/roles', ({ params, body }) => {
+  const event = getEvent(params.id);
+  const label = str(body.label, 60) || fail(400, "Cal dir de què s'encarrega");
+  if (!db.prepare('SELECT 1 FROM people WHERE id = ? AND active = 1').get(body.person_id)) fail(404, 'Persona no trobada');
+  if (db.prepare('SELECT 1 FROM event_roles WHERE event_id = ? AND label = ? AND person_id = ?').get(event.id, label, body.person_id)) {
+    fail(400, 'Aquesta persona ja en té l\'encàrrec');
+  }
+  atMost(LIMITS.rolesPerEvent, 'Com a molt {n} encarregats per sessió', 'SELECT COUNT(*) AS n FROM event_roles WHERE event_id = ?', event.id);
+  insertRow('event_roles', { event_id: event.id, label, person_id: Number(body.person_id) });
+  return rolesOf(event.id, true);
+}, 'admin');
+
+route('DELETE', '/api/events/:id/roles/:roleId', ({ params }) => {
+  const event = getEvent(params.id);
+  db.prepare('DELETE FROM event_roles WHERE id = ? AND event_id = ?').run(params.roleId, event.id);
+  return rolesOf(event.id, true);
+}, 'admin');
 
 // Previsió d'assistència d'una sessió que encara no s'ha fet. Per a cada persona: com de sovint ha vingut l'últim any
 // a sessions del mateix tipus quan havia dit que sí, que no o quan no havia respost. Amb poca història, la seva xifra

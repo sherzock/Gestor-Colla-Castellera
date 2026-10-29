@@ -107,7 +107,7 @@ async function exportSession(event, castells, button) {
 }
 
 export async function pageEvent(id) {
-  const { event, fields, castells, mine, attendance, counts, guests = [], forecast } = await api('GET', `/events/${id}`);
+  const { event, fields, castells, mine, attendance, counts, guests = [], forecast, roles = [], roleLabels = [] } = await api('GET', `/events/${id}`);
   const admin = isAdmin();
   let status = mine?.status ?? null;
   let escoleta = mine?.escoleta ?? null;
@@ -127,15 +127,24 @@ export async function pageEvent(id) {
       .filter(([, xs]) => xs.length);
     return groups.map(([l, xs]) => `<h3 class="instr-h">${l} · ${xs.length}</h3><div class="names">${xs.map(chip).join('')}</div>`).join('');
   };
-  // Qui hi va, per grups (tècnica, canalla, tronc, pinya); els músics van a part i qui no té grup, al final.
+  // Qui hi va, per grups (canalla, tècnica, junta); els músics van a part i qui no té grup, al final.
   const groupOf = (a) => (a.instrument ? 'musica' : a.section || null);
-  const groupLabel = (k) => (k === 'musica' ? t('Música') : sectionLabel(k));
+  const groupLabel = (k) => (k === 'musica' ? t('Músics') : sectionLabel(k));
   const byGroup = (list) => [...SECTIONS, 'musica', null].map((k) => [k, list.filter((a) => groupOf(a) === k)]).filter(([, xs]) => xs.length);
   const namesByGroup = (list) => {
     const chip = (a) => `<span class="${a.id === me.id ? 'me' : ''}">${esc(shortName(a))}</span>`;
     const groups = byGroup(list);
     if (groups.length === 1 && !groups[0][0]) return `<div class="names">${list.map(chip).join('')}</div>`;
     return groups.map(([k, xs]) => `<h3 class="instr-h">${groupLabel(k)} · ${xs.length}</h3><div class="names">${xs.map(chip).join('')}</div>`).join('');
+  };
+  // A la taula de l'administració, una fila de capçalera per grup amb quants en vénen.
+  const columns = 3 + passList + !!event.escoleta + !!event.ask_companions + fields.length;
+  const tableGroups = (list, row) => {
+    const groups = isMusics ? [[null, list]] : byGroup(list);
+    if (groups.length === 1 && !groups[0][0]) return list.map(row).join('');
+    return groups.map(([k, xs]) => `<tr class="group-row"><th colspan="${columns}">${groupLabel(k)}
+        <span>${passList ? t('{n} han vingut', { n: xs.filter((a) => a.present).length }) : t('{n} vénen', { n: xs.filter((a) => a.status === 'si').length })} · ${xs.length}</span></th></tr>
+      ${xs.map(row).join('')}`).join('');
   };
   const groupCounts = isMusics ? '' : byGroup(going).filter(([k]) => k)
     .map(([k, xs]) => `<span class="status none">${groupLabel(k)}: ${xs.length}</span>`).join('');
@@ -202,15 +211,15 @@ export async function pageEvent(id) {
       <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" style="margin-bottom:6px">
       <div class="table-wrap"><table class="responsive" id="att-table">
         <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>${t('Comentari')}</th></tr></thead>
-        <tbody>${sortedAttendance.map((a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
-          <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}${a.section ? ` <span class="badge section">${sectionLabel(a.section)}</span>` : ''}</td>
+        <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
+          <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}</td>
           <td><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
           ${cameCell(a)}
           ${event.escoleta ? `<td data-l="${t('Escoleta')}">${escValue(a.escoleta)}</td>` : ''}
           ${event.ask_companions ? `<td data-l="${t('Acompanyants')}" class="small">${a.companions.length ? `<strong>${a.companions.length}</strong> · ${esc(a.companions.join(', '))}` : ''}</td>` : ''}
           ${fields.map((f) => `<td data-l="${esc(f.label)}">${extraValue(f, a.extra?.[f.id])}</td>`).join('')}
           <td data-l="${t('Comentari')}" class="small">${esc(a.comment)}</td>
-        </tr>`).join('')}</tbody>
+        </tr>`)}</tbody>
       </table></div>
       <p class="small muted">${t("Toca el nom d'una persona per editar els seus camps extra.")}</p>
     </div>` : `
@@ -236,6 +245,31 @@ export async function pageEvent(id) {
             g.placed ? tn(g.placed, 'A {n} castell', 'A {n} castells') : t('Encara sense posició')].filter(Boolean).join(' · ')}</div></div>
         <button class="btn ghost sm" style="margin-left:auto" data-edit-guest="${g.id}">${t('Edita')}</button></div>`).join('')
         || `<div class="muted small">${t('Cap persona temporal.')}</div>`}</div>
+    </div>` : '';
+
+  // Encarregats de la sessió (material, farmaciola…): l'administració els posa i tothom els veu.
+  const myRoles = roles.filter((r) => r.person_id === me.id).map((r) => r.label);
+  const roleNames = [...new Set(roles.map((r) => r.label))].map((label) => [label, roles.filter((r) => r.label === label)]);
+  const roleSuggestions = [...new Set([...roleLabels, t('Material'), t('Farmaciola'), t('Aigua'), t('Fotos')])];
+  const rolesCard = admin ? `
+    <div class="card">
+      <div class="card-head"><h2>${t('Encarregats')}</h2></div>
+      <p class="small muted" style="margin-top:-6px">${t("Qui s'encarrega de què en aquesta sessió (material, farmaciola…). Ho veu tothom.")}</p>
+      <div class="field-list">${roles.map((r) => `<div class="field-row"><div><div>${esc(r.label)}</div><div class="k">${esc(fullName(r))}</div></div>
+        <button class="btn ghost sm danger" style="margin-left:auto" data-del-role="${r.id}">${t('Treu')}</button></div>`).join('')
+        || `<div class="muted small">${t('Cap encarregat.')}</div>`}</div>
+      <form id="role-form" class="form-grid">
+        <label class="field">${t('Encàrrec')}<input name="label" list="role-labels" maxlength="60" required placeholder="${t('Material')}"></label>
+        <datalist id="role-labels">${roleSuggestions.map((l) => `<option value="${esc(l)}"></option>`).join('')}</datalist>
+        <label class="field">${t('Persona')}<select name="person_id" required><option value="">—</option>${[...attendance]
+          .sort((a, b) => shortName(a).localeCompare(shortName(b))).map((a) => `<option value="${a.id}">${esc(shortName(a))}${a.alias ? ` · ${esc(a.name)}` : ''}</option>`).join('')}</select></label>
+        <div class="full"><button class="btn sm">${icon.plus}${t('Afegeix encarregat')}</button></div>
+      </form>
+    </div>` : roles.length ? `
+    <div class="card">
+      <h2>${t('Encarregats')}</h2>
+      <div class="roles-list">${roleNames.map(([label, rs]) => `<div class="data-row"><span class="muted">${esc(label)}</span>
+        <span>${rs.map((r) => `<strong class="${r.person_id === me.id ? 'me' : ''}">${esc(shortName(r))}</strong>`).join(', ')}</span></div>`).join('')}</div>
     </div>` : '';
 
   const fieldsCard = admin ? `
@@ -279,6 +313,7 @@ export async function pageEvent(id) {
           ${isMusics ? `<p class="small muted" style="margin:-6px 0 12px">${me.instrument
             ? t('Hi vas com a: {instrument}', { instrument: `<strong>${INSTRUMENTS[me.instrument]}</strong>` })
             : t('No consta que toquis cap instrument. Demana a un administrador que ho afegeixi a la teva fitxa.')}</p>` : ''}
+          ${myRoles.length ? `<div class="rsvp-note role">${icon.check}<span>${t("T'encarregues de: {what}", { what: `<strong>${esc(myRoles.join(', '))}</strong>` })}</span></div>` : ''}
           <div class="rsvp two" id="rsvp-main">${['si', 'no'].map((s) => `<button type="button" data-v="${s}" class="${status === s ? 'on' : ''}">${statusLabel(s)}</button>`).join('')}</div>
           ${event.escoleta ? `<div class="escoleta-q">
             <div><strong>${t('Escoleta')}</strong>${escTime ? `<span class="muted">${escTime}</span>` : ''}
@@ -295,12 +330,14 @@ export async function pageEvent(id) {
           <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" maxlength="300" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
           ${event.rsvp_open ? `<div class="form-actions"><button class="btn primary" ${status || escoleta !== null ? '' : 'disabled'} id="rsvp-save">${t('Desa')}</button></div>` : ''}
         </form>`}
+        ${admin ? '' : rolesCard}
         ${isMusics ? '' : `<div class="card">
           <div class="card-head"><h2>${t('Castells')}</h2>
             ${admin ? `<div class="actions"><button class="btn sm primary" id="add-castell">${icon.plus}${t('Afegeix castell')}</button></div>` : ''}
           </div>
           ${castells.length ? `<div class="castell-list">${castellCards}</div>` : `<p class="muted small">${t('Encara no hi ha castells programats.')}</p>`}
         </div>`}
+        ${admin ? rolesCard : ''}
         ${guestsCard}
         ${fieldsCard}
       </div>
@@ -362,6 +399,14 @@ export async function pageEvent(id) {
     e.preventDefault();
     if (await attempt(() => api('POST', `/events/${event.id}/fields`, formData(ff)))) { toast(t('Camp afegit')); reload(); }
   };
+  qs('#role-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const d = formData(e.target);
+    if (await attempt(() => api('POST', `/events/${event.id}/roles`, { label: d.label, person_id: Number(d.person_id) }))) reload();
+  };
+  qsa('[data-del-role]').forEach((b) => (b.onclick = async () => {
+    if (await attempt(() => api('DELETE', `/events/${event.id}/roles/${b.dataset.delRole}`))) reload();
+  }));
   qsa('[data-del-field]').forEach((b) => (b.onclick = async () => {
     if (!confirm(t('Esborrar aquest camp? Les respostes ja donades deixaran de mostrar-se.'))) return;
     if (await attempt(() => api('DELETE', `/fields/${b.dataset.delField}`))) reload();
@@ -369,9 +414,17 @@ export async function pageEvent(id) {
 
   qs('#att-search').oninput = (e) => {
     const q = norm(e.target.value.trim());
-    qsa('#att-table tbody tr').forEach((tr) => tr.classList.toggle('hidden', q && !tr.dataset.name.includes(q)));
+    let header = null, shown = 0;
+    const closeGroup = () => header?.classList.toggle('hidden', !shown);
+    qsa('#att-table tbody tr').forEach((tr) => {
+      if (tr.classList.contains('group-row')) { closeGroup(); header = tr; shown = 0; return; }
+      const hide = q && !tr.dataset.name.includes(q);
+      tr.classList.toggle('hidden', hide);
+      if (!hide) shown++;
+    });
+    closeGroup();
   };
-  qsa('#att-table tbody tr').forEach((tr) => {
+  qsa('#att-table tbody tr[data-id]').forEach((tr) => {
     const pid = tr.dataset.id;
     const a = attendance.find((x) => String(x.id) === pid);
     qs('[data-act=status]', tr).onchange = async (e) => {
