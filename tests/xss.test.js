@@ -153,6 +153,10 @@ test('el recordatori per WhatsApp és general: no diu el nom de ningú', async (
   const text = decodeURIComponent(href[1]);
   assert.match(text, new RegExp(`/#/sessio/${ids.event}`));
   assert.ok(text.includes(`📍 ${X}`), 'porta el lloc de la sessió');
+  // I a la pàgina, el lloc obre Google Maps (amb el text codificat dins de l'adreça).
+  const map = html.match(/<a class="map-link" href="([^"]+)"/);
+  assert.ok(map, 'el lloc és un enllaç');
+  assert.equal(map[1].replace(/&#39;/g, "'").replace(/&amp;/g, '&'), `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(X)}`);
   const people = (await s.admin('GET', '/people')).d.people;
   const names = people.flatMap((p) => [p.name, p.alias, p.name.replace(/^(\S+)\s+(\S).*$/, '$1 $2.')]).filter((n) => n && n.length > 3);
   assert.deepEqual(names.filter((n) => text.includes(n)), []);

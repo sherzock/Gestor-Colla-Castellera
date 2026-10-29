@@ -247,7 +247,7 @@ export async function pageEvent(id) {
     <div class="page-head"><div class="event-hero">
         <div>${typeBadge(event.type)}${event.hidden ? ` ${hiddenBadge(t('Oculta'))}` : ''}</div>
         <h1>${esc(event.title)}</h1>
-        <div class="meta"><span>${icon.calendar}${fmtLong(event.date)}</span>${time(event) ? `<span>${icon.clock}${time(event)}</span>` : ''}${event.location ? `<span>${icon.pin}${esc(event.location)}</span>` : ''}${event.escoleta ? `<span class="badge escoleta">${t('Escoleta')}${escTime}</span>` : ''}</div>
+        <div class="meta"><span>${icon.calendar}${fmtLong(event.date)}</span>${time(event) ? `<span>${icon.clock}${time(event)}</span>` : ''}${event.location ? `<a class="map-link" href="${esc(mapsUrl(event.location))}" target="_blank" rel="noopener noreferrer" title="${t('Obre-ho al mapa')}">${icon.pin}${esc(event.location)}</a>` : ''}${event.escoleta ? `<span class="badge escoleta">${t('Escoleta')}${escTime}</span>` : ''}</div>
       </div>
       <div class="actions">
         ${event.date >= todayIso() && !event.hidden ? `<a class="btn sm" href="/api/calendar.ics?event=${event.id}${calendarCode('&')}" download>${icon.calAdd}${t('Al meu calendari')}</a>` : ''}
@@ -403,6 +403,9 @@ function pendingPeople(event, attendance) {
   return attendance.filter((a) => !a.status && (event.type !== 'musics' || a.instrument))
     .sort((a, b) => shortName(a).localeCompare(shortName(b)));
 }
+
+// El lloc de la sessió obre Google Maps (al mòbil, l'app de mapes si la té) buscant el text tal com està escrit.
+const mapsUrl = (place) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 
 // Missatge per enganxar al grup de WhatsApp: un recordatori general, sense dir qui falta (ningú queda assenyalat
 // davant de tot el grup; la llista de qui falta només la veu l'administració).

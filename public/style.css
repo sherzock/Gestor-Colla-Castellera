@@ -202,7 +202,9 @@ legend { font-weight: 700; margin-bottom: 8px; }
 /* ---------- Detall de sessió ---------- */
 .event-hero { display: grid; gap: 6px; }
 .event-hero .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); }
-.event-hero .meta span { display: inline-flex; align-items: center; gap: 6px; }
+.event-hero .meta span, .event-hero .meta .map-link { display: inline-flex; align-items: center; gap: 6px; }
+.map-link { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+.map-link:hover { color: var(--accent); }
 .event-hero svg { width: 16px; height: 16px; }
 .description { white-space: pre-wrap; margin-top: 10px; }
 .rsvp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }

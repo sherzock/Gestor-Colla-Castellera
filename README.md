@@ -21,6 +21,7 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
 - **Qui falta per contestar** (admins): a cada sessió, la llista de malnoms que encara no han respost, i un botó per
   **enviar un recordatori per WhatsApp** o copiar-lo. El recordatori és general (no diu qui falta, perquè ningú quedi
   assenyalat davant del grup) i porta l'enllaç a la sessió i, si n'hi ha, el lloc i la data límit.
+- **El lloc obre el mapa**: a la pàgina de cada sessió, prémer el lloc l'obre a Google Maps (al mòbil, a l'app de mapes).
 - **Sessions pendents**: a l'inici, cada sessió porta una franja de color segons la teva resposta, i un avís si en tens
   sense respondre.
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
