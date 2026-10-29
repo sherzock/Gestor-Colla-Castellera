@@ -59,6 +59,26 @@ test('tots els textos tenen traducció al castellà i a l\'anglès', () => {
   assert.deepEqual(missing, []);
 });
 
+test('app instal·lable: manifest amb el nom de la colla, icones i tots els fitxers per obrir-la sense connexió', async () => {
+  const ROOT = path.join(import.meta.dirname, '..');
+  const m = await fetch(`${server.url}/manifest.webmanifest`);
+  assert.match(m.headers.get('content-type'), /manifest\+json/);
+  const manifest = await m.json();
+  assert.equal(manifest.name, (await s.admin('GET', '/config')).d.collaName);
+  assert.equal(manifest.display, 'standalone');
+  for (const icon of manifest.icons) assert.equal((await fetch(server.url + icon.src)).headers.get('content-type'), 'image/png', icon.src);
+  assert.match(fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8'), /rel="manifest" href="\/manifest.webmanifest"/);
+  // Cada fitxer de l'app és a la llista del service worker, i cada fitxer de la llista existeix de debò.
+  const sw = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
+  const files = JSON.parse(sw.match(/const FILES = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  const js = ['', 'ui/'].flatMap((d) => fs.readdirSync(path.join(ROOT, 'public', d)).filter((f) => /\.(js|css)$/.test(f) && f !== 'sw.js').map((f) => `/${d}${f}`));
+  assert.deepEqual(js.filter((f) => !files.includes(f)), []);
+  for (const f of files.filter((x) => x !== '/' && x !== '/manifest.webmanifest')) {
+    assert.ok(fs.existsSync(path.join(ROOT, 'public', f)), f);
+  }
+  assert.equal((await fetch(`${server.url}/sw.js`)).headers.get('content-type'), 'text/javascript; charset=utf-8');
+});
+
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });

@@ -29,14 +29,37 @@ export function applyTheme() {
 applyTheme();
 
 // ---------- Utilitats ----------
+// Sense connexió, el service worker (sw.js) torna l'últim que s'ha vist i diu de quan és (X-Saved-At).
+const OFFLINE_DATA = 'colla-dades';
+// Quan algú surt o canvia de persona, el que s'havia desat en aquest dispositiu ja no és seu.
+export const clearOfflineData = () => window.caches?.delete(OFFLINE_DATA).catch(() => {});
+const AUTH_URLS = ['/login', '/logout', '/identify', '/mode'];
+function showOffline(savedAt) {
+  const bar = document.getElementById('offline');
+  if (!bar) return;
+  bar.hidden = !savedAt;
+  if (savedAt) {
+    const when = new Date(savedAt).toLocaleString(LOCALE[lang], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    bar.textContent = t('Sense connexió: es mostra el que es va veure el {when}', { when });
+  }
+}
+
 export async function api(method, url, body) {
-  const res = await fetch('/api' + url, {
-    method,
-    headers: { 'X-Lang': lang, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch('/api' + url, {
+      method,
+      headers: { 'X-Lang': lang, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error(t('Sense connexió. Torna-ho a provar quan en tinguis.'));
+  }
+  if (method === 'GET') showOffline(res.headers.get('X-Saved-At'));
+  if (res.ok && AUTH_URLS.includes(url)) clearOfflineData();
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : null;
   if (res.status === 401 && url !== '/login') {
+    clearOfflineData();
     me = null;
     location.hash = '#/login';
     throw new Error(t('Cal iniciar sessió'));

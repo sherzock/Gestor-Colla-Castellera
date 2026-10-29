@@ -6,6 +6,8 @@
   <meta name="theme-color" content="#9b1c2c">
   <title>Colla castellera</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%239b1c2c'/><g fill='white'><circle cx='16' cy='6' r='3'/><rect x='12' y='10' width='8' height='5' rx='2'/><rect x='8' y='16' width='16' height='5' rx='2'/><rect x='4' y='22' width='24' height='5' rx='2'/></g></svg>">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -15,6 +17,7 @@
     <nav class="nav" id="nav"></nav>
     <button class="me-chip" id="me-chip" type="button"></button>
   </header>
+  <div id="offline" class="offline-bar" role="status" hidden></div>
   <main id="app" class="page"></main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module" src="/app.js"></script>

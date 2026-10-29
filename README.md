@@ -158,6 +158,10 @@ Aplicació web (mòbil i ordinador) per gestionar una colla castellera:
 
 - **Idioma i aparença**: català, castellà o anglès, i tema automàtic, clar o fosc (es recorda a cada dispositiu).
   Els termes castellers (baix, pinya, enxaneta, folre…) es mantenen en català a tots els idiomes.
+- **Al mòbil com una app**: des del navegador es pot afegir a la pantalla d'inici (amb el nom de la colla i la seva
+  icona). Sense connexió es pot consultar l'últim que s'hi ha vist (sessions, castells i alineacions), amb un avís
+  que diu de quan és; per canviar res cal connexió. Amb connexió sempre es veu el més nou. En sortir o canviar de
+  persona, el que s'havia desat al dispositiu s'esborra.
 
 ## Com s'entra i tipus d'usuari
 
@@ -337,6 +341,8 @@ db.js              Esquema SQLite i contrasenyes (scrypt)
 seed.js            Dades de demostració
 public/index.html  Pàgina única
 public/theme.js    Aplica el tema i l'idioma abans de pintar la pàgina
+public/sw.js       Service worker: app instal·lable i consulta sense connexió
+public/icons/      Icones de l'app (el manifest el genera el servidor amb el nom de la colla)
 public/app.js      Punt d'entrada de la interfície: rutes i arrencada
 public/ui/         Una pantalla per fitxer:
   core.js          estat compartit, crides a l'API, utilitats, icones i finestres

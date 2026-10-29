@@ -81,6 +81,9 @@ h3 { font-size: .95rem; }
 .hidden, [hidden] { display: none !important; }
 
 /* ---------- Capçalera i navegació ---------- */
+.offline-bar { padding: 6px 16px; text-align: center; font-size: 13px; font-weight: 600;
+  background: var(--warn-soft); color: var(--warn); }
+.offline-bar[hidden] { display: none; }
 .topbar {
   position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px;
   padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line);

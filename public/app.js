@@ -58,6 +58,8 @@ setRenderer(renderPage);
 window.addEventListener('hashchange', () => { closeModal(); render(); });
 
 // ---------- Inici ----------
+// Per instal·lar-la al mòbil i veure-la sense connexió.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 (async () => {
   setConfig(await api('GET', '/config').catch(() => config));
   render();

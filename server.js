@@ -2001,6 +2001,16 @@ function sendBody(req, res, status, headers, body, encoded = null) {
   } else res.writeHead(status, headers).end(data);
 }
 
+// Per instal·lar l'app al mòbil: porta el nom de la colla, per això no és un fitxer.
+function sendManifest(req, res) {
+  const icon = (src, size, purpose = 'any') => ({ src, sizes: `${size}x${size}`, type: 'image/png', purpose });
+  sendBody(req, res, 200, { 'Content-Type': MIME['.webmanifest'], 'Cache-Control': 'no-cache' }, JSON.stringify({
+    name: COLLA_NAME, short_name: COLLA_NAME, lang: 'ca', start_url: '/', scope: '/', display: 'standalone',
+    background_color: '#f6f5f3', theme_color: '#9b1c2c',
+    icons: [icon('/icons/icon-192.png', 192), icon('/icons/icon-512.png', 512), icon('/icons/icon-maskable-512.png', 512, 'maskable')],
+  }));
+}
+
 function serveStatic(req, res, pathname) {
   let decoded;
   // Una adreça mal codificada (p. ex. «/%E0%A4%A») no pot tombar el servidor.
@@ -2050,6 +2060,7 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
   if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   let url;
   try { url = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400).end(); return; }
+  if (url.pathname === '/manifest.webmanifest') return sendManifest(req, res);
   if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
 
   const send = (status, data) => {
