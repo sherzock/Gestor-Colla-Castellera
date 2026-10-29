@@ -130,7 +130,7 @@ test('el calendari (que és públic) no porta el nom de ningú', async () => {
 // una columna o una taula amb dades de la gent, aquesta prova falla fins que no surti també a la descàrrega.
 const PERSON_EXPORT = { name: 'nom', alias: 'malnom', email: 'correu', phone: 'telefon', birthdate: 'data_naixement',
   height_cm: 'alcada_cm', shoulder_height_cm: 'alcada_espatlles_cm', shoulder_width_cm: 'amplada_espatlles_cm', weight_kg: 'pes_kg',
-  notes: 'notes', instrument: 'instrument', active: 'activa', created_at: 'alta' };
+  notes: 'notes', instrument: 'instrument', section: 'grup', active: 'activa', created_at: 'alta' };
 // id; i usuari, contrasenya i rol de quan els administradors eren persones (ara sempre buits: veure db.js).
 const PERSON_NOT_DATA = ['id', 'username', 'password_hash', 'role'];
 const ATTENDANCE_EXPORT = { status: 'resposta', came: 'ha_vingut', escoleta: 'escoleta', extra: 'camps', comment: 'comentari', updated_at: 'actualitzat' };

@@ -1,7 +1,7 @@
 // Persones (administració), importar-ne d'un full de càlcul i perfil del membre.
 import { download } from '../export.js';
 import { IMPORT_FIELDS, guessField, readSpreadsheet, rowsToPeople } from '../import.js';
-import { $app, INSTRUMENTS, MEASURES, age, api, attempt, closeModal, esc, formData, fullName, icon, isAdmin, me,
+import { $app, INSTRUMENTS, MEASURES, SECTIONS, sectionLabel, age, api, attempt, closeModal, esc, formData, fullName, icon, isAdmin, me,
   modalHead, norm, openModal, qs, qsa, render, setMe, shortName, store, t, tn, toast, todayIso } from './core.js';
 import { switchPerson } from './shell.js';
 import { personHistoryHtml } from './viewer.js';
@@ -17,6 +17,7 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
     <label class="field">${t('Telèfon')}<input name="phone" type="tel" maxlength="30" value="${esc(p.phone)}"></label>
     <label class="field">${t('Correu')}<input name="email" type="email" maxlength="120" value="${esc(p.email)}"></label>
     <label class="field">${t('Músic/a')}<select name="instrument"><option value="">${t('No toca')}</option>${Object.entries(INSTRUMENTS).map(([v, l]) => `<option value="${v}" ${p.instrument === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="field">${t('Grup')}<select name="section"><option value="">${t('Cap')}</option>${SECTIONS.map((v) => `<option value="${v}" ${p.section === v ? 'selected' : ''}>${sectionLabel(v)}</option>`).join('')}</select></label>
   </div>
   <fieldset style="margin-top:16px"><legend>${t('Mides')}</legend><div class="form-grid">
     ${n('height_cm', t('Alçada'), 'cm')}
@@ -29,6 +30,7 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
 }
 
 let peopleSort = store.get('peopleSort', 'name');
+const sectionOrder = (p) => (p.section ? SECTIONS.indexOf(p.section) : SECTIONS.length);
 
 export async function pagePeople() {
   if (!isAdmin()) { location.hash = '#/'; return; }
@@ -41,6 +43,7 @@ export async function pagePeople() {
     age: (a, b) => (age(b.birthdate) ?? -1) - (age(a.birthdate) ?? -1),
     attendance: (a, b) => b.attended - a.attended,
     music: (a, b) => (b.instrument || '').localeCompare(a.instrument || '') || a.name.localeCompare(b.name),
+    section: (a, b) => sectionOrder(a) - sectionOrder(b) || a.name.localeCompare(b.name),
   };
   const sorted = [...people].sort(sorters[peopleSort] || sorters.name);
   const v = (x, unit = '') => (x != null ? `${x}${unit}` : '<span class="muted">—</span>');
@@ -53,13 +56,13 @@ export async function pagePeople() {
       <label class="check small" style="margin-left:auto">${t('Ordena per')}
         <select id="people-sort" style="width:auto">
           <option value="name">${t('Nom')}</option><option value="height">${t('Alçada')}</option><option value="shoulder">${t('Alçada espatlles')}</option>
-          <option value="weight">${t('Pes')}</option><option value="age">${t('Edat')}</option><option value="attendance">${t('Assistència')}</option><option value="music">${t('Música')}</option>
+          <option value="weight">${t('Pes')}</option><option value="age">${t('Edat')}</option><option value="attendance">${t('Assistència')}</option><option value="music">${t('Música')}</option><option value="section">${t('Grup')}</option>
         </select></label>
     </div>
     <div class="card"><div class="table-wrap"><table class="responsive" id="people-table">
       <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th><th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th><th class="num">${t('Assistència {year}', { year: season })}</th></tr></thead>
       <tbody>${sorted.map((p) => `<tr class="clickable ${p.active ? '' : 'inactive'}" data-id="${p.id}" data-name="${esc(norm(p.name + ' ' + (p.alias || '')))}">
-        <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
+        <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.section ? ` <span class="badge section">${sectionLabel(p.section)}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
         <td class="num" data-l="${t('Edat')}">${v(age(p.birthdate))}</td>
         <td class="num" data-l="${t('Alçada')}">${v(p.height_cm, ' cm')}</td>
         <td class="num" data-l="${t('Alç. esp.')}">${v(p.shoulder_height_cm, ' cm')}</td>
@@ -221,6 +224,7 @@ export async function pageProfile() {
         <h2 style="margin-bottom:12px">${t('El meu perfil')}</h2>
         <div class="data-row"><span class="muted">${t('Com et veuen els altres')}</span><strong>${esc(shortName(me))}</strong></div>
         ${me.instrument ? `<div class="data-row"><span class="muted">${t('Músic/a')}</span><strong>${INSTRUMENTS[me.instrument]}</strong></div>` : ''}
+        ${me.section ? `<div class="data-row"><span class="muted">${t('Grup')}</span><strong>${sectionLabel(me.section)}</strong></div>` : ''}
         <p class="small muted" style="margin-bottom:0">${t("Per privacitat, a l'app només es veuen els malnoms. Les dades personals (nom, mides, contacte…) només les veuen els administradors; si cal canviar-ne alguna, demana-ho a un administrador.")}</p>
       </div>
       ${historyCard}

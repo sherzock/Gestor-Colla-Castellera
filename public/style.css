@@ -185,6 +185,24 @@ legend { font-weight: 700; margin-bottom: 8px; }
 .events { display: grid; gap: 10px; }
 .event-card { display: flex; gap: 14px; align-items: center; padding: 12px 14px; text-decoration: none; color: inherit; }
 .event-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+/* Tota la targeta porta a la sessió (l'enllaç del títol la cobreix), però els botons de resposta queden a sobre. */
+.event-card { position: relative; }
+.event-link { display: block; color: inherit; text-decoration: none; }
+.event-link::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+.event-link:focus-visible { outline: none; }
+.event-card:has(.event-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.quick-rsvp { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 6px; }
+.quick-rsvp button { min-width: 84px; padding: 7px 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface);
+  font: inherit; font-size: .85rem; font-weight: 700; color: var(--ink-2); cursor: pointer; }
+.quick-rsvp button:hover { border-color: var(--ink-3); }
+.quick-rsvp button[data-quick="si"].on { border-color: var(--ok); background: var(--ok-soft); color: var(--ok); }
+.quick-rsvp button[data-quick="no"].on { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+@media (max-width: 560px) {
+  .event-card:has(.quick-rsvp) { flex-wrap: wrap; }
+  .event-side:has(.quick-rsvp) { flex-basis: 100%; }
+  .quick-rsvp { flex-direction: row; width: 100%; }
+  .quick-rsvp button { flex: 1; }
+}
 .date-block { flex: none; width: 54px; text-align: center; border-radius: 10px; padding: 6px 0; background: var(--surface-2); }
 .date-block .d { font-size: 1.35rem; font-weight: 800; line-height: 1; }
 .date-block .w { font-size: .7rem; text-transform: uppercase; color: var(--ink-2); font-weight: 700; margin-top: 3px; }
@@ -514,6 +532,7 @@ body.no-scroll { overflow: hidden; }
 .result-bar .tabs button.on.r-carregat { background: var(--warn-soft); color: var(--warn); }
 .result-bar .tabs button.on.r-intent, .result-bar .tabs button.on.r-intent-desfet { background: var(--bad-soft); color: var(--bad); }
 .instr-h { margin: 14px 0 0; font-size: .85rem; color: var(--ink-2); }
+.badge.section { background: var(--surface-2); color: var(--ink-2); }
 .counts .status svg { width: 12px; height: 12px; vertical-align: -1px; }
 
 /* ---------- Estadístiques ---------- */

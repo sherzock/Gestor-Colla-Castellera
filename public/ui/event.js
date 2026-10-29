@@ -4,9 +4,9 @@ import { boxShort } from '../editor.js';
 import { castellPng, download, fileSafe, xlsx } from '../export.js';
 import { calendarCode } from './calendar.js';
 import { castellModal } from './castell-form.js';
-import { $app, INSTRUMENTS, MEASURES, api, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
+import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
   fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, partialLabel, qs, qsa,
-  render, resultLabel, resultPill, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
+  render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
 import { eventModal } from './sessions.js';
 import { STATUS_ORDER, assignedName } from './viewer.js';
 
@@ -127,6 +127,18 @@ export async function pageEvent(id) {
       .filter(([, xs]) => xs.length);
     return groups.map(([l, xs]) => `<h3 class="instr-h">${l} · ${xs.length}</h3><div class="names">${xs.map(chip).join('')}</div>`).join('');
   };
+  // Qui hi va, per grups (tècnica, canalla, tronc, pinya); els músics van a part i qui no té grup, al final.
+  const groupOf = (a) => (a.instrument ? 'musica' : a.section || null);
+  const groupLabel = (k) => (k === 'musica' ? t('Música') : sectionLabel(k));
+  const byGroup = (list) => [...SECTIONS, 'musica', null].map((k) => [k, list.filter((a) => groupOf(a) === k)]).filter(([, xs]) => xs.length);
+  const namesByGroup = (list) => {
+    const chip = (a) => `<span class="${a.id === me.id ? 'me' : ''}">${esc(shortName(a))}</span>`;
+    const groups = byGroup(list);
+    if (groups.length === 1 && !groups[0][0]) return `<div class="names">${list.map(chip).join('')}</div>`;
+    return groups.map(([k, xs]) => `<h3 class="instr-h">${groupLabel(k)} · ${xs.length}</h3><div class="names">${xs.map(chip).join('')}</div>`).join('');
+  };
+  const groupCounts = isMusics ? '' : byGroup(going).filter(([k]) => k)
+    .map(([k, xs]) => `<span class="status none">${groupLabel(k)}: ${xs.length}</span>`).join('');
 
   const castellCards = castells.map((c) => {
     const total = buildStructure(c).positions.size;
@@ -183,7 +195,7 @@ export async function pageEvent(id) {
         ${passList && counts.absent ? `<span class="status no">${t('{n} apuntats que no han vingut', { n: counts.absent })}</span>` : ''}
         ${passList && counts.walkins ? `<span class="status none">${t('{n} sense apuntar-se', { n: counts.walkins })}</span>` : ''}
         ${event.escoleta ? `<span class="status none">${t('Escoleta: {n}', { n: counts.escoleta })}</span>` : ''}
-        ${instrumentCounts}
+        ${instrumentCounts}${groupCounts}
         ${totals.map((x) => `<span class="status none">${esc(x.f.label)}: ${x.sum}</span>`).join('')}
       </div>
       ${passList ? `<p class="small muted" style="margin:0 0 8px">${t('Qui havia dit «Vinc» compta com a present. Toca «Ha vingut» per marcar qui no ha vingut, o afegeix qui ha vingut sense apuntar-se.')}</p>` : ''}
@@ -191,7 +203,7 @@ export async function pageEvent(id) {
       <div class="table-wrap"><table class="responsive" id="att-table">
         <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>${t('Comentari')}</th></tr></thead>
         <tbody>${sortedAttendance.map((a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
-          <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}</td>
+          <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}${a.section ? ` <span class="badge section">${sectionLabel(a.section)}</span>` : ''}</td>
           <td><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
           ${cameCell(a)}
           ${event.escoleta ? `<td data-l="${t('Escoleta')}">${escValue(a.escoleta)}</td>` : ''}
@@ -210,7 +222,7 @@ export async function pageEvent(id) {
         ${event.escoleta ? `<span class="status none">${t('Escoleta: {n}', { n: counts.escoleta })}</span>` : ''}${instrumentCounts}</div>
       ${!attendance.length ? `<div class="names"><span class="muted">${t('Encara ningú')}</span></div>`
         : isMusics ? namesByInstrument(attendance)
-        : `<div class="names">${attendance.map((a) => `<span class="${a.id === me.id ? 'me' : ''}">${esc(shortName(a))}</span>`).join('')}</div>`}
+        : namesByGroup(attendance)}
     </div>`;
 
   const guestsCard = admin && !isMusics ? `

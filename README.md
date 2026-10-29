@@ -23,7 +23,8 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   assenyalat davant del grup) i porta l'enllaç a la sessió i, si n'hi ha, el lloc i la data límit.
 - **El lloc obre el mapa**: a la pàgina de cada sessió, prémer el lloc l'obre a Google Maps (al mòbil, a l'app de mapes).
 - **Sessions pendents**: a l'inici, cada sessió porta una franja de color segons la teva resposta, i un avís si en tens
-  sense respondre.
+  sense respondre. Es pot dir *Vinc* o *No vinc* des de la mateixa llista; si la sessió té preguntes obligatòries,
+  *Vinc* porta a la sessió per respondre-les.
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
   Els administradors veuen la taula completa amb totals i exporten a CSV.
@@ -48,6 +49,9 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   o no, a part de l'assaig.
 - **Música**: cada persona pot ser músic (gralla o timbal). Cada castell pot tenir gralles i timbals: surten al
   tronc i a la llista, i el muntador automàtic hi posa músics de l'instrument corresponent.
+- **Grups**: a la fitxa de cada persona es pot posar el seu grup (tècnica, canalla, tronc o pinya; només un).
+  A cada sessió, «Qui hi va» surt separat per grups, amb els músics a part i qui no en té a «Altres», i
+  l'administració en veu els totals.
 - **Castells** per sessió (pilars, torres, 3, 4, 5, 7, 9; amb agulla, folre, manilles i puntals; aixecats per sota;
   nombre de cordons de pinya). Nomenclatura: `3d6`, `4d7a`, `3d9fm`, `3d6n` (net), `pd4ps` (per sota).
   - **Castells nets** (`n`): la pinya no toca el tronc; només hi ha tronc, sense pinya, folre ni manilles.

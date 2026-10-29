@@ -51,6 +51,8 @@ const fail = (status, message, params) => { throw new HttpError(status, message,
 
 const EVENT_TYPES = ['assaig', 'diada', 'esdeveniment', 'musics'];
 const INSTRUMENTS = ['gralla', 'timbal'];
+// Grup de cada persona dins la colla (un de sol), per veure qui hi va per grups. Els músics van a part, per l'instrument.
+const SECTIONS = ['tecnica', 'canalla', 'tronc', 'pinya'];
 const FIELD_KINDS = ['number', 'text', 'bool', 'select'];
 const STATUSES = ['si', 'no'];
 const WIDTHS = [1, 2, 3, 4, 5, 7, 9];
@@ -60,7 +62,7 @@ const FAIL_CAUSES = ['obert', 'decantat', 'cedit', 'altre'];
 // El que només veuen els administradors d'un castell: les notes i on va fallar podrien assenyalar algú.
 const ADMIN_ONLY_CASTELL = { tech_notes: undefined, fail_level: undefined, fail_cause: undefined };
 const NUMERIC_PERSON_FIELDS = ['height_cm', 'shoulder_height_cm', 'shoulder_width_cm', 'weight_kg'];
-const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', ...NUMERIC_PERSON_FIELDS, 'notes', 'instrument'];
+const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', ...NUMERIC_PERSON_FIELDS, 'notes', 'instrument', 'section'];
 
 function str(value, max = 500) {
   if (value === undefined || value === null) return null;
@@ -141,6 +143,9 @@ function pickPersonField(body, f, out) {
   } else if (f === 'instrument') {
     if (body.instrument && !INSTRUMENTS.includes(body.instrument)) fail(400, 'Instrument no vàlid');
     out.instrument = body.instrument || null;
+  } else if (f === 'section') {
+    if (body.section && !SECTIONS.includes(body.section)) fail(400, 'Grup no vàlid');
+    out.section = body.section || null;
   } else if (f === 'active') out.active = bool(body.active);
   else out[f] = str(body[f], PERSON_TEXT[f] ?? 200);
 }
@@ -401,7 +406,7 @@ function newPassword(password, username) {
 const latestNews = () => db.prepare('SELECT MAX(created_at) AS at FROM announcements').get().at;
 const meResponse = (user) => (user.mode === 'admin'
   ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions, latestNews: latestNews() }
-  : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, role: 'member', mode: 'member', sessions: user.sessions, latestNews: latestNews() });
+  : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, section: user.section, role: 'member', mode: 'member', sessions: user.sessions, latestNews: latestNews() });
 
 // ---------- Rutes: autenticació i perfil ----------
 route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO, privacyContact: PRIVACY_CONTACT }), 'public');
@@ -687,7 +692,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     colla: COLLA_NAME, contacte: PRIVACY_CONTACT || null, generat: nowLocal(),
     persona: { nom: p.name, malnom: p.alias, correu: p.email, telefon: p.phone, data_naixement: p.birthdate, alcada_cm: p.height_cm,
       alcada_espatlles_cm: p.shoulder_height_cm, amplada_espatlles_cm: p.shoulder_width_cm, pes_kg: p.weight_kg, notes: p.notes,
-      instrument: p.instrument, activa: !!p.active, alta: p.created_at },
+      instrument: p.instrument, grup: p.section, activa: !!p.active, alta: p.created_at },
     assistencia: attendance,
     posicions: positions,
     acompanyants: companions,
@@ -707,7 +712,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
 const IMPORT_ERRORS = 50;
 // Per dir a quina columna és l'error (són els mateixos noms que a la fitxa de l'app).
 const IMPORT_LABELS = { alias: 'Malnom', email: 'Correu', phone: 'Telèfon', birthdate: 'Data de naixement', height_cm: 'Alçada',
-  shoulder_height_cm: "Alçada d'espatlles", shoulder_width_cm: "Amplada d'espatlles", weight_kg: 'Pes', instrument: 'Músic/a' };
+  shoulder_height_cm: "Alçada d'espatlles", shoulder_width_cm: "Amplada d'espatlles", weight_kg: 'Pes', instrument: 'Músic/a', section: 'Grup' };
 route('POST', '/api/people/import', ({ req, body }) => {
   const rows = Array.isArray(body.people) ? body.people : fail(400, 'Dades no vàlides');
   if (!rows.length) fail(400, 'El fitxer no té cap persona');
@@ -767,6 +772,7 @@ route('GET', '/api/events', ({ user, query }) => {
   return db.prepare(`SELECT e.*, a.status AS my_status,
       (SELECT COUNT(*) FROM attendance WHERE event_id = e.id AND status = 'si') AS count_si,
       (SELECT COUNT(*) FROM attendance WHERE event_id = e.id AND status = 'no') AS count_no,
+      (SELECT COUNT(*) FROM event_fields WHERE event_id = e.id AND required = 1) AS required_fields,
       (SELECT GROUP_CONCAT(width || '|' || height || '|' || agulla || '|' || folre || '|' || manilles || '|' || puntals || '|' || sota
           || '|' || net || '|' || result, ';')
          FROM (SELECT * FROM castells WHERE event_id = e.id${hidden ? ' AND hidden = 0' : ''} ORDER BY position, id)) AS castells
@@ -846,14 +852,14 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   const keysOf = db.prepare('SELECT pos_key FROM castell_positions WHERE castell_id = ?');
   const castells = db.prepare(`SELECT c.* FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
     .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : ADMIN_ONLY_CASTELL) }));
-  const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
+  const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, p.section, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
       ${CAME_SQL} AS present
     FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
     WHERE p.active = 1 OR a.status IS NOT NULL OR a.came IS NOT NULL ORDER BY p.name COLLATE NOCASE`).all(event.id);
   const flag = (v) => (v === null || v === undefined ? null : !!v);
   const attendance = rows.map((r) => isAdmin
     ? { ...r, present: !!r.present, came: flag(r.came), escoleta: flag(r.escoleta), extra: parseJSON(r.extra, {}) }
-    : { ...publicPerson(r), instrument: r.instrument, status: r.status, present: !!r.present });
+    : { ...publicPerson(r), instrument: r.instrument, section: r.section, status: r.status, present: !!r.present });
   const counts = Object.fromEntries(STATUSES.map((s) => [s, rows.filter((r) => r.status === s).length]));
   counts.present = rows.filter((r) => r.present).length;
   counts.walkins = rows.filter((r) => r.came === 1 && r.status !== 'si').length;

@@ -143,6 +143,7 @@ if (oldLaterals.length) {
   db.exec('COMMIT');
 }
 addColumn('people', 'instrument', 'TEXT');
+addColumn('people', 'section', 'TEXT');
 
 // La primera versió limitava els tipus de sessió amb un CHECK: es refà la taula per poder afegir-ne.
 if (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'events'").get().sql.includes('CHECK')) {

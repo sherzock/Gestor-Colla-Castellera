@@ -1,6 +1,6 @@
 // Llista de sessions (inici) i formulari de sessió.
 import { $app, TYPES, api, attempt, castellTags, closeModal, day, esc, fmt, formData, hiddenBadge, icon, initial,
-  isAdmin, me, modalHead, openModal, qs, qsa, render, shortName, statusPill, store, t, time, tn, toast, todayIso,
+  isAdmin, me, modalHead, openModal, qs, qsa, render, shortName, statusLabel, statusPill, store, t, time, tn, toast, todayIso,
   typeBadge, typeLabel, typePlural } from './core.js';
 import { newsUnread } from './news.js';
 import { switchPerson } from './shell.js';
@@ -26,11 +26,13 @@ export async function pageHome() {
     // A les properes, es veu d'un cop d'ull què has respost: franja de color i, si encara no has dit res, un avís.
     const waiting = answering && !e.my_status && e.rsvp_open;
     const answer = answering && (e.my_status || waiting) ? `ans-${e.my_status || 'none'}` : '';
-    return `${header}<a class="card event-card ${e.type} ${answer} ${e.hidden ? 'is-hidden' : ''}" href="#/sessio/${e.id}" ${waiting ? 'data-pending' : ''}>
+    // Es pot respondre des de la llista: la targeta porta a la sessió i els botons, a sobre, desen la resposta.
+    const quick = answering && e.rsvp_open;
+    return `${header}<div class="card event-card ${e.type} ${answer} ${e.hidden ? 'is-hidden' : ''}" ${waiting ? 'data-pending' : ''}>
       <div class="date-block"><div class="d">${day(e.date).getDate()}</div><div class="w">${fmt(e.date, { weekday: 'short' })}</div></div>
       <div class="event-main">
         ${typeBadge(e.type)}${e.escoleta ? ` <span class="badge escoleta">${t('Escoleta')}</span>` : ''}${e.hidden ? ` ${hiddenBadge(t('Oculta'))}` : ''}
-        <div class="title">${esc(e.title)}</div>
+        <a class="title event-link" href="#/sessio/${e.id}">${esc(e.title)}</a>
         <div class="event-meta">
           ${time(e) ? `<span>${time(e)}</span>` : ''}${e.location ? `<span>${esc(e.location)}</span>` : ''}
           <span>✓ ${e.count_si}</span>
@@ -38,10 +40,11 @@ export async function pageHome() {
         ${e.castells ? `<div class="event-castells">${castellTags(e.castells)}</div>` : ''}
       </div>
       <div class="event-side">${isAdmin() ? ''
-        : waiting ? `<span class="status pending">${icon.alert}${t('Respon')}</span>`
+        : quick ? `<div class="quick-rsvp" role="group" aria-label="${t('La meva assistència')}">${['si', 'no'].map((s) =>
+          `<button type="button" data-quick="${s}" data-id="${e.id}" class="${e.my_status === s ? 'on' : ''}" aria-pressed="${e.my_status === s}">${statusLabel(s)}</button>`).join('')}</div>`
         : !e.my_status && answering ? `<span class="status none">${t('Tancat')}</span>`
         : statusPill(e.my_status)}</div>
-    </a>`;
+    </div>`;
   }).join('');
 
   $app.innerHTML = `
@@ -72,6 +75,21 @@ export async function pageHome() {
   qsa('#scope button').forEach((b) => (b.onclick = () => { homeScope = b.dataset.v; render(); }));
   qsa('#types button').forEach((b) => (b.onclick = () => { homeType = b.dataset.v; store.set('homeType', homeType); render(); }));
   qs('#new-event')?.addEventListener('click', () => eventModal());
+  qsa('[data-quick]').forEach((b) => (b.onclick = () => quickAnswer(list.find((e) => String(e.id) === b.dataset.id), b.dataset.quick)));
+}
+
+// Resposta ràpida des de la llista. Si la sessió té preguntes obligatòries, per dir que vens cal anar a la sessió.
+export async function quickAnswer(event, status) {
+  if (status === event.my_status) return;
+  if (status === 'si' && event.required_fields) {
+    toast(t('Aquesta sessió té preguntes per respondre'));
+    location.hash = `#/sessio/${event.id}`;
+    return;
+  }
+  if (await attempt(() => api('PUT', `/events/${event.id}/attendance`, { status }))) {
+    toast(t('Assistència desada'));
+    render({ keepScroll: true });
+  }
 }
 
 export function eventModal(event, defaults = {}) {
