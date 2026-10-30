@@ -11,8 +11,8 @@ before(async () => {
   install({ base: server.url, cookies: () => Object.entries(s[who].jar).map(([k, v]) => `${k}=${v}`).join('; ') });
   const A = s.admin;
   const date = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
-  ids.open = (await A('POST', '/events', { type: 'assaig', title: 'Assaig obert', date })).d.id;
-  ids.required = (await A('POST', '/events', { type: 'diada', title: 'Diada amb dinar', date })).d.id;
+  ids.open = (await A('POST', '/events', { hidden: false, type: 'assaig', title: 'Assaig obert', date })).d.id;
+  ids.required = (await A('POST', '/events', { hidden: false, type: 'diada', title: 'Diada amb dinar', date })).d.id;
   await A('POST', `/events/${ids.required}/fields`, { label: 'Dinar', kind: 'bool', required: true });
   ui = async (file) => import(`../public/ui/${file}.js`);
 });

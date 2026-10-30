@@ -33,6 +33,8 @@
   --k-mans: #57534e;
   --k-lateral: #8c867f;
   --k-latmans: #65a30d;
+  --k-tap: #b45309;
+  --k-tapatap: #a21caf;
   --k-musica: #a16207;
   --radius: 12px;
   --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 2px 8px rgb(0 0 0 / .04);
@@ -46,7 +48,7 @@
     --ok: #5cc48d; --ok-soft: #173426; --warn: #e3a948; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1a17;
     --c-ok: #5cc48d; --c-warn: #e3a948; --c-bad: #f08a80;
     --assaig: #7aa7e0; --diada: #e0596a; --esdeveniment: #b39ae6; --musics: #e3b341;
-    --k-baix: #e0596a; --k-tronc: #f08a4b; --k-pom: #e3b341; --k-crossa: #7aa7e0; --k-contrafort: #5cc48d; --k-agulla: #b39ae6; --k-vent: #4fc3d9; --k-mans: #bdb6ae; --k-lateral: #8c867f; --k-latmans: #a3e635; --k-musica: #e3b341;
+    --k-tap: #d9975a; --k-tapatap: #d68ae0; --k-baix: #e0596a; --k-tronc: #f08a4b; --k-pom: #e3b341; --k-crossa: #7aa7e0; --k-contrafort: #5cc48d; --k-agulla: #b39ae6; --k-vent: #4fc3d9; --k-mans: #bdb6ae; --k-lateral: #8c867f; --k-latmans: #a3e635; --k-musica: #e3b341;
     --shadow: 0 1px 2px rgb(0 0 0 / .4);
     color-scheme: dark;
   }
@@ -57,7 +59,7 @@
     --ok: #5cc48d; --ok-soft: #173426; --warn: #e3a948; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1a17;
     --c-ok: #5cc48d; --c-warn: #e3a948; --c-bad: #f08a80;
     --assaig: #7aa7e0; --diada: #e0596a; --esdeveniment: #b39ae6; --musics: #e3b341;
-    --k-baix: #e0596a; --k-tronc: #f08a4b; --k-pom: #e3b341; --k-crossa: #7aa7e0; --k-contrafort: #5cc48d; --k-agulla: #b39ae6; --k-vent: #4fc3d9; --k-mans: #bdb6ae; --k-lateral: #8c867f; --k-latmans: #a3e635; --k-musica: #e3b341;
+    --k-tap: #d9975a; --k-tapatap: #d68ae0; --k-baix: #e0596a; --k-tronc: #f08a4b; --k-pom: #e3b341; --k-crossa: #7aa7e0; --k-contrafort: #5cc48d; --k-agulla: #b39ae6; --k-vent: #4fc3d9; --k-mans: #bdb6ae; --k-lateral: #8c867f; --k-latmans: #a3e635; --k-musica: #e3b341;
     --shadow: 0 1px 2px rgb(0 0 0 / .4);
     color-scheme: dark;
 }
@@ -461,6 +463,18 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .is-hidden { opacity: .62; }
 .is-hidden:hover { opacity: .85; }
 .castell-card.is-hidden, .event-card.is-hidden { border-style: dashed; }
+.castell-group + .castell-group { margin-top: 14px; }
+.tl { display: grid; grid-template-columns: 44px 1fr 1fr; column-gap: 8px; }
+.tl-head { font-size: .8rem; font-weight: 700; color: var(--ink-2); padding-bottom: 6px; }
+.tl-axis { position: relative; }
+.tl-tick { position: absolute; right: 0; transform: translateY(-50%); font-size: .72rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tl-lane { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 72px); border-left: 1px solid var(--line); }
+.tl-block { position: absolute; display: flex; flex-direction: column; gap: 1px; padding: 4px 7px; overflow: hidden; text-align: left; font: inherit; font-size: .75rem; line-height: 1.25; color: var(--ink); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 8px; text-decoration: none; cursor: pointer; }
+.tl-block strong { font-size: .9rem; }
+.tl-block span { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-block.is-hidden { border-style: dashed; }
+.tl-none { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.tl-none .is-hidden { border-style: dashed; }
 .sibling-nav a.is-hidden svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
 .castell-title .hidden-badge { font-size: .8rem; font-family: inherit; letter-spacing: 0; }
 .hidden-note { display: flex; align-items: center; gap: 8px; margin: 10px 0; padding: 10px 14px; border-radius: 12px; border: 1px dashed var(--line);

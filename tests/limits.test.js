@@ -23,9 +23,9 @@ test('persones: textos tallats, mides possibles i dates reals', async () => {
 
 test('sessions: dates i hores impossibles → 400; títol i lloc tallats', async () => {
   const bad = await Promise.all([{ date: '2026-13-01' }, { date: '1999-12-31' }, { date: '2200-01-01' }, { start_time: '25:00' }, { end_time: '19:61' },
-    { rsvp_until: '2026-11-31T10:00' }, { rsvp_until: '2026-11-30T24:00' }].map((x) => s.admin('POST', '/events', { ...base, ...x })));
+    { rsvp_until: '2026-11-31T10:00' }, { rsvp_until: '2026-11-30T24:00' }].map((x) => s.admin('POST', '/events', { hidden: false, ...base, ...x })));
   assert.deepEqual(statuses(bad), Array(7).fill(400));
-  const ev = (await s.admin('POST', '/events', { ...base, title: long(500), location: long(500) })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, ...base, title: long(500), location: long(500) })).d;
   assert.equal(ev.title.length, 120);
   assert.equal(ev.location.length, 150);
 });
@@ -45,7 +45,7 @@ test('camps extra: 15 per sessió, 20 opcions sense repetir', async () => {
 });
 
 test('respostes d\'un membre: comentari i textos tallats a 300, com a molt 6 acompanyants', async () => {
-  const ev = (await s.admin('POST', '/events', { ...base, ask_companions: 1 })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, ...base, ask_companions: 1 })).d;
   await s.admin('POST', `/events/${ev.id}/fields`, { label: 'Quants', kind: 'number' });
   await s.admin('POST', `/events/${ev.id}/fields`, { label: 'Què', kind: 'text' });
   const { fields } = (await s.admin('GET', `/events/${ev.id}`)).d;
@@ -64,17 +64,17 @@ test('castells: 30 per sessió (ni duplicant), cordons possibles, persones tempo
   const ev = (await s.admin('POST', '/events', base)).d;
   assert.equal((await s.admin('POST', `/events/${ev.id}/guests`, { name: 'Visitant', shoulder_height_cm: 900 })).s, 400);
   let last;
-  for (let i = 0; i < 30; i++) last = await s.admin('POST', `/events/${ev.id}/castells`, { width: 3, height: 6, cordons: 3 });
+  for (let i = 0; i < 30; i++) last = await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 6, cordons: 3 });
   assert.equal(last.s, 200);
-  assert.equal((await s.admin('POST', `/events/${ev.id}/castells`, { width: 3, height: 6 })).s, 400);
+  assert.equal((await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 6 })).s, 400);
   assert.equal((await s.admin('POST', `/castells/${last.d.id}/duplicate`, {})).s, 400);
   const ev2 = (await s.admin('POST', '/events', base)).d;
-  assert.equal((await s.admin('POST', `/events/${ev2.id}/castells`, { width: 3, height: 6, cordons: 9 })).s, 400);
+  assert.equal((await s.admin('POST', `/events/${ev2.id}/castells`, { hidden: false, width: 3, height: 6, cordons: 9 })).s, 400);
 });
 
 test('posicions: només les del castell, i no milers alhora', async () => {
   const ev = (await s.admin('POST', '/events', base)).d;
-  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { width: 3, height: 6 })).d.id;
+  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 6 })).d.id;
   const bad = await Promise.all([
     s.admin('PUT', `/castells/${c}/positions/zz-inventada`, { person_id: s.personId }),
     s.admin('PUT', `/castells/${c}/positions`, { assignments: Array.from({ length: 5000 }, (_, i) => ({ pos_key: `k${i}`, person_id: null })) }),

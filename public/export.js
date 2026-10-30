@@ -169,7 +169,7 @@ export function xlsx(sheets) {
 const C = {
   bg: '#ffffff', ink: '#1c1917', ink3: '#78716c', line: '#e2ded9', soft: '#f6f5f3',
   baixos: '#9b1c2c', tronc: '#c2410c', pom: '#a16207', agulla: '#6b4fa0', musica: '#a16207',
-  base: '#9b1c2c', crossa: '#2f5f98', contrafort: '#1f7a4d', mans: '#57534e', vent: '#0e7490', lateral: '#8c867f', altre: '#9b1c2c',
+  base: '#9b1c2c', crossa: '#2f5f98', contrafort: '#1f7a4d', mans: '#57534e', vent: '#0e7490', lateral: '#8c867f', tap: '#b45309', tapatap: '#a21caf', altre: '#9b1c2c',
 };
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const PLAN_SCALE = 1.7;

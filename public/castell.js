@@ -226,7 +226,7 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
 // la capa envolta, { base: columna | 'c' (pilar central), x, y, w, h, rot }.
 export const LAYER_IDS = ['pinya', 'folre', 'manilles', 'puntals'];
 export const LAYER_PREFIX = { pinya: 'p', folre: 'f', manilles: 'm', puntals: 'u' };
-export const TEMPLATE_KINDS = ['contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral', 'altre'];
+export const TEMPLATE_KINDS = ['contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral', 'tap', 'tapatap', 'altre'];
 export const BOX = { w: BOX_W, h: BOX_H };
 let templates = new Map();
 export function setTemplates(list) {
@@ -240,7 +240,7 @@ export const templateRings = (tpl) => Math.max(0, ...(tpl?.layers?.pinya || []).
 // Categoria comparable entre castells (la mateixa que fa servir la capa generada).
 export function kindCat(layerId, kind, ring, role) {
   const base = kind === 'mans' ? `${ordinal(ring || 1, true)} mans` : kind === 'vent' ? `${ordinal(ring || 1, false)} vent`
-    : kind === 'altre' ? role : { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', lateral: 'Lateral' }[kind];
+    : kind === 'altre' ? role : { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', lateral: 'Lateral', tap: 'Tap', tapatap: 'Tapa-tap' }[kind];
   return layerId === 'pinya' ? base : `${LAYER_LABEL[layerId]} · ${base}`;
 }
 const LAYER_LABEL = { pinya: 'Pinya', folre: 'Folre', manilles: 'Manilles', puntals: 'Puntals' };

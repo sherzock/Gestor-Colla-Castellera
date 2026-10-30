@@ -8,6 +8,7 @@ import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, c
   fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, partialLabel, qs, qsa,
   render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
 import { eventModal } from './sessions.js';
+import { bindTimeline, timelineCard } from './timeline.js';
 import { STATUS_ORDER, assignedName } from './viewer.js';
 
 // ---------- Detall de sessió ----------
@@ -149,7 +150,7 @@ export async function pageEvent(id) {
   const groupCounts = isMusics ? '' : byGroup(going).filter(([k]) => k)
     .map(([k, xs]) => `<span class="status none">${groupLabel(k)}: ${xs.length}</span>`).join('');
 
-  const castellCards = castells.map((c) => {
+  const castellCard = (c) => {
     const total = buildStructure(c).positions.size;
     const pct = Math.round((c.assigned_count / total) * 100);
     return `<a class="castell-card ${c.hidden ? 'is-hidden' : ''}" href="#/castell/${c.id}">
@@ -158,7 +159,11 @@ export async function pageEvent(id) {
       <div class="meter" title="${c.assigned_count} / ${total}"><div style="width:${pct}%"></div></div>
       <div class="small muted" style="margin-top:4px">${t('{a}/{b} posicions', { a: c.assigned_count, b: total })}</div>
     </a>`;
-  }).join('');
+  };
+  // Els nets (sense pinya) a part dels castells normals.
+  const nets = castells.filter((c) => c.net), normals = castells.filter((c) => !c.net);
+  const castellCards = [[t('Castells'), normals], [t('Castells nets'), nets]].filter(([, list]) => list.length)
+    .map(([title, list]) => `<div class="castell-group">${nets.length ? `<h3 class="instr-h">${title}</h3>` : ''}<div class="castell-list">${list.map(castellCard).join('')}</div></div>`).join('');
 
   const confirmed = attendance.filter((a) => a.status === 'si');
   const totals = fields.filter((f) => f.kind === 'number' || f.kind === 'bool').map((f) => {
@@ -335,8 +340,9 @@ export async function pageEvent(id) {
           <div class="card-head"><h2>${t('Castells')}</h2>
             ${can('castells') ? `<div class="actions"><button class="btn sm primary" id="add-castell">${icon.plus}${t('Afegeix castell')}</button></div>` : ''}
           </div>
-          ${castells.length ? `<div class="castell-list">${castellCards}</div>` : `<p class="muted small">${t('Encara no hi ha castells programats.')}</p>`}
+          ${castellCards || `<p class="muted small">${t('Encara no hi ha castells programats.')}</p>`}
         </div>`}
+        ${event.type === 'assaig' && can('staff') ? timelineCard(event, castells) : ''}
         ${admin ? rolesCard : ''}
         ${guestsCard}
         ${fieldsCard}
@@ -379,18 +385,22 @@ export async function pageEvent(id) {
   qsa('[data-edit-guest]').forEach((b) => (b.onclick = () => guestModal(event.id, guests.find((g) => String(g.id) === b.dataset.editGuest), () => render({ keepScroll: true }))));
   const reload = () => render({ keepScroll: true });
   qs('#add-castell')?.addEventListener('click', () => castellModal(event.id));
+  bindTimeline(event, castells);
   qs('#add-walkin')?.addEventListener('click', () => walkinModal(event, attendance, reload));
   qs('#export-xlsx')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
-  bindSessionEditing(event, reload);
+  bindSessionEditing(event, reload, castells);
   bindAttendanceTable(event, attendance, fields, reload);
 }
 
 // Editar la sessió és de la junta (i de l'administració): sense permís, aquests botons i formularis no hi són.
-function bindSessionEditing(event, reload) {
+function bindSessionEditing(event, reload, castells) {
   if (!can('sessions')) return;
   qs('#edit-event').onclick = () => eventModal(event);
   qs('#hide-event').onclick = async () => {
-    if (await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: !event.hidden }))) {
+    // Els castells es creen ocults: en mostrar la sessió, millor preguntar-ho que deixar-la buida sense voler.
+    const pending = event.hidden && can('castells') ? castells.filter((c) => c.hidden).length : 0;
+    const also = pending > 0 && confirm(tn(pending, 'Aquesta sessió té {n} castell ocult. Vols mostrar-lo també als membres?', 'Aquesta sessió té {n} castells ocults. Vols mostrar-los també als membres?'));
+    if (await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: !event.hidden, castells: also }))) {
       toast(event.hidden ? t('Ara els membres ja la veuen') : t('Sessió oculta als membres'));
       reload();
     }

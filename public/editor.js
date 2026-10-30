@@ -11,7 +11,7 @@ const DEG = Math.PI / 180;
 export const MAX_BOXES = 200;
 
 // Text de la caixa: el tipus i el cordó (com a la vista de pinya) o el nom si és una posició pròpia.
-export const KIND_SHORT = { base: 'Baix', contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', altre: '' };
+export const KIND_SHORT = { base: 'Baix', contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', tap: 'Tap', tapatap: 'Tapa-tap', altre: '' };
 export const boxShort = (item) => (item.kind === 'altre' ? item.role : `${KIND_SHORT[item.kind]}${item.ring ? ` ${item.ring}` : ''}`);
 export const autoRole = (kind, ring) => kindCat('pinya', kind, ring, '');
 
@@ -72,7 +72,8 @@ export function snapBox(item, others, x, y, range = SNAP_RANGE) {
 }
 
 // ---------- Cordons ----------
-export const RING_KINDS = ['mans', 'vent', 'lateral'];
+// Els taps i els tapa-taps també són d'un cordó: si el castell no l'ensenya, no han de quedar sols.
+export const RING_KINDS = ['mans', 'vent', 'lateral', 'tap', 'tapatap'];
 export const maxRing = (list) => Math.max(0, ...list.map((i) => i.ring || 0));
 // Les caixes d'un cordó més, seguint cada línia: cada caixa de l'últim cordó es repeteix a la mateixa distància de
 // l'anterior de la seva línia. Si encara no hi ha anterior, les mans segueixen el contrafort, i la resta se separen
@@ -162,7 +163,7 @@ export function createEditor(root, { layers, baseLabel, usage, t, onChange, onSe
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const KIND_VAR = {
     base: 'var(--k-baix)', contrafort: 'var(--k-contrafort)', agulla: 'var(--k-agulla)', crossa: 'var(--k-crossa)',
-    mans: 'var(--k-mans)', vent: 'var(--k-vent)', lateral: 'var(--k-lateral)', altre: 'var(--accent)',
+    mans: 'var(--k-mans)', vent: 'var(--k-vent)', lateral: 'var(--k-lateral)', tap: 'var(--k-tap)', tapatap: 'var(--k-tapatap)', altre: 'var(--accent)',
   };
   const boxHtml = (item, idx) => {
     const base = item.base !== undefined;

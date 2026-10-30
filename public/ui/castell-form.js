@@ -4,7 +4,7 @@ import { api, attempt, closeModal, day, esc, fmt, formData, icon, modalHead, ope
 
 // ---------- Formulari de castell ----------
 export function castellModal(eventId, castell, onLost) {
-  const c = castell || { width: 3, height: 7, agulla: 0, folre: 0, manilles: 0, cordons: 4, gralles: 0, timbals: 0, result: 'previst' };
+  const c = castell || { width: 3, height: 7, agulla: 0, folre: 0, manilles: 0, cordons: 4, gralles: 0, timbals: 0, result: 'previst', hidden: 1 };
   openModal(`${modalHead(castell ? t('Edita el castell') : t('Nou castell'))}
     <form id="castell-form">
       <div class="castell-title" id="cname" style="text-align:center;margin-bottom:12px">${castellName(c)}</div>

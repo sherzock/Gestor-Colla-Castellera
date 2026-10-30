@@ -150,7 +150,12 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   una lliurement), desfer i refer (Ctrl+Z, Ctrl+Y), selecció de diverses caixes (Maj+clic, requadre pel fons, «Tria
   diverses» al mòbil o «Tria tot el cordó»), mirall, avís de caixes solapades i «Afegeix un cordó», que continua cada
   línia. **Cordons**: la plantilla en dibuixa fins a un màxim i cada castell n'ensenya els que digui el seu formulari,
-  de manera que el mateix dibuix serveix per a una pinya de 3 i per a una de 5.
+  de manera que el mateix dibuix serveix per a una pinya de 3 i per a una de 5. A més dels tipus habituals, es poden
+  afegir **taps** i **tapa-taps**, que també van per cordons.
+- **Horari de l'assaig**: la tècnica posa a cada castell l'hora i els minuts, i la junta ho consulta. Els castells
+  nets surten en un carril a part, perquè es poden fer alhora que la resta. Als membres no els arriba.
+- **Tot es crea ocult**: les sessions i els castells nous no els veuen els membres fins que es mostren. En mostrar una
+  sessió, qui porta els castells pot mostrar-los alhora.
 - **Administradors**: creen/editen sessions i castells, assignen o canvien persones a cada posició
   (cercant per nom o ordenant per alçada d'espatlles, alçada o pes), poden posar convidats d'altres colles,
   i dupliquen castells (amb l'alineació) a una altra sessió. Truc ràpid: toca un nom a «Confirmats sense posició»

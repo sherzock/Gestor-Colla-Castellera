@@ -58,7 +58,7 @@ test('cada rol pot fer només el que li toca, ruta per ruta', async () => {
 test('el grup de la fitxa no dona cap permís', async () => {
   await s.admin('PUT', `/people/${s.personId}`, { section: 'junta' });
   assert.equal((await s.member('GET', '/people')).s, 403);
-  assert.equal((await s.member('POST', '/events', {})).s, 403);
+  assert.equal((await s.member('POST', '/events', { hidden: false,})).s, 403);
   await s.admin('PUT', `/people/${s.personId}`, { section: '' });
 });
 

@@ -107,7 +107,7 @@ test('CSV: no es guarda a la memòria cau i el text no es pot executar com a fó
 });
 
 test('calendari: el títol no pot afegir línies', async () => {
-  const ev = (await s.admin('POST', '/events', { type: 'assaig', title: 'Assaig\r\nATTENDEE:mailto:x@y', date: '2026-12-20' })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Assaig\r\nATTENDEE:mailto:x@y', date: '2026-12-20' })).d;
   const ics = (await client(server.url)('GET', `/api/calendar.ics?event=${ev.id}`)).text;
   assert.ok(!/\r\nATTENDEE/.test(ics));
 });

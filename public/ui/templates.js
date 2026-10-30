@@ -6,7 +6,7 @@ import { $app, api, attempt, can, config, esc, icon, qs, qsa, render, store, t, 
 // ---------- Pinyes de la colla (plantilles) ----------
 // Cada colla fa la pinya a la seva manera: aquí es redibuixa la de cada tipus de castell i val per a tots els castells
 // d'aquell nom. Les posicions que es mantenen conserven l'historial; les que es treuen deixen de sortir però no s'esborren.
-const KIND_NAMES = { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', altre: 'Una altra' };
+const KIND_NAMES = { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', tap: 'Tap', tapatap: 'Tapa-tap', altre: 'Una altra' };
 const MAX_RINGS = 8;
 // L'editor escolta el teclat a tot el document: si la pàgina es torna a pintar, l'anterior ha de deixar d'escoltar.
 let stopKeys = null;

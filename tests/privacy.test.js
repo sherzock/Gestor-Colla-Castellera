@@ -87,8 +87,8 @@ test("l'altaveu no diu als membres qui ha escrit cada missatge", async () => {
 });
 
 test('les persones temporals surten als membres com «Nom I.», i qui diu que no ve no surt enlloc', async () => {
-  const ev = (await s.admin('POST', '/events', { type: 'diada', title: 'Temporals', date: future() })).d;
-  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { width: 3, height: 7 })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, type: 'diada', title: 'Temporals', date: future() })).d;
+  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 7 })).d;
   const g = (await s.admin('POST', `/events/${ev.id}/guests`, { name: 'Pere Martí Soler', colla: 'Castellers de Prova' })).d;
   await s.admin('PUT', `/castells/${c.id}/positions/t1-0`, { guest_id: g.id });
   const seen = (await s.member('GET', `/castells/${c.id}`)).d.positions.find((p) => p.pos_key === 't1-0');
@@ -107,7 +107,7 @@ test('les persones temporals surten als membres com «Nom I.», i qui diu que no
 });
 
 test('una sessió oculta i una que no existeix responen igual (no es pot saber que hi és)', async () => {
-  const ev = (await s.admin('POST', '/events', { type: 'assaig', title: 'Secreta', date: future() })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Secreta', date: future() })).d;
   await s.admin('PUT', `/events/${ev.id}/hidden`, { hidden: true });
   const hidden = await s.member('GET', `/events/${ev.id}`);
   const none = await s.member('GET', '/events/99999999');
@@ -160,9 +160,9 @@ test('esborrar una persona no en deixa cap rastre: ni a la base de dades, ni din
   const A = s.admin;
   const p = (await A('POST', '/people', { name: 'Zeldaesborrable Puig', alias: 'zeldaesb', email: 'zelda@esborra.cat', phone: '600111999',
     notes: 'notaesborrable', birthdate: '1990-05-05', height_cm: 170 })).d;
-  const ev = (await A('POST', '/events', { type: 'diada', title: 'Esborrar', date: future(), ask_companions: true })).d;
+  const ev = (await A('POST', '/events', { hidden: false, type: 'diada', title: 'Esborrar', date: future(), ask_companions: true })).d;
   const field = (await A('POST', `/events/${ev.id}/fields`, { label: 'Talla', kind: 'text' })).d.at(-1);
-  const c = (await A('POST', `/events/${ev.id}/castells`, { width: 3, height: 7 })).d;
+  const c = (await A('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 7 })).d;
   const m = client(`${server.url}/api`);
   await m('POST', '/identify', { person_id: p.id });
   assert.equal((await m('PUT', `/events/${ev.id}/attendance`, { status: 'si', comment: 'comentariesborrable',

@@ -126,8 +126,8 @@ test('al servidor: el mateix dibuix serveix per a castells amb cordons diferents
   const A = s.admin;
   assert.equal((await A('PUT', '/templates/3d6', { layers: { pinya: pinyaOf('3d6', 5) } })).s, 200);
   const date = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const ev = (await A('POST', '/events', { type: 'assaig', title: 'Cordons', date })).d.id;
-  const post = async (cordons) => (await A('POST', `/events/${ev}/castells`, { width: 3, height: 6, cordons })).d;
+  const ev = (await A('POST', '/events', { hidden: false, type: 'assaig', title: 'Cordons', date })).d.id;
+  const post = async (cordons) => (await A('POST', `/events/${ev}/castells`, { hidden: false, width: 3, height: 6, cordons })).d;
   const [small, big] = [await post(2), await post(5)];
   assert.equal(small.cordons, 2, 'no es toca el que ha demanat');
   assert.equal(big.cordons, 5);
@@ -145,9 +145,9 @@ async function copyOf(srv, admin) {
 test('en actualitzar, els castells amb plantilla passen als cordons que dibuixa: no se\'ls amaga res', async () => {
   const A = s.admin;
   const date = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const ev = (await A('POST', '/events', { type: 'assaig', title: 'Migració', date })).d.id;
-  const withTpl = (await A('POST', `/events/${ev}/castells`, { width: 3, height: 8, cordons: 2 })).d.id;
-  const noTpl = (await A('POST', `/events/${ev}/castells`, { width: 4, height: 8, cordons: 2 })).d.id;
+  const ev = (await A('POST', '/events', { hidden: false, type: 'assaig', title: 'Migració', date })).d.id;
+  const withTpl = (await A('POST', `/events/${ev}/castells`, { hidden: false, width: 3, height: 8, cordons: 2 })).d.id;
+  const noTpl = (await A('POST', `/events/${ev}/castells`, { hidden: false, width: 4, height: 8, cordons: 2 })).d.id;
   assert.equal((await A('PUT', '/templates/3d8', { layers: { pinya: pinyaOf('3d8', 4) } })).s, 200);
 
   const file = await copyOf(server, A);
@@ -170,4 +170,25 @@ test('en actualitzar, els castells amb plantilla passen als cordons que dibuixa:
     } finally { await third.stop(); }
   } finally { await next.stop(); }
   assert.equal((await A('DELETE', '/templates/3d8')).s, 200);
+});
+
+test('taps i tapa-taps: es poden desar a la plantilla, van per cordons i continuen amb «Afegeix un cordó»', async () => {
+  const A = s.admin;
+  const pinya = pinyaOf('3d5', 2);
+  const box2 = (key, kind, ring, x) => ({ key, kind, role: kind === 'tap' ? 'Tap' : 'Tapa-tap', ring, x, y: 500, w: 78, h: 30, rot: 0 });
+  pinya.push(box2('pn1', 'tap', 2, 0), box2('pn2', 'tapatap', 2, 100));
+  assert.equal((await A('PUT', '/templates/3d5', { layers: { pinya } })).s, 200);
+  const items = (await A('GET', '/templates')).d.find((x) => x.name === '3d5').layers.pinya;
+  assert.ok(items.some((i) => i.kind === 'tap' && i.ring === 2));
+  assert.ok(items.some((i) => i.kind === 'tapatap' && i.ring === 2));
+  setTemplates([{ name: '3d5', layers: { pinya } }]);
+  try {
+    const kinds = (cordons) => structureOf({ ...configFromName('3d5'), cordons }).layers.find((l) => l.id === 'pinya').items.map((i) => i.kind);
+    assert.ok(kinds(2).includes('tap'));
+    assert.ok(!kinds(1).includes('tap'), 'sense el seu cordó no queden sols');
+  } finally { setTemplates([]); }
+  let n = 0;
+  const extra = nextRing(pinya, () => `xn${++n}`);
+  assert.equal(extra.find((i) => i.kind === 'tap').ring, 3);
+  assert.equal((await A('DELETE', '/templates/3d5')).s, 200);
 });

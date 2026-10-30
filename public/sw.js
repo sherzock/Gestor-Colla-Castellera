@@ -8,9 +8,9 @@ const DATA = 'colla-dades';
 
 // Tot el que cal per obrir l'app sense connexió (una prova comprova que no en falta cap fitxer).
 const FILES = ['/', '/index.html', '/style.css', '/theme.js', '/app.js', '/castell.js', '/editor.js', '/export.js',
-  '/i18n.js', '/import.js', '/muntador.js', '/privacy.js', '/zoom.js', '/ui/accounts.js', '/ui/calendar.js',
+  '/i18n.js', '/import.js', '/muntador.js', '/planning.js', '/privacy.js', '/zoom.js', '/ui/accounts.js', '/ui/calendar.js',
   '/ui/castell-form.js', '/ui/core.js', '/ui/event.js', '/ui/login.js', '/ui/news.js', '/ui/notifications.js',
-  '/ui/people.js', '/ui/sessions.js', '/ui/shell.js', '/ui/stats.js', '/ui/templates.js', '/ui/viewer.js',
+  '/ui/people.js', '/ui/sessions.js', '/ui/shell.js', '/ui/stats.js', '/ui/templates.js', '/ui/timeline.js', '/ui/viewer.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg', '/icons/mark.svg'];
 
 // Només es desen les respostes que calen per veure sessions i castells; mai còpies de seguretat, calendaris, etc.

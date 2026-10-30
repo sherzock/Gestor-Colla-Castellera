@@ -19,10 +19,10 @@ before(async () => {
   const A = s.admin;
   const date = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
   ids.person = (await A('POST', '/people', { name: `Xènia ${X}`, alias: `X${X}`.slice(0, 30), notes: X })).d.id;
-  ids.event = (await A('POST', '/events', { type: 'diada', title: `Diada ${X}`, date, location: X, address: `Adreça ${X}`, description: X, ask_companions: true })).d.id;
+  ids.event = (await A('POST', '/events', { hidden: false, type: 'diada', title: `Diada ${X}`, date, location: X, address: `Adreça ${X}`, description: X, ask_companions: true })).d.id;
   const text = (await A('POST', `/events/${ids.event}/fields`, { label: `Text ${X}`, kind: 'text' })).d.at(-1);
   const sel = (await A('POST', `/events/${ids.event}/fields`, { label: `Llista ${X}`, kind: 'select', options: [`a${X}`, 'b'] })).d.at(-1);
-  ids.castell = (await A('POST', `/events/${ids.event}/castells`, { width: 3, height: 7, label: X, notes: X })).d.id;
+  ids.castell = (await A('POST', `/events/${ids.event}/castells`, { hidden: false, width: 3, height: 7, label: X, notes: X })).d.id;
   await A('PUT', `/castells/${ids.castell}`, { tech_notes: X });
   const guest = (await A('POST', `/events/${ids.event}/guests`, { name: `Convidat ${X}`, colla: X })).d;
   await A('PUT', `/castells/${ids.castell}/positions/t1-0`, { person_id: ids.person });

@@ -28,7 +28,7 @@ test('acompanyants: es creen com a persones temporals, amb nom o «Acompanyant d
 
 test('acompanyants: si en diu menys o ja no ve, els col·locats es queden marcats i els altres s\'esborren', async () => {
   const ev = await futureEvent();
-  const castell = (await s.admin('POST', `/events/${ev.id}/castells`, { width: 3, height: 6 })).d;
+  const castell = (await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 6 })).d;
   const laia = (await s.admin('GET', `/events/${ev.id}`)).d.guests.find((g) => g.name === 'Laia');
   assert.equal((await s.admin('PUT', `/castells/${castell.id}/positions/t1-0`, { guest_id: laia.id })).s, 200);
   await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'no' });
@@ -64,7 +64,7 @@ test('plantilles: es desen, les veu tothom i les posicions noves es poden ocupar
   assert.equal((await s.admin('PUT', '/templates/3d7', { layers })).s, 200);
   assert.ok((await s.member('GET', '/templates')).d.some((t) => t.name === '3d7'));
   const ev = await futureEvent();
-  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { width: 3, height: 7 })).d;
+  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, width: 3, height: 7 })).d;
   assert.equal((await s.admin('PUT', `/castells/${c.id}/positions/pn1`, { person_id: s.personId })).s, 200);
   assert.equal((await s.admin('PUT', `/castells/${c.id}/positions/${removed.key}`, { person_id: s.personId })).s, 400, 'una posició que la plantilla ha tret');
   const usage = (await s.admin('GET', '/templates/3d7/usage')).d;
@@ -117,13 +117,13 @@ test('copiar: castells anteriors del mateix tipus i còpia de les posicions', as
   assert.ok(list.length >= 1 && list.length <= 6);
   assert.ok(list.every((x, i) => i === 0 || list[i - 1].event_date >= x.event_date), 'del més recent al més antic');
   assert.ok(list.some((x) => x.id === source.id), 'el castell d\'origen hi surt');
-  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { ...sc.castell, copy_from: source.id })).d;
+  const c = (await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, ...sc.castell, copy_from: source.id })).d;
   const copied = (await s.admin('GET', `/castells/${c.id}`)).d.positions.filter((p) => p.person_id || p.guest_id);
   assert.ok(copied.length > 5, `${copied.length} posicions copiades`);
   assert.ok(copied.every((p) => p.person_id), 'les persones temporals d\'una altra sessió no es copien');
   const other = name === '3d7' ? '4d7' : '3d7';
   const wrong = (await s.admin('GET', `/events/${ev.id}/castell-sources?name=${other}`)).d[0];
-  if (wrong) assert.equal((await s.admin('POST', `/events/${ev.id}/castells`, { ...sc.castell, copy_from: wrong.id })).s, 400, 'un altre tipus de castell');
+  if (wrong) assert.equal((await s.admin('POST', `/events/${ev.id}/castells`, { hidden: false, ...sc.castell, copy_from: wrong.id })).s, 400, 'un altre tipus de castell');
 });
 
 // ---------- Memòries del servidor ----------
@@ -145,7 +145,7 @@ test('memòries: cada canvi refà el que en depèn', async () => {
   assert.equal((await s.admin('GET', `/castells/${s.pastCastell.id}/history`)).text, castellHistory);
 
   const t0 = (await s.admin('GET', '/stats/castells?season=all')).d.total;
-  await s.admin('POST', `/events/${s.pastEvent.id}/castells`, { width: 2, height: 6, result: 'descarregat' });
+  await s.admin('POST', `/events/${s.pastEvent.id}/castells`, { hidden: false, width: 2, height: 6, result: 'descarregat' });
   assert.equal((await s.admin('GET', '/stats/castells?season=all')).d.total, t0 + 1, 'un castell nou en una sessió passada compta');
 });
 
@@ -173,15 +173,15 @@ test('tècnica: espatlles i pes com a factors, i relleus de les properes diades'
   const st = (await s.admin('GET', '/stats/tecnica?season=all')).d;
   for (const k of ['level', 'weight']) assert.ok(st.factors[k].high.n + st.factors[k].low.n > 0, k);
   // Un castell que la colla no ha fet mai: ningú en pot fer de relleu.
-  const diada = (await s.admin('POST', '/events', { type: 'diada', title: 'Diada de prova', date: '2026-12-12' })).d;
-  const fresh = (await s.admin('POST', `/events/${diada.id}/castells`, { width: 5, height: 6 })).d;
+  const diada = (await s.admin('POST', '/events', { hidden: false, type: 'diada', title: 'Diada de prova', date: '2026-12-12' })).d;
+  const fresh = (await s.admin('POST', `/events/${diada.id}/castells`, { hidden: false, width: 5, height: 6 })).d;
   await s.admin('PUT', `/castells/${fresh.id}/positions/t1-0`, { person_id: s.personId });
   const prep = (await s.admin('GET', `/castells/${fresh.id}/prep`)).d.positions;
   assert.equal(prep.find((p) => p.key === 't1-0').reliefs, 0);
   assert.ok(prep.find((p) => p.key === 't1-0').attendance >= 0);
   // El mateix tronc d'un castell que es fa sovint sí que té relleus (sense comptar qui hi ha posat).
   const sc = (await s.admin('GET', `/castells/${s.pastCastell.id}`)).d;
-  const copy = (await s.admin('POST', `/events/${diada.id}/castells`, { ...sc.castell, copy_from: s.pastCastell.id })).d;
+  const copy = (await s.admin('POST', `/events/${diada.id}/castells`, { hidden: false, ...sc.castell, copy_from: s.pastCastell.id })).d;
   const rows = (await s.admin('GET', `/castells/${copy.id}/prep`)).d.positions.filter((p) => p.person_id);
   assert.ok(rows.some((p) => p.reliefs > 0));
   const card = (await s.admin('GET', '/stats/tecnica?season=all')).d.prep.find((c) => c.castell_id === fresh.id);
@@ -189,7 +189,7 @@ test('tècnica: espatlles i pes com a factors, i relleus de les properes diades'
 });
 
 test('on va fallar: es desa amb el resultat, només ho veu la tècnica i surt a les estadístiques', async () => {
-  const c = (await s.admin('POST', `/events/${s.pastEvent.id}/castells`, { width: 2, height: 7, label: 'Prova on falla' })).d;
+  const c = (await s.admin('POST', `/events/${s.pastEvent.id}/castells`, { hidden: false, width: 2, height: 7, label: 'Prova on falla' })).d;
   const put = (body) => s.admin('PUT', `/castells/${c.id}`, body);
   assert.equal((await put({ result: 'intent', fail_level: 4, fail_cause: 'obert' })).s, 200);
   let got = (await s.admin('GET', `/castells/${c.id}`)).d.castell;
@@ -247,12 +247,12 @@ test('el lloc es pot mostrar amb un nom i obrir una altra adreça al mapa, que e
   const A = s.admin;
   const date = new Date(Date.now() + 9 * 86400000).toISOString().slice(0, 10);
   const base = { type: 'assaig', title: 'Assaig', date, start_time: '20:00', end_time: '22:00', escoleta_time: '19:00' };
-  const first = (await A('POST', '/events', { ...base, location: 'Local de proves', address: 'Carrer Major, 12, Vilafranca' })).d;
+  const first = (await A('POST', '/events', { hidden: false, ...base, location: 'Local de proves', address: 'Carrer Major, 12, Vilafranca' })).d;
   assert.equal(first.address, 'Carrer Major, 12, Vilafranca');
   // Una sessió nova al mateix lloc, amb l'adreça buida (com surt del formulari), la recorda.
-  const second = (await A('POST', '/events', { ...base, location: 'Local de proves', address: '' })).d;
+  const second = (await A('POST', '/events', { hidden: false, ...base, location: 'Local de proves', address: '' })).d;
   assert.equal(second.address, 'Carrer Major, 12, Vilafranca');
-  assert.equal((await A('POST', '/events', { ...base, location: 'Un altre lloc', address: '' })).d.address, null);
+  assert.equal((await A('POST', '/events', { hidden: false, ...base, location: 'Un altre lloc', address: '' })).d.address, null);
   // En editar-la, es pot treure, i si el canvi no en diu res, es queda com estava.
   assert.equal((await A('PUT', `/events/${second.id}`, { ...second, address: '' })).d.address, null);
   const { address, ...noAddress } = first;

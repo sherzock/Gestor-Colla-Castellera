@@ -38,10 +38,10 @@ function profileOf(pos, s) {
     case 'manilles': return { target: 0.65, order: 2.3, kids: false };
     case 'folre': return { target: 0.7, order: 2.4 + (pos.ring ? 0.05 : 0), kids: false };
     default: {
-      const target = { crossa: 0.6, contrafort: 0.8, agulla: 0.65, vent: 0.55, mans: 0.5, lateral: 0.4, latmans: 0.4 }[pos.kind] ?? 0.5;
+      const target = { crossa: 0.6, contrafort: 0.8, agulla: 0.65, vent: 0.55, mans: 0.5, lateral: 0.4, latmans: 0.4, tap: 0.45, tapatap: 0.4 }[pos.kind] ?? 0.5;
       // Primer el nucli (contraforts, crosses, agulles) i després cordó a cordó: mans, vents i laterals.
       const inner = { contrafort: 0, crossa: 0.01, agulla: 0.02 }[pos.kind];
-      const inRing = { mans: 0, vent: 0.02, lateral: 0.05, latmans: 0.06 }[pos.kind] ?? 0.05;
+      const inRing = { mans: 0, vent: 0.02, lateral: 0.05, latmans: 0.06, tap: 0.07, tapatap: 0.08 }[pos.kind] ?? 0.05;
       return { target, order: inner !== undefined ? 3 + inner : 3 + pos.ring * 0.1 + inRing, kids: false };
     }
   }

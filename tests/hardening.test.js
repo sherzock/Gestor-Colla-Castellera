@@ -104,7 +104,7 @@ test('camps que no es poden canviar des de fora: rol, usuari, contrasenya, id, d
   assert.ok(!('password_hash' in p) && !('username' in p) && !('role' in p), 'tampoc surten a la resposta');
   await s.admin('DELETE', `/people/${p.id}`);
   // Un castell no es pot moure a una altra sessió dient-ho al cos de la petició.
-  const other = (await s.admin('POST', '/events', { type: 'assaig', title: 'Una altra', date: future() })).d;
+  const other = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Una altra', date: future() })).d;
   await s.admin('PUT', `/castells/${s.pastCastell.id}`, { event_id: other.id, id: 999999 });
   assert.equal(sql((db) => db.prepare('SELECT event_id FROM castells WHERE id = ?').get(s.pastCastell.id)).event_id, s.pastEvent.id);
   // Un membre no es pot marcar com a vingut, ni respondre per algú altre ni a una altra sessió.
@@ -116,7 +116,7 @@ test('camps que no es poden canviar des de fora: rol, usuari, contrasenya, id, d
 });
 
 test('amb les respostes tancades (o la sessió passada) un membre ja no pot canviar la seva; i l\'administració no respon per ningú', async () => {
-  const ev = (await s.admin('POST', '/events', { type: 'assaig', title: 'Tancada', date: future() })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Tancada', date: future() })).d;
   assert.equal((await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si' })).s, 200);
   await s.admin('POST', `/events/${ev.id}/rsvp`, { open: false });
   assert.equal((await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'no' })).s, 400);
@@ -157,7 +157,7 @@ test('JSON estrany («__proto__», «constructor», llistes, «null», a mitges�
     assert.equal(r.s, 400, `${body} → ${r.s}`);
   }
   // Dins dels camps que es guarden com a JSON (respostes a preguntes de la sessió), les claus estranyes es descarten.
-  const ev = (await s.admin('POST', '/events', { type: 'assaig', title: 'JSON', date: future() })).d;
+  const ev = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'JSON', date: future() })).d;
   const field = (await s.admin('POST', `/events/${ev.id}/fields`, { label: 'Samarreta', kind: 'text' })).d.at(-1);
   const r = await s.member('PUT', `/events/${ev.id}/attendance`,
     `{"status":"si","extra":{"__proto__":{"role":"admin"},"constructor":"x","toString":"x","${field.id}":"M"}}`);

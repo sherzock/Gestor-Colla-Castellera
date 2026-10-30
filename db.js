@@ -299,6 +299,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS castell_templates (
 addColumn('events', 'ask_companions', 'INTEGER NOT NULL DEFAULT 0');
 // Adreça que s'obre al mapa quan el lloc és un nom que el mapa no coneix («Local de la colla»).
 addColumn('events', 'address', 'TEXT');
+addColumn('castells', 'plan_time', 'TEXT');
+addColumn('castells', 'plan_minutes', 'INTEGER');
 
 // Encarregats d'una sessió: qui porta el material, la farmaciola… (una feina pot tenir més d'una persona).
 db.exec(`CREATE TABLE IF NOT EXISTS event_roles (

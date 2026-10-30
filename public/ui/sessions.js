@@ -93,7 +93,7 @@ export async function quickAnswer(event, status) {
 }
 
 export function eventModal(event, defaults = {}) {
-  const e = event || { type: 'assaig', date: todayIso(), start_time: '20:00', end_time: '22:30', escoleta: 0, escoleta_time: '19:00', ...defaults };
+  const e = event || { type: 'assaig', date: todayIso(), start_time: '20:00', end_time: '22:30', escoleta: 0, escoleta_time: '19:00', hidden: 1, ...defaults };
   openModal(`${modalHead(event ? t('Edita la sessió') : t('Nova sessió'))}
     <form id="event-form">
       <div class="form-grid">

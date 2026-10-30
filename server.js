@@ -70,7 +70,7 @@ const RESULTS = ['previst', 'descarregat', 'carregat', 'intent', 'intent desfet'
 // Què va passar quan un castell no es va descarregar.
 const FAIL_CAUSES = ['obert', 'decantat', 'cedit', 'altre'];
 // El que només veuen els administradors d'un castell: les notes i on va fallar podrien assenyalar algú.
-const ADMIN_ONLY_CASTELL = { tech_notes: undefined, fail_level: undefined, fail_cause: undefined };
+const ADMIN_ONLY_CASTELL = { tech_notes: undefined, fail_level: undefined, fail_cause: undefined, plan_time: undefined, plan_minutes: undefined };
 const NUMERIC_PERSON_FIELDS = ['height_cm', 'shoulder_height_cm', 'shoulder_width_cm', 'weight_kg'];
 const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', ...NUMERIC_PERSON_FIELDS, 'notes', 'instrument', 'section'];
 
@@ -245,6 +245,7 @@ function castellInput(body, existing = {}) {
   const height = int(merged.height, width === 1 ? 3 : 4, 11, null);
   const net = bool(merged.net);
   const folre = net ? 0 : bool(merged.folre);
+  if (!isTime(merged.plan_time)) fail(400, 'Hora no vàlida');
   const out = {
     width, height,
     agulla: width >= 3 ? bool(merged.agulla) : 0,
@@ -265,6 +266,8 @@ function castellInput(body, existing = {}) {
     fail_level: int(merged.fail_level, 0, 11, 0),
     fail_cause: FAIL_CAUSES.includes(merged.fail_cause) ? merged.fail_cause : null,
     hidden: bool(merged.hidden),
+    plan_time: merged.plan_time || null,
+    plan_minutes: merged.plan_minutes ? int(merged.plan_minutes, 5, 240, 20) : null,
   };
   if (out.folre && height < 6) fail(400, 'El folre necessita un castell de 6 pisos o més');
   if (out.puntals && height < (width === 1 ? 8 : 9)) fail(400, 'Els puntals necessiten un castell més alt');
@@ -841,7 +844,8 @@ function eventInput(body) {
 
 route('POST', '/api/events', ({ body }) => {
   atMost(LIMITS.events, 'Com a molt {n} sessions', 'SELECT COUNT(*) AS n FROM events');
-  const data = eventInput(body);
+  // Es crea oculta, si no es diu el contrari: els membres no la veuen fins que està a punt.
+  const data = { hidden: 1, ...eventInput(body) };
   // Una sessió nova al mateix lloc que una d'anterior en recorda l'adreça del mapa, si no se n'hi posa cap.
   if (data.location && !data.address) {
     data.address = db.prepare(`SELECT address FROM events WHERE location = ? AND address IS NOT NULL ORDER BY date DESC, id DESC LIMIT 1`)
@@ -869,9 +873,11 @@ route('POST', '/api/events/:id/rsvp', ({ params, body }) => {
 }, 'attendance');
 
 // Ocultar o tornar a mostrar una sessió o un castell als membres.
-route('PUT', '/api/events/:id/hidden', ({ params, body }) => {
+route('PUT', '/api/events/:id/hidden', ({ params, body, user }) => {
   getEvent(params.id);
   db.prepare('UPDATE events SET hidden = ? WHERE id = ?').run(bool(body.hidden), params.id);
+  // Els castells es creen ocults: qui en porta el permís els pot mostrar d'un cop amb la sessió.
+  if (body.castells && !bool(body.hidden) && can(user, 'castells')) db.prepare('UPDATE castells SET hidden = 0 WHERE event_id = ?').run(params.id);
   return getEvent(params.id);
 }, 'sessions');
 route('PUT', '/api/castells/:id/hidden', ({ params, body }) => {
@@ -1250,7 +1256,8 @@ route('POST', '/api/events/:id/castells', ({ params, body }) => {
   atMost(LIMITS.castellsPerEvent, 'Com a molt {n} castells per sessió', 'SELECT COUNT(*) AS n FROM castells WHERE event_id = ?', params.id);
   const position = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(params.id).p;
   return transaction(() => {
-    const id = insertRow('castells', { event_id: Number(params.id), position, ...castellInput(body) });
+    // Es crea ocult, si no es diu el contrari: els membres no el veuen fins que està a punt.
+    const id = insertRow('castells', { event_id: Number(params.id), position, ...castellInput(body), hidden: 'hidden' in body ? bool(body.hidden) : 1 });
     if (body.copy_from) copyLineup(getCastell(id), Number(body.copy_from));
     return getCastell(id);
   });
@@ -1315,7 +1322,7 @@ route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
   return transaction(() => {
     const { id, event_id, position, ...rest } = castell;
     const nextPos = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM castells WHERE event_id = ?').get(target.id).p;
-    const newId = insertRow('castells', { ...rest, result: 'previst', tech_notes: null, fail_level: 0, fail_cause: null, event_id: target.id, position: nextPos });
+    const newId = insertRow('castells', { ...rest, result: 'previst', tech_notes: null, fail_level: 0, fail_cause: null, hidden: 1, plan_time: null, event_id: target.id, position: nextPos });
     // Les persones temporals són d'una sessió: només es copien si el castell queda a la mateixa sessió.
     db.prepare(`INSERT INTO castell_positions (castell_id, pos_key, person_id, guest_name, guest_id)
       SELECT ?, pos_key, person_id, guest_name, guest_id FROM castell_positions

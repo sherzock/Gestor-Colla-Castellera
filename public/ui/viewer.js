@@ -11,7 +11,7 @@ import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, day, esc
 import { guestModal } from './event.js';
 
 // ---------- Visualitzador de castell ----------
-const KIND_LABEL = { base: 'Baix', crossa: 'Crossa', contrafort: 'Contrafort', agulla: 'Agulla', vent: 'Vents', mans: 'Mans', lateral: 'Laterals', latmans: 'Laterals de mans', altre: 'Altres' };
+const KIND_LABEL = { base: 'Baix', crossa: 'Crossa', contrafort: 'Contrafort', agulla: 'Agulla', vent: 'Vents', mans: 'Mans', lateral: 'Laterals', tap: 'Taps', tapatap: 'Tapa-taps', latmans: 'Laterals de mans', altre: 'Altres' };
 let castellView = store.get('castellView', 'tronc');
 let selectedPerson = null;
 let searchQuery = '';
@@ -83,7 +83,7 @@ function troncView(s, cell, levelNote = () => '') {
 // Color del contorn de cada tipus de posició (variables CSS, s'adapten al mode fosc).
 const KIND_VAR = {
   base: 'var(--k-baix)', contrafort: 'var(--k-contrafort)', agulla: 'var(--k-agulla)', crossa: 'var(--k-crossa)',
-  mans: 'var(--k-mans)', vent: 'var(--k-vent)', lateral: 'var(--k-lateral)', latmans: 'var(--k-latmans)', altre: 'var(--accent)',
+  mans: 'var(--k-mans)', vent: 'var(--k-vent)', lateral: 'var(--k-lateral)', latmans: 'var(--k-latmans)', tap: 'var(--k-tap)', tapatap: 'var(--k-tapatap)', altre: 'var(--accent)',
 };
 
 function layerSvg(layer, s, byKey, ctx) {
@@ -125,7 +125,7 @@ function layerSvg(layer, s, byKey, ctx) {
 
 function pinyaView(s, byKey, ctx) {
   const kinds = ['base', 'contrafort', 'agulla', 'crossa', 'mans', 'vent', 'lateral'];
-  if (s.layers.some((l) => l.items.some((i) => i.kind === 'altre'))) kinds.push('altre');
+  for (const k of ['tap', 'tapatap', 'altre']) if (s.layers.some((l) => l.items.some((i) => i.kind === k))) kinds.push(k);
   return s.layers.map((layer, i) => {
     const filled = layer.items.filter((x) => !x.shared && byKey.has(x.key)).length;
     const total = layer.items.filter((x) => !x.shared).length;
