@@ -70,3 +70,24 @@ test('editar: es poden treure i afegir imatges, i si no se\'n parla no canvien',
   assert.equal((await A('POST', '/announcements', { title: 'Massa', image_ids: many, notify: false })).s, 400);
   assert.equal((await A('GET', '/announcements')).d.filter((x) => x.title === 'Massa').length, 0, 'si falla, no queda el missatge a mitges');
 });
+
+test('la demo porta imatges d\'exemple, i són imatges de debò', async () => {
+  const list = (await s.member('GET', '/announcements')).d;
+  const seeded = list.find((a) => a.title === 'Fotos de la darrera diada');
+  assert.equal(seeded.images.length, 2);
+  const r = await s.member('GET', `/announcements/images/${seeded.images[0]}`);
+  assert.equal(r.s, 200);
+  assert.equal(r.headers.get('content-type'), 'image/png');
+});
+
+test('com a molt 50 missatges: en arribar-hi no se\'n publiquen més, fins que se n\'esborra algun', async () => {
+  const A = s.admin;
+  const now = (await A('GET', '/announcements')).d.length;
+  const made = [];
+  for (let i = now; i < 50; i++) made.push((await A('POST', '/announcements', { title: `M${i}`, notify: false })).d.id);
+  const full = await A('POST', '/announcements', { title: 'Un de més', notify: false });
+  assert.equal(full.s, 400);
+  assert.match(full.d.error, /50/);
+  await A('DELETE', `/announcements/${made[0]}`);
+  assert.equal((await A('POST', '/announcements', { title: 'Ara sí', notify: false })).s, 200);
+});

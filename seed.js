@@ -1,5 +1,7 @@
 // Omple la base de dades amb dades de demostració.
 // Ús: node seed.js   (esborra les dades existents!)
+import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { db, hashPassword, transaction } from './db.js';
 import { buildStructure } from './public/castell.js';
 
@@ -48,6 +50,40 @@ const ASSAIG = [['3d6', '4d6', '2d6', 'pd4', '3d7'], ['3d7', '4d7', '2d6', 'pd5'
 const DIADA = [['3d6', '4d6', '2d6', 'pd4'], ['3d7', '4d7', '2d6', 'pd5'], ['3d7', '4d7a', '2d6', 'pd5']];
 const DIADA_NAMES = ['Diada de Sant Jordi', "Diada de l'aniversari", 'Diada de la Verema', 'Diada del Mercat', 'Diada de la Plaça Nova',
   'Trobada de colles', 'Diada del barri de Sant Pere', 'Diada a la Rambla', 'Diada de la colla', 'Diada de les entitats', 'Diada de la Festa Major'];
+
+// Un dibuix senzill d'un castell en PNG: la demo no ha de dependre de cap fitxer de fotos.
+function sampleCastell(floors, [r, g, b]) {
+  const W = 640, H = 420, BLOCK = 44;
+  const raw = Buffer.alloc((W * 3 + 1) * H);
+  for (let y = 0; y < H; y++) {
+    const row = y * (W * 3 + 1);
+    for (let x = 0; x < W; x++) {
+      // El cel i, a sobre, cada pis amb una persona menys que el de sota.
+      const sky = y / H;
+      let px = [Math.round(150 + 90 * sky), Math.round(195 + 45 * sky), 245];
+      const floor = Math.floor((H - 20 - y) / BLOCK);
+      if (y < H - 20 && floor >= 0 && floor < floors) {
+        const n = Math.max(1, floors - floor);
+        const left = W / 2 - (n * BLOCK) / 2;
+        const inRow = x >= left && x < left + n * BLOCK;
+        if (inRow && (x - left) % BLOCK > 3 && (H - 20 - y) % BLOCK > 3) px = [r, g, b];
+      } else if (y >= H - 20) px = [120, 110, 100];
+      raw.set(px, row + 1 + x * 3);
+    }
+  }
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const len = Buffer.alloc(4), crc = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const head = Buffer.alloc(13);
+  head.writeUInt32BE(W, 0);
+  head.writeUInt32BE(H, 4);
+  head.set([8, 2], 8);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 
 transaction(() => {
   for (const t of ['announcements', 'castell_templates', 'castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
@@ -259,6 +295,11 @@ transaction(() => {
   insNews.run('Camisa i faixa per a la diada', "Recordeu portar la camisa neta i la faixa. Ens trobem a la plaça a les 11:15.\nQui necessiti faixa, que ho digui a l'assaig de dijous.", 1, '-2 days');
   insNews.run("Canvi d'hora de l'assaig", "Aquesta setmana l'assaig del dijous comença a les 20:30 per l'obra del local.", 0, '-1 days');
   insNews.run('Fotos de la darrera diada', 'Ja teniu les fotos penjades: https://example.com/fotos-diada', 0, '-6 days');
+  // Dues imatges d'exemple a l'últim missatge, per veure com queden a la demo.
+  const photos = db.prepare("SELECT id FROM announcements WHERE title = 'Fotos de la darrera diada'").get().id;
+  const insImage = db.prepare("INSERT INTO announcement_images (id, announcement_id, position, mime, data) VALUES (?, ?, ?, 'image/png', ?)");
+  insImage.run(crypto.randomBytes(12).toString('hex'), photos, 0, sampleCastell(5, [214, 90, 106]));
+  insImage.run(crypto.randomBytes(12).toString('hex'), photos, 1, sampleCastell(7, [90, 140, 214]));
   const insCompanion = db.prepare('INSERT INTO event_guests (event_id, name, companion_of) VALUES (?, ?, ?)');
   const companionNames = ['Laia', 'Oriol', 'Marta', 'Pau', 'Núria', 'Jordi', 'Clara', 'Marc'];
   for (const p of people.filter((x) => present.sopar.has(x.id))) {

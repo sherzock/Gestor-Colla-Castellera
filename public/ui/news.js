@@ -12,6 +12,8 @@ const newsDate = (at) => new Date(`${at.replace(' ', 'T')}Z`);
 const richText = (text) => esc(text || '').replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
 
 const imageUrl = (id) => `/api/announcements/images/${encodeURIComponent(id)}`;
+// Els mateixos límits que el servidor.
+const MAX_MESSAGES = 50;
 const MAX_IMAGES = 4;
 const MAX_SIDE = 1280;
 const MAX_BYTES = 900 * 1024;
@@ -57,7 +59,8 @@ export async function pageNews() {
   const when = (a) => newsDate(a.created_at).toLocaleDateString(LOCALE[lang], { day: 'numeric', month: 'long', year: 'numeric' });
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Altaveu')}</h1>
-      <div class="actions">${admin ? `<button class="btn primary" id="new-news">${icon.plus}${t('Nou missatge')}</button>` : ''}</div></div>
+      <div class="actions">${admin ? `<span class="small muted">${t('{a} de {b} missatges', { a: list.length, b: MAX_MESSAGES })}</span><button class="btn primary" id="new-news" ${list.length >= MAX_MESSAGES ? 'disabled' : ''}>${icon.plus}${t('Nou missatge')}</button>` : ''}</div></div>
+    ${admin && list.length >= MAX_MESSAGES ? `<p class="small" style="margin-top:0">${t("Ja n'hi ha el màxim: esborra'n algun d'antic per publicar-ne un de nou.")}</p>` : ''}
     <p class="muted" style="margin-top:0">${admin ? t('Missatges per a tota la colla. Els membres els veuen aquí i la pestanya es marca quan n\'hi ha de nous.') : t("Informació de l'administració per a tota la colla.")}</p>
     <div class="news-list">${list.map((a) => `<article class="card news ${a.pinned ? 'pinned' : ''} ${!admin && a.created_at > seen && seen ? 'new' : ''}">
       <div class="news-head">

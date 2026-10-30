@@ -112,7 +112,7 @@ const NEWS_IMAGES_PER_MESSAGE = 4;
 const NEWS_IMAGE_BYTES = 1024 * 1024;
 const NEWS_IMAGE_BODY = Math.ceil(NEWS_IMAGE_BYTES * 4 / 3) + 1024;
 const LIMITS = {
-  people: 2000, events: 5000, admins: 25, announcements: 300, newsImages: 300, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
+  people: 2000, events: 5000, admins: 25, announcements: 50, newsImages: 220, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
   guestsPerEvent: 200, companions: 6, templateBoxes: 200, rolesPerEvent: 20,
 };
 // Mides humanes possibles (en cm i kg): un valor fora d'aquí és un error en escriure'l.
