@@ -864,6 +864,20 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .news-tag { font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 1px 8px; }
 .news-body { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .news-body a { color: var(--accent); }
+.news-images { display: grid; gap: 6px; margin-top: 12px; grid-template-columns: repeat(2, 1fr); }
+.news-images.one { grid-template-columns: 1fr; }
+.news-images button { padding: 0; border: 0; background: var(--surface-2); border-radius: 10px; overflow: hidden; cursor: zoom-in; display: block; }
+.news-images img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+.news-images.one img { aspect-ratio: auto; max-height: 460px; object-fit: contain; }
+.news-photo { display: block; max-width: 100%; max-height: 75vh; margin: 0 auto; border-radius: 8px; }
+.news-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 2px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; }
+.emoji-grid button { font-size: 1.3rem; line-height: 1; padding: 7px 0; border: 0; background: none; border-radius: 8px; cursor: pointer; }
+.emoji-grid button:hover { background: var(--surface-2); }
+.news-picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.news-pick { position: relative; width: 84px; height: 84px; }
+.news-pick img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; display: block; }
+.news-pick button { position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: rgb(0 0 0 / .65); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
 .empty > svg { width: 32px; height: 32px; opacity: .5; }
 
 /* Omplir un castell com un d'anterior */

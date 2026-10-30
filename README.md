@@ -31,7 +31,7 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
 - **Assistència**: cada persona respon *Vinc* o *No vinc* (sense «potser», perquè la tècnica sàpiga amb qui pot comptar) i respon els **camps extra** de la sessió
   (acompanyants, dinar, menú…: número, sí/no, text o llista d'opcions; poden ser obligatoris).
   Els administradors veuen la taula completa amb totals i exporten a CSV.
-- **Altaveu**: pestanya amb missatges d'informació de l'administració per a tota la colla (canvis d'hora, què cal
+- **Altaveu**: pestanya amb missatges, amb emojis i fins a 4 imatges, de l'administració per a tota la colla (canvis d'hora, què cal
   portar, enllaços a fotos…). Els administradors els publiquen, editen, esborren i poden fixar-ne a dalt de tot. Les
   adreces web es converteixen en enllaços. Quan hi ha missatges nous, la pestanya surt marcada i a l'inici apareix un
   avís; cada mòbil recorda fins on ha llegit. Els membres no veuen quin compte d'administració ha escrit el missatge.

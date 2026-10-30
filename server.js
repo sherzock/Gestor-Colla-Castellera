@@ -76,7 +76,8 @@ const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', ...NUMER
 
 function str(value, max = 500) {
   if (value === undefined || value === null) return null;
-  const s = String(value).trim().slice(0, max);
+  // Si el tall cau enmig d'un emoji (ocupa dos caràcters), el treu sencer.
+  const s = String(value).trim().slice(0, max).replace(/[\uD800-\uDBFF]$/, '');
   return s === '' ? null : s;
 }
 function num(value) {
@@ -106,8 +107,12 @@ function inRange(value, min, max) {
   return Math.round(n * 10) / 10;
 }
 // Quantes coses hi pot haver com a molt: res d'això té sentit a milers (i la pàgina no ho podria mostrar).
+// Imatges de l'altaveu: l'app les redueix abans de pujar-les, i en base64 ocupen un terç més.
+const NEWS_IMAGES_PER_MESSAGE = 4;
+const NEWS_IMAGE_BYTES = 1024 * 1024;
+const NEWS_IMAGE_BODY = Math.ceil(NEWS_IMAGE_BYTES * 4 / 3) + 1024;
 const LIMITS = {
-  people: 2000, events: 5000, admins: 25, announcements: 300, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
+  people: 2000, events: 5000, admins: 25, announcements: 300, newsImages: 300, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
   guestsPerEvent: 200, companions: 6, templateBoxes: 200, rolesPerEvent: 20,
 };
 // Mides humanes possibles (en cm i kg): un valor fora d'aquí és un error en escriure'l.
@@ -1390,14 +1395,58 @@ function announcementInput(body) {
   return { title, body: str(body.body, 4000), pinned: bool(body.pinned) };
 }
 const getAnnouncement = (id) => db.prepare('SELECT * FROM announcements WHERE id = ?').get(id) || fail(404, 'Missatge no trobat');
+const withImages = (a) => ({ ...a, images: db.prepare('SELECT id FROM announcement_images WHERE announcement_id = ? ORDER BY position').all(a.id).map((i) => i.id) });
+
+// Què és una imatge ho diuen els seus primers bytes, no el que digui qui la puja (i un SVG podria dur codi: no se n'accepten).
+function imageMime(b) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (b.subarray(0, 4).toString('latin1') === 'GIF8') return 'image/gif';
+  if (b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return null;
+}
+// Les imatges d'un missatge passen a ser les d'aquesta llista, en aquest ordre; les que en surten s'esborren.
+function setImages(announcementId, ids) {
+  if (!Array.isArray(ids)) fail(400, 'Imatge no vàlida');
+  if (ids.length > NEWS_IMAGES_PER_MESSAGE) fail(400, 'Com a molt {n} imatges per missatge', { n: NEWS_IMAGES_PER_MESSAGE });
+  const own = db.prepare('SELECT 1 FROM announcement_images WHERE id = ? AND (announcement_id IS NULL OR announcement_id = ?)');
+  for (const id of ids) if (typeof id !== 'string' || !own.get(id, announcementId)) fail(400, 'Imatge no vàlida');
+  db.prepare('DELETE FROM announcement_images WHERE announcement_id = ? AND id NOT IN (SELECT value FROM json_each(?))').run(announcementId, JSON.stringify(ids));
+  const link = db.prepare('UPDATE announcement_images SET announcement_id = ?, position = ? WHERE id = ?');
+  ids.forEach((id, i) => link.run(announcementId, i, id));
+}
 
 route('GET', '/api/announcements', ({ user }) => db.prepare(`SELECT * FROM announcements
-  ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 200`).all().map((a) => (user.role === 'admin' ? a : { ...a, author: undefined })));
+  ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 200`).all().map(withImages).map((a) => (user.role === 'admin' ? a : { ...a, author: undefined })));
+
+route('POST', '/api/announcements/images', ({ body }) => {
+  // Les que es van pujar però mai es van arribar a publicar.
+  db.prepare("DELETE FROM announcement_images WHERE announcement_id IS NULL AND created_at < datetime('now', '-1 day')").run();
+  atMost(LIMITS.newsImages, "Com a molt {n} imatges: esborra algun missatge antic", 'SELECT COUNT(*) AS n FROM announcement_images');
+  if (typeof body.data !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(body.data)) fail(400, 'Imatge no vàlida');
+  const data = Buffer.from(body.data, 'base64');
+  if (data.length > NEWS_IMAGE_BYTES) fail(413, 'Petició massa gran');
+  const mime = imageMime(data) || fail(400, 'Imatge no vàlida');
+  // A l'atzar: el navegador les guarda molt de temps, i una altra imatge mai no pot tornar a tenir la mateixa adreça.
+  const id = crypto.randomBytes(12).toString('hex');
+  db.prepare('INSERT INTO announcement_images (id, mime, data) VALUES (?, ?, ?)').run(id, mime, data);
+  return { id };
+}, 'news');
+
+route('GET', '/api/announcements/images/:id', ({ params, res }) => {
+  const image = db.prepare('SELECT mime, data FROM announcement_images WHERE id = ?').get(params.id) || fail(404, 'Imatge no trobada');
+  res.writeHead(200, { 'Content-Type': image.mime, 'Content-Length': image.data.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+  res.end(image.data);
+  return undefined;
+});
 
 route('POST', '/api/announcements', ({ body, user }) => {
   atMost(LIMITS.announcements, "Com a molt {n} missatges: esborra'n algun d'antic", 'SELECT COUNT(*) AS n FROM announcements');
-  const id = insertRow('announcements', { ...announcementInput(body), author: user.name, created_at: nowUtc() });
-  const a = getAnnouncement(id);
+  const a = transaction(() => {
+    const id = insertRow('announcements', { ...announcementInput(body), author: user.name, created_at: nowUtc() });
+    if (body.image_ids) setImages(id, body.image_ids);
+    return withImages(getAnnouncement(id));
+  });
   if (body.notify !== false) {
     // Només als mòbils d'algú de la colla que encara hi és, o d'un compte d'administració.
     notify(db.prepare(`SELECT s.* FROM push_subscriptions s LEFT JOIN people p ON p.id = s.person_id
@@ -1409,8 +1458,11 @@ route('POST', '/api/announcements', ({ body, user }) => {
 
 route('PUT', '/api/announcements/:id', ({ params, body }) => {
   getAnnouncement(params.id);
-  updateRow('announcements', params.id, { ...announcementInput(body), updated_at: nowUtc() });
-  return getAnnouncement(params.id);
+  transaction(() => {
+    updateRow('announcements', params.id, { ...announcementInput(body), updated_at: nowUtc() });
+    if (body.image_ids) setImages(params.id, body.image_ids);
+  });
+  return withImages(getAnnouncement(params.id));
 }, 'news');
 
 route('DELETE', '/api/announcements/:id', ({ params }) => {
@@ -1632,7 +1684,7 @@ const NO_DATA_CHANGE = new Set(['/api/directory', '/api/identify', '/api/login',
   '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox']);
 // Peticions que només toquen l'assistència, els camps extra, l'altaveu o els comptes d'administració.
 const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/attendance(\/\d+)?$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,
-  /^\/api\/fields\/\d+$/, /^\/api\/announcements(\/\d+)?$/, /^\/api\/admins(\/\d+)?$/];
+  /^\/api\/fields\/\d+$/, /^\/api\/announcements(\/\d+|\/images)?$/, /^\/api\/admins(\/\d+)?$/];
 const POSITIONS_ROUTE = /^\/api\/castells\/(\d+)\/positions(\/[^/]+)?$/;
 function dataChanged(pathname) {
   dataVersion++;
@@ -2358,17 +2410,17 @@ function serveStatic(req, res, pathname) {
 // Una petició massa gran es llegeix fins al final sense guardar-la i es respon 413: si es tallés la connexió, l'app
 // diria «Sense connexió» en lloc de dir què passa. Si és enorme, sí que es talla.
 const BODY_MAX = 1_000_000;
-function readBody(req) {
+function readBody(req, max = BODY_MAX) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > 20 * BODY_MAX) { reject(new HttpError(413, 'Petició massa gran')); req.destroy(); return; }
-      if (size <= BODY_MAX) chunks.push(c);
+      if (size > 20 * max) { reject(new HttpError(413, 'Petició massa gran')); req.destroy(); return; }
+      if (size <= max) chunks.push(c);
     });
     req.on('end', () => {
-      if (size > BODY_MAX) return reject(new HttpError(413, 'Petició massa gran'));
+      if (size > max) return reject(new HttpError(413, 'Petició massa gran'));
       if (!chunks.length) return resolve({});
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* es rebutja a sota */ }
@@ -2417,7 +2469,8 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     if (match.auth !== 'public' && match.auth !== 'user' && !can(user, match.auth)) {
       fail(403, user.role === 'admin' ? 'El teu compte no té permís per fer això' : 'Només per a administradors');
     }
-    const body = req.method === 'GET' ? {} : await readBody(req);
+    // Només les imatges de l'altaveu passen d'aquí, i la ruta ja ha comprovat qui les envia.
+    const body = req.method === 'GET' ? {} : await readBody(req, url.pathname === '/api/announcements/images' ? NEWS_IMAGE_BODY : BODY_MAX);
     let result;
     try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }
     finally { if (req.method !== 'GET' && !NO_DATA_CHANGE.has(url.pathname)) { dataChanged(url.pathname); warmCaches(); } }

@@ -322,6 +322,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS announcements (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT
 )`);
+// Les imatges dels missatges. Es pugen abans de publicar: fins llavors no tenen missatge («announcement_id» buit).
+db.exec(`CREATE TABLE IF NOT EXISTS announcement_images (
+  id TEXT PRIMARY KEY,
+  announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
 
 // Configuració que el servidor genera ell mateix i ha de mantenir (p. ex. les claus dels avisos al mòbil).
 db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);

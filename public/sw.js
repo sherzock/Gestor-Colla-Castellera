@@ -14,7 +14,7 @@ const FILES = ['/', '/index.html', '/style.css', '/theme.js', '/app.js', '/caste
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg', '/icons/mark.svg'];
 
 // Només es desen les respostes que calen per veure sessions i castells; mai còpies de seguretat, calendaris, etc.
-const SAVED_API = /^\/api\/(config|me|events|events\/\d+|castells\/\d+(\/history|\/prep)?|templates|announcements)$/;
+const SAVED_API = /^\/api\/(config|me|events|events\/\d+|castells\/\d+(\/history|\/prep)?|templates|announcements(\/images\/[0-9a-f]+)?)$/;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
