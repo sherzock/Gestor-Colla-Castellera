@@ -1,5 +1,5 @@
 // Llista de sessions (inici) i formulari de sessió.
-import { $app, TYPES, api, attempt, castellTags, closeModal, day, esc, fmt, formData, hiddenBadge, icon, initial,
+import { $app, TYPES, api, attempt, can, castellTags, closeModal, day, esc, fmt, formData, hiddenBadge, icon, initial,
   isAdmin, me, modalHead, openModal, qs, qsa, render, shortName, statusLabel, statusPill, store, t, time, tn, toast, todayIso,
   typeBadge, typeLabel, typePlural } from './core.js';
 import { newsUnread } from './news.js';
@@ -55,7 +55,7 @@ export async function pageHome() {
     </div>`}
     ${!isAdmin() && newsUnread() ? `<a class="card news-banner" href="#/altaveu">${icon.megaphone}<span>${t("Hi ha missatges nous a l'altaveu")}</span>${icon.chevron}</a>` : ''}
     <div class="page-head"><h1>${t('Sessions')}</h1>
-      <div class="actions">${isAdmin() ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div>
+      <div class="actions">${can('sessions') ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div>
     </div>
     <div class="toolbar">
       <div class="tabs" id="scope">

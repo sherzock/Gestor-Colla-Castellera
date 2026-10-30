@@ -6,7 +6,7 @@ import { proposeLineup } from '../muntador.js';
 import { openZoom } from '../zoom.js';
 import { castellModal } from './castell-form.js';
 import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, day, esc, failCauseLabel, fmt, formData,
-  fullName, hiddenBadge, hiddenToggle, icon, isAdmin, me, modalHead, norm, openModal, partialLabel, qs, qsa, render,
+  can, fullName, hiddenBadge, hiddenToggle, icon, me, modalHead, norm, openModal, partialLabel, qs, qsa, render,
   resultClass, resultLabel, resultPill, shortName, statusPill, store, t, tn, toast, todayIso } from './core.js';
 import { guestModal } from './event.js';
 
@@ -283,11 +283,12 @@ export async function pageCastell(id) {
   // L'historial de posicions només el veuen els administradors.
   const [data, history, prep] = await Promise.all([
     api('GET', `/castells/${id}`),
-    isAdmin() ? api('GET', `/castells/${id}/history`) : { castellsCount: 0, exact: [] },
-    isAdmin() ? api('GET', `/castells/${id}/prep`) : null,
+    can('castells') ? api('GET', `/castells/${id}/history`) : { castellsCount: 0, exact: [] },
+    can('castells') ? api('GET', `/castells/${id}/prep`) : null,
   ]);
   const { castell, event, positions, siblings, candidates = [], events = [], guests: sessionGuests = [] } = data;
-  const admin = isAdmin();
+  // Editar l'alineació és de la tècnica: la junta la veu com la veu un membre.
+  const admin = can('castells');
   const s = buildStructure(castell);
   const saved = new Map(positions.filter((p) => s.positions.has(p.pos_key)).map((p) => [p.pos_key, p]));
   if (proposal && proposal.castellId !== castell.id) proposal = null;

@@ -1,7 +1,7 @@
 // Persones (administració), importar-ne d'un full de càlcul i perfil del membre.
 import { download } from '../export.js';
 import { IMPORT_FIELDS, guessField, readSpreadsheet, rowsToPeople } from '../import.js';
-import { $app, INSTRUMENTS, MEASURES, SECTIONS, sectionLabel, age, api, attempt, closeModal, esc, formData, fullName, icon, isAdmin, me,
+import { $app, INSTRUMENTS, MEASURES, SECTIONS, sectionLabel, age, api, attempt, can, canField, closeModal, esc, formData, fullName, icon, isAdmin, me,
   modalHead, norm, openModal, qs, qsa, render, setMe, shortName, store, t, tn, toast, todayIso } from './core.js';
 import { switchPerson } from './shell.js';
 import { personHistoryHtml } from './viewer.js';
@@ -14,18 +14,18 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
     <p class="small muted full" style="margin:-4px 0 0">${t('El malnom és el que surt a la pinya i al tronc, i no es pot repetir. Si no en té, es mostra el nom i la inicial del cognom.')}</p>
     <label class="field">${t('Malnom')}<input name="alias" maxlength="40" value="${esc(p.alias)}" placeholder="${t('Com et coneixen a la colla')}"></label>
     <label class="field">${t('Data de naixement')}<input name="birthdate" type="date" min="1900-01-01" max="${todayIso()}" value="${esc(p.birthdate)}"></label>
-    <label class="field">${t('Telèfon')}<input name="phone" type="tel" maxlength="30" value="${esc(p.phone)}"></label>
-    <label class="field">${t('Correu')}<input name="email" type="email" maxlength="120" value="${esc(p.email)}"></label>
+    ${canField('phone') ? `<label class="field">${t('Telèfon')}<input name="phone" type="tel" maxlength="30" value="${esc(p.phone)}"></label>
+    <label class="field">${t('Correu')}<input name="email" type="email" maxlength="120" value="${esc(p.email)}"></label>` : ''}
     <label class="field">${t('Músic/a')}<select name="instrument"><option value="">${t('No toca')}</option>${Object.entries(INSTRUMENTS).map(([v, l]) => `<option value="${v}" ${p.instrument === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="field">${t('Grup')}<select name="section"><option value="">${t('Cap')}</option>${SECTIONS.map((v) => `<option value="${v}" ${p.section === v ? 'selected' : ''}>${sectionLabel(v)}</option>`).join('')}</select></label>
   </div>
-  <fieldset style="margin-top:16px"><legend>${t('Mides')}</legend><div class="form-grid">
+  ${canField('weight_kg') ? `<fieldset style="margin-top:16px"><legend>${t('Mides')}</legend><div class="form-grid">
     ${n('height_cm', t('Alçada'), 'cm')}
     ${n('shoulder_height_cm', t("Alçada d'espatlles"), 'cm')}
     ${n('shoulder_width_cm', t("Amplada d'espatlles"), 'cm')}
     ${n('weight_kg', t('Pes'), 'kg', '0.1')}
   </div></fieldset>
-  <label class="field" style="margin-top:12px">${t('Notes')}<textarea name="notes" maxlength="2000" placeholder="${t('Posicions habituals, lesions…')}">${esc(p.notes)}</textarea></label>
+  <label class="field" style="margin-top:12px">${t('Notes')}<textarea name="notes" maxlength="2000" placeholder="${t('Posicions habituals, lesions…')}">${esc(p.notes)}</textarea></label>` : ''}
   ${admin && !isNew ? `<label class="check" style="margin-top:12px"><input type="checkbox" name="active" ${p.active !== 0 ? 'checked' : ''}> ${t('Activa (desmarca-ho si ha deixat la colla)')}</label>` : ''}`;
 }
 
@@ -47,27 +47,28 @@ export async function pagePeople() {
   };
   const sorted = [...people].sort(sorters[peopleSort] || sorters.name);
   const v = (x, unit = '') => (x != null ? `${x}${unit}` : '<span class="muted">—</span>');
+  const measures = canField('weight_kg');
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Persones')}</h1>
-      <div class="actions"><button class="btn" id="import-people">${t('Importa des d\'un Excel')}</button><button class="btn primary" id="new-person">${icon.plus}${t('Nova persona')}</button></div></div>
+      <div class="actions">${can('import') ? `<button class="btn" id="import-people">${t('Importa des d\'un Excel')}</button>` : ''}<button class="btn primary" id="new-person">${icon.plus}${t('Nova persona')}</button></div></div>
     <div class="toolbar">
       <input type="search" id="people-q" placeholder="${t('Cerca…')}" style="max-width:280px">
       <label class="check small" style="margin-left:auto">${t('Ordena per')}
         <select id="people-sort" style="width:auto">
-          <option value="name">${t('Nom')}</option><option value="height">${t('Alçada')}</option><option value="shoulder">${t('Alçada espatlles')}</option>
-          <option value="weight">${t('Pes')}</option><option value="age">${t('Edat')}</option><option value="attendance">${t('Assistència')}</option><option value="music">${t('Música')}</option><option value="section">${t('Grup')}</option>
+          <option value="name">${t('Nom')}</option>${measures ? `<option value="height">${t('Alçada')}</option><option value="shoulder">${t('Alçada espatlles')}</option>
+          <option value="weight">${t('Pes')}</option>` : ''}<option value="age">${t('Edat')}</option><option value="attendance">${t('Assistència')}</option><option value="music">${t('Música')}</option><option value="section">${t('Grup')}</option>
         </select></label>
     </div>
     <div class="card"><div class="table-wrap"><table class="responsive" id="people-table">
-      <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th><th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th><th class="num">${t('Assistència {year}', { year: season })}</th></tr></thead>
+      <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th>${measures ? `<th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th>` : ''}<th class="num">${t('Assistència {year}', { year: season })}</th></tr></thead>
       <tbody>${sorted.map((p) => `<tr class="clickable ${p.active ? '' : 'inactive'}" data-id="${p.id}" data-name="${esc(norm(p.name + ' ' + (p.alias || '')))}">
         <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.section ? ` <span class="badge section">${sectionLabel(p.section)}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
         <td class="num" data-l="${t('Edat')}">${v(age(p.birthdate))}</td>
-        <td class="num" data-l="${t('Alçada')}">${v(p.height_cm, ' cm')}</td>
+        ${measures ? `<td class="num" data-l="${t('Alçada')}">${v(p.height_cm, ' cm')}</td>
         <td class="num" data-l="${t('Alç. esp.')}">${v(p.shoulder_height_cm, ' cm')}</td>
         <td class="num" data-l="${t('Ampl. esp.')}">${v(p.shoulder_width_cm, ' cm')}</td>
-        <td class="num" data-l="${t('Pes')}">${v(p.weight_kg, ' kg')}</td>
+        <td class="num" data-l="${t('Pes')}">${v(p.weight_kg, ' kg')}</td>` : ''}
         <td class="num" data-l="${t('Assistència')}">${p.attended}${pastEvents ? ` <span class="muted small">(${Math.round((p.attended / pastEvents) * 100)}%)</span>` : ''}</td>
       </tr>`).join('')}</tbody>
     </table></div>
@@ -75,13 +76,14 @@ export async function pagePeople() {
 
   const sort = qs('#people-sort');
   sort.value = peopleSort;
+  if (!sort.value) sort.value = 'name';
   sort.onchange = () => { peopleSort = sort.value; store.set('peopleSort', peopleSort); render(); };
   qs('#people-q').oninput = (e) => {
     const q = norm(e.target.value.trim());
     qsa('#people-table tbody tr').forEach((tr) => tr.classList.toggle('hidden', q && !tr.dataset.name.includes(q)));
   };
   qs('#new-person').onclick = () => personModal();
-  qs('#import-people').onclick = () => importModal();
+  qs('#import-people')?.addEventListener('click', () => importModal());
   qsa('#people-table tbody tr').forEach((tr) => (tr.onclick = () => personModal(people.find((p) => String(p.id) === tr.dataset.id))));
 }
 
@@ -97,7 +99,9 @@ function importModal() {
   const template = () => {
     const header = ['Nom', 'Cognoms', 'Malnom', 'Correu', 'Telèfon', 'Data de naixement', 'Alçada', "Alçada d'espatlles", "Amplada d'espatlles", 'Pes', 'Notes'];
     const example = ['Maria', 'Puig Soler', 'Pruna', 'maria@exemple.cat', '600000000', '15/06/1990', '165', '138', '40', '58', ''];
-    download(new Blob(['\uFEFF' + [header, example].map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(';')).join('\r\n')], { type: 'text/csv' }), 'persones.csv');
+    // Les mides i les notes (les darreres columnes) només es demanen a qui les pot desar.
+    const columns = canField('weight_kg') ? header.length : header.indexOf('Alçada');
+    download(new Blob(['\uFEFF' + [header, example].map((r) => r.slice(0, columns).map((c) => `"${c.replace(/"/g, '""')}"`).join(';')).join('\r\n')], { type: 'text/csv' }), 'persones.csv');
   };
   const draw = (m) => {
     const body = qs('#import-body', m);
@@ -126,7 +130,7 @@ function importModal() {
       return;
     }
     const [header, ...data] = rows;
-    const options = (sel) => `<option value="">${t('No importar')}</option>${IMPORT_FIELDS.map((f) => `<option value="${f}" ${f === sel ? 'selected' : ''}>${importFieldLabel(f)}</option>`).join('')}`;
+    const options = (sel) => `<option value="">${t('No importar')}</option>${IMPORT_FIELDS.filter((f) => f === 'surname' || canField(f)).map((f) => `<option value="${f}" ${f === sel ? 'selected' : ''}>${importFieldLabel(f)}</option>`).join('')}`;
     body.innerHTML = `<p class="muted" style="margin-top:0"><strong>${esc(fileName)}</strong> · ${tn(data.length, '{n} persona', '{n} persones')}. ${t('Comprova quin camp és cada columna.')}</p>
       <div class="table-wrap"><table class="import-map"><thead><tr><th>${t('Columna')}</th><th>${t('Exemple')}</th><th>${t('Camp')}</th></tr></thead>
         <tbody>${header.map((h, i) => `<tr><td>${esc(h) || `<span class="muted">${i + 1}</span>`}</td>
@@ -177,14 +181,14 @@ function importModal() {
 function personModal(person) {
   openModal(`${modalHead(person ? esc(fullName(person)) : t('Nova persona'))}
     <form id="person-form">${personFields(person, { admin: true, isNew: !person })}
-      <div class="form-actions">${person ? `<button type="button" class="btn danger" id="del-person" style="margin-right:auto">${t('Esborra')}</button>` : ''}
+      <div class="form-actions">${person && can('admin') ? `<button type="button" class="btn danger" id="del-person" style="margin-right:auto">${t('Esborra')}</button>` : ''}
         <button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${person ? t('Desa') : t('Crea')}</button></div>
     </form>
     ${person ? `<fieldset style="margin-top:18px"><legend>${t('Historial de posicions')}</legend><div id="person-history" class="muted small">${t('Carregant…')}</div>
       <a class="btn sm" href="#/estadistiques/persona/${person.id}" style="margin-top:12px">${icon.chart}${t('Estadístiques')}</a></fieldset>
-      <fieldset style="margin-top:12px"><legend>${t('Protecció de dades')}</legend>
+      ${can('admin') ? `<fieldset style="margin-top:12px"><legend>${t('Protecció de dades')}</legend>
         <p class="small muted" style="margin:0 0 8px">${t("Si ho demana, pots donar-li totes les seves dades en un fitxer: fitxa, assistència, respostes, posicions i acompanyants.")}</p>
-        <a class="btn sm" href="/api/people/${person.id}/export" download>${t('Descarrega les seves dades')}</a></fieldset>` : ''}`, (m) => {
+        <a class="btn sm" href="/api/people/${person.id}/export" download>${t('Descarrega les seves dades')}</a></fieldset>` : ''}` : ''}`, (m) => {
     if (person) {
       api('GET', `/people/${person.id}/history`)
         .then((h) => { const el = qs('#person-history', m); if (el) { el.className = ''; el.innerHTML = personHistoryHtml(h); } })

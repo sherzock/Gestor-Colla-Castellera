@@ -1,7 +1,7 @@
 // Pinyes de la colla: editor de plantilles.
 import { TEMPLATE_KINDS, buildStructure, configFromName, setTemplates } from '../castell.js';
 import { MAX_BOXES, createEditor, layerToTemplate } from '../editor.js';
-import { $app, api, attempt, config, esc, icon, isAdmin, qs, qsa, render, t, tn, toast } from './core.js';
+import { $app, api, attempt, can, config, esc, icon, qs, qsa, render, t, tn, toast } from './core.js';
 
 // ---------- Pinyes de la colla (plantilles) ----------
 // Cada colla fa la pinya a la seva manera: aquí es redibuixa la de cada tipus de castell i val per a tots els castells
@@ -9,14 +9,14 @@ import { $app, api, attempt, config, esc, icon, isAdmin, qs, qsa, render, t, tn,
 const KIND_NAMES = { contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', altre: 'Una altra' };
 
 export async function pageTemplates() {
-  if (!isAdmin()) { location.hash = '#/'; return; }
+  if (!can('castells')) { location.hash = '#/'; return; }
   const [list, types] = await Promise.all([api('GET', '/templates'), api('GET', '/templates/types')]);
   setTemplates(list);
   const saved = new Map(list.map((x) => [x.name, x]));
   const rows = [...types];
   for (const x of list) if (!rows.some((r) => r.name === x.name)) rows.push({ name: x.name, castells: 0 });
   $app.innerHTML = `
-    <a class="back" href="#/comptes">${icon.back}${t('Comptes')}</a>
+    <a class="back" href="#/comptes">${icon.back}${can('admin') ? t('Comptes') : t('El meu compte')}</a>
     <div class="page-head"><h1>${t('Pinyes de la colla')}</h1></div>
     <p class="muted" style="margin-top:0">${t("Tria un castell per redibuixar-ne la pinya a la manera de la colla. Els canvis valen per a tots els castells d'aquest tipus, també els que ja s'han fet.")}</p>
     <div class="card">
@@ -40,7 +40,7 @@ export async function pageTemplates() {
 }
 
 export async function pageTemplate(name) {
-  if (!isAdmin()) { location.hash = '#/'; return; }
+  if (!can('castells')) { location.hash = '#/'; return; }
   const config = configFromName(name);
   if (!config || config.net) throw new Error(t('Castell no vàlid'));
   const [list, { usage, castells, cordons }] = await Promise.all([api('GET', '/templates'), api('GET', `/templates/${name}/usage`)]);

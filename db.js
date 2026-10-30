@@ -192,6 +192,8 @@ CREATE TABLE IF NOT EXISTS admin_tokens (
   expires_at INTEGER NOT NULL
 );
 `);
+// Què pot fer cada compte: «admin» (tot) o «junta», «tecnica» o totes dues, separades per comes.
+addColumn('admins', 'roles', "TEXT NOT NULL DEFAULT 'admin'");
 // Abans, els administradors eren persones amb usuari i contrasenya: es passen a comptes d'administració
 // i la persona queda com a membre. La fitxa «Administrador» que es creava sola, si no s'ha fet servir, s'esborra.
 const oldAdmins = db.prepare("SELECT * FROM people WHERE role = 'admin' OR username IS NOT NULL").all();

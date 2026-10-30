@@ -4,7 +4,7 @@ import { boxShort } from '../editor.js';
 import { castellPng, download, fileSafe, xlsx } from '../export.js';
 import { calendarCode } from './calendar.js';
 import { castellModal } from './castell-form.js';
-import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
+import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
   fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, partialLabel, qs, qsa,
   render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
 import { eventModal } from './sessions.js';
@@ -234,7 +234,7 @@ export async function pageEvent(id) {
         : namesByGroup(attendance)}
     </div>`;
 
-  const guestsCard = admin && !isMusics ? `
+  const guestsCard = can('castells') && !isMusics ? `
     <div class="card">
       <div class="card-head"><h2>${t('Persones temporals')}</h2>
         <div class="actions"><button class="btn sm" id="add-guest">${icon.plus}${t('Afegeix')}</button></div></div>
@@ -251,7 +251,7 @@ export async function pageEvent(id) {
   const myRoles = roles.filter((r) => r.person_id === me.id).map((r) => r.label);
   const roleNames = [...new Set(roles.map((r) => r.label))].map((label) => [label, roles.filter((r) => r.label === label)]);
   const roleSuggestions = [...new Set([...roleLabels, t('Material'), t('Farmaciola'), t('Aigua'), t('Fotos')])];
-  const rolesCard = admin ? `
+  const rolesCard = can('sessions') ? `
     <div class="card">
       <div class="card-head"><h2>${t('Encarregats')}</h2></div>
       <p class="small muted" style="margin-top:-6px">${t("Qui s'encarrega de què en aquesta sessió (material, farmaciola…). Ho veu tothom.")}</p>
@@ -272,7 +272,7 @@ export async function pageEvent(id) {
         <span>${rs.map((r) => `<strong class="${r.person_id === me.id ? 'me' : ''}">${esc(shortName(r))}</strong>`).join(', ')}</span></div>`).join('')}</div>
     </div>` : '';
 
-  const fieldsCard = admin ? `
+  const fieldsCard = can('sessions') ? `
     <div class="card">
       <div class="card-head"><h2>${t('Camps extra')}</h2></div>
       <p class="small muted" style="margin-top:-6px">${t('Preguntes addicionals que cada persona respon en confirmar (acompanyants, dinar, autocar…).')}</p>
@@ -297,7 +297,7 @@ export async function pageEvent(id) {
       </div>
       <div class="actions">
         ${event.date >= todayIso() && !event.hidden ? `<a class="btn sm" href="/api/calendar.ics?event=${event.id}${calendarCode('&')}" download>${icon.calAdd}${t('Al meu calendari')}</a>` : ''}
-        ${admin ? `${hiddenToggle(event.hidden, 'hide-event')}<button class="btn sm" id="edit-event">${t('Edita')}</button><button class="btn sm danger" id="del-event">${t('Esborra')}</button>` : ''}
+        ${can('sessions') ? `${hiddenToggle(event.hidden, 'hide-event')}<button class="btn sm" id="edit-event">${t('Edita')}</button><button class="btn sm danger" id="del-event">${t('Esborra')}</button>` : ''}
       </div>
     </div>
     ${event.hidden ? `<div class="hidden-note">${icon.eyeOff}<span>${t("Aquesta sessió està oculta: els membres no la veuen ni hi poden respondre, ni veuen els seus castells.")}</span></div>` : ''}
@@ -333,7 +333,7 @@ export async function pageEvent(id) {
         ${admin ? '' : rolesCard}
         ${isMusics ? '' : `<div class="card">
           <div class="card-head"><h2>${t('Castells')}</h2>
-            ${admin ? `<div class="actions"><button class="btn sm primary" id="add-castell">${icon.plus}${t('Afegeix castell')}</button></div>` : ''}
+            ${can('castells') ? `<div class="actions"><button class="btn sm primary" id="add-castell">${icon.plus}${t('Afegeix castell')}</button></div>` : ''}
           </div>
           ${castells.length ? `<div class="castell-list">${castellCards}</div>` : `<p class="muted small">${t('Encara no hi ha castells programats.')}</p>`}
         </div>`}
@@ -378,6 +378,16 @@ export async function pageEvent(id) {
   qs('#add-guest')?.addEventListener('click', () => guestModal(event.id, null, () => render({ keepScroll: true })));
   qsa('[data-edit-guest]').forEach((b) => (b.onclick = () => guestModal(event.id, guests.find((g) => String(g.id) === b.dataset.editGuest), () => render({ keepScroll: true }))));
   const reload = () => render({ keepScroll: true });
+  qs('#add-castell')?.addEventListener('click', () => castellModal(event.id));
+  qs('#add-walkin')?.addEventListener('click', () => walkinModal(event, attendance, reload));
+  qs('#export-xlsx')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
+  bindSessionEditing(event, reload);
+  bindAttendanceTable(event, attendance, fields, reload);
+}
+
+// Editar la sessió és de la junta (i de l'administració): sense permís, aquests botons i formularis no hi són.
+function bindSessionEditing(event, reload) {
+  if (!can('sessions')) return;
   qs('#edit-event').onclick = () => eventModal(event);
   qs('#hide-event').onclick = async () => {
     if (await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: !event.hidden }))) {
@@ -389,9 +399,6 @@ export async function pageEvent(id) {
     if (!confirm(t("Segur que vols esborrar «{title}» amb els seus castells i l'assistència?", { title: event.title }))) return;
     if (await attempt(() => api('DELETE', `/events/${event.id}`))) { toast(t('Sessió esborrada')); location.hash = '#/'; }
   };
-  qs('#add-castell')?.addEventListener('click', () => castellModal(event.id));
-  qs('#add-walkin')?.addEventListener('click', () => walkinModal(event, attendance, reload));
-  qs('#export-xlsx')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
 
   const ff = qs('#field-form');
   ff.elements.kind.onchange = () => qs('#opts').classList.toggle('hidden', ff.elements.kind.value !== 'select');
@@ -411,7 +418,9 @@ export async function pageEvent(id) {
     if (!confirm(t('Esborrar aquest camp? Les respostes ja donades deixaran de mostrar-se.'))) return;
     if (await attempt(() => api('DELETE', `/fields/${b.dataset.delField}`))) reload();
   }));
+}
 
+function bindAttendanceTable(event, attendance, fields, reload) {
   qs('#att-search').oninput = (e) => {
     const q = norm(e.target.value.trim());
     let header = null, shown = 0;

@@ -89,9 +89,11 @@ export function routes() {
     const first = chunk.split('\n')[0];
     const end = chunk.search(/^\}.*\);\s*$/m);
     const body = !/\);\s*$/.test(first) && end >= 0 ? chunk.slice(0, chunk.indexOf('\n', end) + 1) : first;
-    const auth = /,\s*'admin'\);\s*$/m.test(body) ? 'admin' : /,\s*'public'\);\s*$/m.test(body) ? 'public' : 'user';
+    // «cap» és la capacitat que demana la ruta (veure ROLE_CAPS a server.js); «auth: admin» vol dir que cal un compte.
+    const cap = body.match(/^(?:\}|route\().*,\s*'(admin|staff|sessions|castells|news|attendance|people|import)'\);\s*$/m)?.[1];
+    const auth = cap ? 'admin' : /,\s*'public'\);\s*$/m.test(body) ? 'public' : 'user';
     const sample = m[2].replace(/:(\w+)/g, (_, k) => (k === 'key' ? 't1-0' : k === 'name' ? '3d7' : '1'));
-    return { method: m[1], path: m[2], sample, auth };
+    return { method: m[1], path: m[2], sample, auth, cap };
   });
 }
 

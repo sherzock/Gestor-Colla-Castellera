@@ -213,6 +213,29 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   Qui és administrador i també fa castells té la seva fitxa de membre com tothom: al mateix mòbil pot tenir les dues
   entrades obertes i passar d'una a l'altra des dels ajustos («Respon com a…» / «Passa al mode administració»),
   sense tornar a posar la contrasenya.
+- **Rols dels comptes**: cada compte és d'**administració** (tot), de **junta**, de **tècnica** o de junta i tècnica
+  alhora. Ho tria l'administració en crear o editar el compte. El «Grup» de la fitxa d'una persona no dona cap permís
+  (els membres entren sense contrasenya). Sempre ha de quedar almenys un compte d'administració.
+
+| | Administració | Junta | Tècnica |
+|---|---|---|---|
+| Crear, editar, ocultar i esborrar sessions; camps extra i encarregats | ✓ | ✓ | |
+| Castells: crear, muntar, resultats, notes de la tècnica; persones temporals; editor de pinyes | ✓ | | ✓ |
+| Altaveu | ✓ | ✓ | ✓ |
+| Assistència: passar llista, recordatori, exportar, tancar o obrir les respostes | ✓ | ✓ | ✓ |
+| Estadístiques (les notes de la tècnica, només qui fa castells) | ✓ | ✓ | ✓ |
+| Persones: afegir, editar i donar de baixa | ✓ | ✓ | ✓ |
+| Veure i editar el telèfon i el correu | ✓ | ✓ | |
+| Veure i editar les mides, el pes i les notes de la fitxa | ✓ | | ✓ |
+| Veure i editar la data de naixement (el muntador la necessita per a la canalla) | ✓ | ✓ | ✓ |
+| Importar persones des d'un Excel | ✓ | ✓ | |
+| Esborrar una persona i descarregar les seves dades | ✓ | | |
+| Comptes i còpies de seguretat | ✓ | | |
+
+  Els permisos es comproven al servidor, ruta per ruta (`tests/roles.test.js`). A la versió de prova hi ha els comptes
+  `junta` / `junta1234` i `tecnica` / `tecnica1234` per provar-ho.
+
+A la taula següent, «Administrador/a» vol dir qualsevol d'aquests comptes, amb els límits de cada rol.
 
 | | Membre | Administrador/a |
 |---|---|---|

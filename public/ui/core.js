@@ -72,7 +72,12 @@ export async function api(method, url, body) {
 export const hiddenBadge = (label) => `<span class="badge hidden-badge">${icon.eyeOff}${label}</span>`;
 export const hiddenToggle = (hidden, id) => `<button class="btn sm" id="${id}">${hidden ? `${icon.eye}${t('Mostra als membres')}` : `${icon.eyeOff}${t('Oculta als membres')}`}</button>`;
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Si s'està treballant amb un compte (administració, junta o tècnica), i què permet: la llista la diu el servidor.
 export const isAdmin = () => me?.mode === 'admin';
+export const can = (cap) => !!me?.can?.includes(cap);
+export const canField = (field) => !!me?.personFields?.includes(field);
+export const accountLabel = (roles = []) => (roles.includes('admin') ? t('Administració')
+  : roles.map((r) => ({ junta: t('Junta'), tecnica: t('Tècnica') }[r])).join(' · '));
 export const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 export const qs = (sel, root = document) => root.querySelector(sel);
 export const qsa = (sel, root = document) => [...root.querySelectorAll(sel)];

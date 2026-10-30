@@ -1,6 +1,6 @@
 // Ajustos (persona, idioma, tema) i barra de navegació.
 import { LANGS } from '../i18n.js';
-import { api, applyTheme, attempt, closeModal, config, esc, icon, initial, isAdmin, lang, me, modalHead, openModal,
+import { accountLabel, api, applyTheme, attempt, can, closeModal, config, esc, icon, initial, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, render, setLang, setMe, setTheme, shortName, store, t, theme, toast } from './core.js';
 import { newsUnread } from './news.js';
 import { pushControls } from './notifications.js';
@@ -55,7 +55,7 @@ function settingsModal() {
     <div class="me-card">
       <span class="avatar lg ${isAdmin() ? 'admin' : ''}">${esc(initial(me))}</span>
       <div><div class="nm">${esc(isAdmin() ? me.name : shortName(me))}</div>
-        <div class="small muted">${isAdmin() ? t("Compte d'administració · per editar") : t('Has entrat com a membre')}</div></div>
+        <div class="small muted">${isAdmin() ? t('Compte de {what} · per editar', { what: accountLabel(me.roles) }) : t('Has entrat com a membre')}</div></div>
     </div>
     <div class="stack">
       ${isAdmin()
@@ -94,14 +94,14 @@ export function renderNav() {
     link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')),
     isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones')) : '',
     link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques')),
-    isAdmin() ? link('#/comptes', 'lock', t('Comptes'), path.startsWith('#/comptes')) : link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
+    isAdmin() ? link('#/comptes', 'lock', can('admin') ? t('Comptes') : t('El meu compte'), path.startsWith('#/comptes')) : link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
   ].join('');
   document.body.classList.toggle('admin-mode', isAdmin());
   const chip = document.getElementById('me-chip');
   chip.title = t('Ajustos i canvi de persona');
   chip.setAttribute('aria-label', chip.title);
   chip.innerHTML = isAdmin()
-    ? `<span class="avatar admin">${icon.lock}</span><span class="nm">${t('Administració')}</span>${icon.chevron}`
+    ? `<span class="avatar admin">${icon.lock}</span><span class="nm">${esc(accountLabel(me.roles))}</span>${icon.chevron}`
     : `<span class="avatar">${esc(initial(me))}</span><span class="nm">${esc(shortName(me))}</span>${icon.chevron}`;
 }
 document.getElementById('me-chip').onclick = () => settingsModal();

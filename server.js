@@ -53,6 +53,16 @@ const EVENT_TYPES = ['assaig', 'diada', 'esdeveniment', 'musics'];
 const INSTRUMENTS = ['gralla', 'timbal'];
 // Grup de cada persona dins la colla (un de sol), per veure qui hi va per grups. Els músics van a part, per l'instrument.
 const SECTIONS = ['canalla', 'tecnica', 'junta'];
+// Rols dels comptes i què permet cadascun. «admin» ho pot fer tot, també el que només és seu (la capacitat 'admin').
+// El «Grup» de la fitxa d'una persona no dona cap permís: els membres entren sense contrasenya.
+const ACCOUNT_ROLES = ['admin', 'junta', 'tecnica'];
+const ROLE_CAPS = {
+  junta: ['staff', 'sessions', 'news', 'attendance', 'people', 'import', 'contact'],
+  tecnica: ['staff', 'castells', 'news', 'attendance', 'people', 'measures'],
+};
+const can = (user, cap) => user?.role === 'admin' && (user.roles.includes('admin') || user.roles.some((r) => ROLE_CAPS[r]?.includes(cap)));
+const capsOf = (user) => [...new Set(user.roles.includes('admin')
+  ? ['admin', ...Object.values(ROLE_CAPS).flat()] : user.roles.flatMap((r) => ROLE_CAPS[r] || []))];
 const FIELD_KINDS = ['number', 'text', 'bool', 'select'];
 const STATUSES = ['si', 'no'];
 const WIDTHS = [1, 2, 3, 4, 5, 7, 9];
@@ -123,6 +133,16 @@ function personRow(p) {
   return rest;
 }
 
+// Dades de la fitxa que només veu i edita qui les necessita: el contacte, la junta; les mides i les notes, la tècnica.
+const CONTACT_FIELDS = ['email', 'phone'];
+const MEASURE_FIELDS = [...NUMERIC_PERSON_FIELDS, 'notes'];
+const hiddenFieldsFor = (user) => [...(can(user, 'contact') ? [] : CONTACT_FIELDS), ...(can(user, 'measures') ? [] : MEASURE_FIELDS)];
+const editableFields = (user) => PROFILE_FIELDS.filter((f) => !hiddenFieldsFor(user).includes(f));
+function personFor(user, p) {
+  const out = personRow(p);
+  for (const f of hiddenFieldsFor(user)) delete out[f];
+  return out;
+}
 const PERSON_TEXT = { name: 100, alias: 40, email: 120, phone: 30, notes: 2000 };
 function pickPersonFields(body, fields) {
   const out = {};
@@ -291,7 +311,7 @@ function adminSession(token) {
   const row = db.prepare(`SELECT a.* FROM admin_tokens t JOIN admins a ON a.id = t.admin_id
     WHERE t.token = ? AND t.expires_at > ?`).get(tokenHash, Date.now());
   // Un compte d'administració no és cap persona de la colla: no té assistència ni posicions (id null).
-  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', mode: 'admin', tokenHash } : null;
+  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', roles: row.roles.split(','), mode: 'admin', tokenHash } : null;
 }
 
 // Crea una sessió (o una marca de mòbil conegut) i en torna el valor per a la cookie.
@@ -405,7 +425,7 @@ function newPassword(password, username) {
 // latestNews: quan es va publicar l'últim missatge de l'altaveu (per marcar la pestanya si n'hi ha de nous).
 const latestNews = () => db.prepare('SELECT MAX(created_at) AS at FROM announcements').get().at;
 const meResponse = (user) => (user.mode === 'admin'
-  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', mode: 'admin', sessions: user.sessions, latestNews: latestNews() }
+  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', roles: user.roles, can: capsOf(user), personFields: editableFields(user), mode: 'admin', sessions: user.sessions, latestNews: latestNews() }
   : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, section: user.section, role: 'member', mode: 'member', sessions: user.sessions, latestNews: latestNews() });
 
 // ---------- Rutes: autenticació i perfil ----------
@@ -556,12 +576,20 @@ route('PUT', '/api/me', async ({ user, body, req }) => {
   }
   db.prepare('UPDATE admins SET name = ? WHERE id = ?').run(name, user.admin_id);
   return { ok: true, name };
-}, 'admin');
+}, 'staff');
 
 // ---------- Rutes: comptes d'administració ----------
-const adminRow = (a) => ({ id: a.id, username: a.username, name: a.name, created_at: a.created_at });
+const adminRow = (a) => ({ id: a.id, username: a.username, name: a.name, roles: a.roles.split(','), created_at: a.created_at });
+const ADMIN_ACCOUNTS_SQL = "SELECT COUNT(*) AS n FROM admins WHERE ',' || roles || ',' LIKE '%,admin,%'";
+// «admin» ja ho inclou tot: no es combina amb els altres. Sense dir res, un compte nou és d'administració, com abans.
+function rolesInput(value) {
+  const list = Array.isArray(value) ? value : ['admin'];
+  if (!list.length || !list.every((r) => ACCOUNT_ROLES.includes(r))) fail(400, 'Tria què pot fer aquest compte');
+  return list.includes('admin') ? 'admin' : ACCOUNT_ROLES.filter((r) => list.includes(r)).join(',');
+}
 function adminInput(body, existing = null) {
   const out = {};
+  if ('roles' in body || !existing) out.roles = rolesInput(body.roles);
   if ('name' in body || !existing) {
     out.name = str(body.name, 60);
     if (!out.name) fail(400, 'El nom és obligatori');
@@ -597,6 +625,9 @@ route('PUT', '/api/admins/:id', async ({ params, body, user, req }) => {
   const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(params.id) || fail(404, 'Compte no trobat');
   await confirmPassword(req, user, body.currentPassword);
   const data = adminInput(body, admin);
+  if (data.roles && data.roles !== 'admin' && admin.roles === 'admin' && db.prepare(ADMIN_ACCOUNTS_SQL).get().n <= 1) {
+    fail(400, "Ha de quedar almenys un compte d'administració");
+  }
   updateRow('admins', admin.id, data);
   // Amb una contrasenya nova, totes les sessions i mòbils coneguts d'aquell compte s'han de tornar a fer.
   if (data.password_hash) {
@@ -610,7 +641,8 @@ route('DELETE', '/api/admins/:id', async ({ params, user, body, req }) => {
   noDemoAccounts();
   if (Number(params.id) === user.admin_id) fail(400, 'No pots esborrar el compte amb què has entrat');
   await confirmPassword(req, user, body.currentPassword);
-  if (db.prepare('SELECT COUNT(*) AS n FROM admins').get().n <= 1) fail(400, "Ha de quedar almenys un compte d'administració");
+  const target = db.prepare('SELECT roles FROM admins WHERE id = ?').get(params.id);
+  if (target?.roles === 'admin' && db.prepare(ADMIN_ACCOUNTS_SQL).get().n <= 1) fail(400, "Ha de quedar almenys un compte d'administració");
   db.prepare('DELETE FROM admins WHERE id = ?').run(params.id);
   return { ok: true };
 }, 'admin');
@@ -624,28 +656,28 @@ const EFFECTIVE_STATUS_SQL = "CASE WHEN a.came = 0 THEN 'no' WHEN a.came = 1 THE
 // L'assistència de la llista de persones és la de la temporada (l'any natural), fins avui.
 // Els assajos de músics no hi compten: la majoria de gent no hi ha d'anar i li baixaria el percentatge.
 const SEASON_SQL = "e.date >= strftime('%Y-01-01','now','localtime') AND e.date <= date('now','localtime') AND e.type != 'musics'";
-route('GET', '/api/people', () => {
+route('GET', '/api/people', ({ user }) => {
   // Es compta d'un sol cop per a tothom (sessions de la temporada → assistència), no persona per persona.
   const people = db.prepare(`SELECT p.*, COALESCE(s.attended, 0) AS attended, COALESCE(s.confirmed, 0) AS confirmed
     FROM people p LEFT JOIN (SELECT a.person_id, SUM(${CAME_SQL}) AS attended, SUM(a.status = 'si') AS confirmed
         FROM events e JOIN attendance a ON a.event_id = e.id WHERE ${SEASON_SQL} GROUP BY a.person_id) s ON s.person_id = p.id
     ORDER BY p.active DESC, p.name COLLATE NOCASE`).all();
   const pastEvents = db.prepare(`SELECT COUNT(*) AS n FROM events e WHERE ${SEASON_SQL}`).get().n;
-  return { people: people.map(personRow), pastEvents, season: String(new Date().getFullYear()) };
-}, 'admin');
+  return { people: people.map((p) => personFor(user, p)), pastEvents, season: String(new Date().getFullYear()) };
+}, 'staff');
 
-route('POST', '/api/people', ({ body }) => {
+route('POST', '/api/people', ({ body, user }) => {
   atMost(LIMITS.people, 'Com a molt {n} persones', 'SELECT COUNT(*) AS n FROM people');
-  const data = pickPersonFields(body, PROFILE_FIELDS);
+  const data = pickPersonFields(body, editableFields(user));
   if (!data.name) fail(400, 'El nom és obligatori');
   checkAliasUnique(data.alias);
   const id = insertRow('people', data);
-  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(id));
-}, 'admin');
+  return personFor(user, db.prepare('SELECT * FROM people WHERE id = ?').get(id));
+}, 'people');
 
-route('PUT', '/api/people/:id', ({ params, body }) => {
+route('PUT', '/api/people/:id', ({ params, body, user }) => {
   const person = db.prepare('SELECT * FROM people WHERE id = ?').get(params.id) || fail(404, 'Persona no trobada');
-  const data = pickPersonFields(body, [...PROFILE_FIELDS, 'active']);
+  const data = pickPersonFields(body, [...editableFields(user), 'active']);
   checkAliasUnique(data.alias, person.id);
   updateRow('people', person.id, data);
   // Qui es dona de baixa perd les sessions i deixa de rebre avisos al mòbil (si hi havia entrat també un compte
@@ -655,8 +687,8 @@ route('PUT', '/api/people/:id', ({ params, body }) => {
     db.prepare('DELETE FROM push_subscriptions WHERE person_id = ? AND admin_id IS NULL').run(person.id);
     db.prepare('UPDATE push_subscriptions SET person_id = NULL WHERE person_id = ?').run(person.id);
   }
-  return personRow(db.prepare('SELECT * FROM people WHERE id = ?').get(person.id));
-}, 'admin');
+  return personFor(user, db.prepare('SELECT * FROM people WHERE id = ?').get(person.id));
+}, 'people');
 
 route('DELETE', '/api/people/:id', ({ params }) => {
   db.prepare('DELETE FROM people WHERE id = ?').run(params.id);
@@ -716,7 +748,7 @@ const IMPORT_ERRORS = 50;
 // Per dir a quina columna és l'error (són els mateixos noms que a la fitxa de l'app).
 const IMPORT_LABELS = { alias: 'Malnom', email: 'Correu', phone: 'Telèfon', birthdate: 'Data de naixement', height_cm: 'Alçada',
   shoulder_height_cm: "Alçada d'espatlles", shoulder_width_cm: "Amplada d'espatlles", weight_kg: 'Pes', instrument: 'Músic/a', section: 'Grup' };
-route('POST', '/api/people/import', ({ req, body }) => {
+route('POST', '/api/people/import', ({ req, body, user }) => {
   const rows = Array.isArray(body.people) ? body.people : fail(400, 'Dades no vàlides');
   if (!rows.length) fail(400, 'El fitxer no té cap persona');
   if (rows.length > LIMITS.people) fail(400, 'Com a molt {n} persones', { n: LIMITS.people });
@@ -730,7 +762,7 @@ route('POST', '/api/people/import', ({ req, body }) => {
   rows.forEach((row, index) => {
     try {
       if (!row || typeof row !== 'object' || Array.isArray(row)) fail(400, 'Dades no vàlides');
-      const data = pickPersonFields(row, PROFILE_FIELDS);
+      const data = pickPersonFields(row, editableFields(user));
       if (!data.name) fail(400, 'El nom és obligatori');
       const key = normName(data.name);
       if (seen.has(key)) fail(400, '«{name}» surt més d\'un cop al fitxer', { name: data.name });
@@ -760,7 +792,7 @@ route('POST', '/api/people/import', ({ req, body }) => {
     for (const [id, data] of update) updateRow('people', id, data);
   });
   return { ...summary, done: true };
-}, 'admin');
+}, 'import');
 
 // ---------- Rutes: sessions (assajos, diades, esdeveniments) ----------
 route('GET', '/api/events', ({ user, query }) => {
@@ -817,7 +849,7 @@ route('POST', '/api/events', ({ body }) => {
   }
   const id = insertRow('events', data);
   return getEvent(id);
-}, 'admin');
+}, 'sessions');
 
 route('PUT', '/api/events/:id', ({ params, body }) => {
   getEvent(params.id);
@@ -826,7 +858,7 @@ route('PUT', '/api/events/:id', ({ params, body }) => {
   }
   updateRow('events', params.id, eventInput(body));
   return getEvent(params.id);
-}, 'admin');
+}, 'sessions');
 
 // Tancar les respostes ara mateix (o tornar-les a obrir, sense data límit).
 route('POST', '/api/events/:id/rsvp', ({ params, body }) => {
@@ -834,24 +866,24 @@ route('POST', '/api/events/:id/rsvp', ({ params, body }) => {
   db.prepare('UPDATE events SET rsvp_until = ? WHERE id = ?').run(body.open ? null : nowLocal(), params.id);
   const event = getEvent(params.id);
   return { ...event, rsvp_open: rsvpOpen(event) };
-}, 'admin');
+}, 'attendance');
 
 // Ocultar o tornar a mostrar una sessió o un castell als membres.
 route('PUT', '/api/events/:id/hidden', ({ params, body }) => {
   getEvent(params.id);
   db.prepare('UPDATE events SET hidden = ? WHERE id = ?').run(bool(body.hidden), params.id);
   return getEvent(params.id);
-}, 'admin');
+}, 'sessions');
 route('PUT', '/api/castells/:id/hidden', ({ params, body }) => {
   getCastell(params.id);
   db.prepare('UPDATE castells SET hidden = ? WHERE id = ?').run(bool(body.hidden), params.id);
   return getCastell(params.id);
-}, 'admin');
+}, 'castells');
 
 route('DELETE', '/api/events/:id', ({ params }) => {
   db.prepare('DELETE FROM events WHERE id = ?').run(params.id);
   return { ok: true };
-}, 'admin');
+}, 'sessions');
 
 route('GET', '/api/events/:id', ({ params, user }) => {
   const event = visibleEvent(params.id, user);
@@ -861,7 +893,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   // Posicions ocupades: només les que el castell té ara (una plantilla pot haver-ne tret alguna).
   const keysOf = db.prepare('SELECT pos_key FROM castell_positions WHERE castell_id = ?');
   const castells = db.prepare(`SELECT c.* FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
-    .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : ADMIN_ONLY_CASTELL) }));
+    .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : ADMIN_ONLY_CASTELL), ...(can(user, 'castells') ? {} : { tech_notes: undefined }) }));
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, p.section, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
       ${CAME_SQL} AS present
     FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -883,7 +915,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   counts.companions = companionRows.length;
   return {
     event: { ...event, rsvp_open: rsvpOpen(event) }, fields, castells, counts,
-    guests: isAdmin ? guestsOf(event.id) : undefined,
+    guests: can(user, 'castells') ? guestsOf(event.id) : undefined,
     mine: mine ? { ...mine, came: flag(mine.came), escoleta: flag(mine.escoleta), extra: parseJSON(mine.extra, {}),
       companions: event.ask_companions ? companionsOf(event.id, user.id) : [] } : null,
     attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [] })) : attendance.filter((a) => a.present),
@@ -909,13 +941,13 @@ route('POST', '/api/events/:id/roles', ({ params, body }) => {
   atMost(LIMITS.rolesPerEvent, 'Com a molt {n} encarregats per sessió', 'SELECT COUNT(*) AS n FROM event_roles WHERE event_id = ?', event.id);
   insertRow('event_roles', { event_id: event.id, label, person_id: Number(body.person_id) });
   return rolesOf(event.id, true);
-}, 'admin');
+}, 'sessions');
 
 route('DELETE', '/api/events/:id/roles/:roleId', ({ params }) => {
   const event = getEvent(params.id);
   db.prepare('DELETE FROM event_roles WHERE id = ? AND event_id = ?').run(params.roleId, event.id);
   return rolesOf(event.id, true);
-}, 'admin');
+}, 'sessions');
 
 // Previsió d'assistència d'una sessió que encara no s'ha fet. Per a cada persona: com de sovint ha vingut l'últim any
 // a sessions del mateix tipus quan havia dit que sí, que no o quan no havia respost. Amb poca història, la seva xifra
@@ -1067,7 +1099,7 @@ route('PUT', '/api/events/:id/attendance/:personId', ({ params, body }) => {
     syncCompanions(event, Number(params.personId), names);
   });
   return { ok: true };
-}, 'admin');
+}, 'attendance');
 
 // Taula d'assistència d'una sessió (la mateixa per al CSV i per a l'Excel que es fa a l'app): capçalera i files de text.
 function attendanceTable(event) {
@@ -1107,10 +1139,10 @@ route('GET', '/api/events/:id/attendance.csv', ({ params, res }) => {
   });
   res.end('﻿' + lines.join('\r\n'));
   return undefined;
-}, 'admin');
+}, 'attendance');
 
 // La mateixa taula en JSON, per a l'Excel de la sessió (a l'Excel, el text no es pot llegir com a fórmula).
-route('GET', '/api/events/:id/attendance', ({ params }) => attendanceTable(getEvent(params.id)), 'admin');
+route('GET', '/api/events/:id/attendance', ({ params }) => attendanceTable(getEvent(params.id)), 'attendance');
 
 // ---------- Rutes: camps extra ----------
 function fieldInput(body) {
@@ -1135,12 +1167,12 @@ route('POST', '/api/events/:id/fields', ({ params, body }) => {
   const position = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM event_fields WHERE event_id = ?').get(params.id).p;
   insertRow('event_fields', { event_id: Number(params.id), position, ...fieldInput(body) });
   return loadFields(params.id);
-}, 'admin');
+}, 'sessions');
 
 route('DELETE', '/api/fields/:id', ({ params }) => {
   db.prepare('DELETE FROM event_fields WHERE id = ?').run(params.id);
   return { ok: true };
-}, 'admin');
+}, 'sessions');
 
 // ---------- Rutes: persones temporals d'una sessió ----------
 function guestInput(body) {
@@ -1158,7 +1190,7 @@ route('POST', '/api/events/:id/guests', ({ params, body }) => {
   atMost(LIMITS.guestsPerEvent, 'Com a molt {n} persones temporals per sessió', 'SELECT COUNT(*) AS n FROM event_guests WHERE event_id = ?', event.id);
   const id = insertRow('event_guests', { event_id: event.id, ...guestInput(body) });
   return db.prepare('SELECT * FROM event_guests WHERE id = ?').get(id);
-}, 'admin');
+}, 'castells');
 
 route('PUT', '/api/guests/:id', ({ params, body }) => {
   const guest = db.prepare('SELECT * FROM event_guests WHERE id = ?').get(params.id) || fail(404, 'Persona temporal no trobada');
@@ -1166,12 +1198,12 @@ route('PUT', '/api/guests/:id', ({ params, body }) => {
   updateRow('event_guests', guest.id, data);
   db.prepare('UPDATE castell_positions SET guest_name = ? WHERE guest_id = ?').run(data.name, guest.id);
   return db.prepare('SELECT * FROM event_guests WHERE id = ?').get(guest.id);
-}, 'admin');
+}, 'castells');
 
 route('DELETE', '/api/guests/:id', ({ params }) => {
   db.prepare('DELETE FROM event_guests WHERE id = ?').run(params.id);
   return { ok: true };
-}, 'admin');
+}, 'castells');
 
 // ---------- Rutes: castells i posicions ----------
 // ---------- Omplir un castell com un d'anterior ----------
@@ -1198,7 +1230,7 @@ route('GET', '/api/events/:id/castell-sources', ({ params, query }) => {
     if (out.length >= SOURCES_LIMIT) break;
   }
   return out;
-}, 'admin');
+}, 'castells');
 
 // Substitueix l'alineació del castell per la d'un altre del mateix tipus. Només es copien les posicions que aquest
 // castell té i la gent activa; les persones temporals, només si són de la mateixa sessió.
@@ -1222,7 +1254,7 @@ route('POST', '/api/events/:id/castells', ({ params, body }) => {
     if (body.copy_from) copyLineup(getCastell(id), Number(body.copy_from));
     return getCastell(id);
   });
-}, 'admin');
+}, 'castells');
 
 route('GET', '/api/castells/:id', ({ params, user }) => {
   const castell = visibleCastell(params.id, user);
@@ -1230,7 +1262,9 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
   const event = getEvent(castell.event_id);
   const measures = 'p.birthdate, p.height_cm, p.shoulder_height_cm, p.shoulder_width_cm, p.weight_kg';
   // De les persones temporals, l'alçada d'espatlles i el pes (si s'han posat) serveixen per revisar l'alineació.
-  const positions = db.prepare(`SELECT cp.pos_key, cp.person_id, cp.guest_id, COALESCE(g.name, cp.guest_name) AS guest_name, p.name, p.alias${isAdmin
+  // La junta veu l'alineació, però les mides, els candidats i les notes només els fa servir la tècnica.
+  const tech = can(user, 'castells');
+  const positions = db.prepare(`SELECT cp.pos_key, cp.person_id, cp.guest_id, COALESCE(g.name, cp.guest_name) AS guest_name, p.name, p.alias${tech
       ? ', p.birthdate, p.height_cm, p.shoulder_width_cm, COALESCE(p.shoulder_height_cm, g.shoulder_height_cm) AS shoulder_height_cm, COALESCE(p.weight_kg, g.weight_kg) AS weight_kg'
       : ''}
     FROM castell_positions cp LEFT JOIN people p ON p.id = cp.person_id LEFT JOIN event_guests g ON g.id = cp.guest_id
@@ -1238,10 +1272,10 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
   const siblings = db.prepare(`SELECT id, width, height, agulla, folre, manilles, puntals, sota, gralles, timbals, net, from_level, to_level,
     label, result, hidden FROM castells WHERE event_id = ?${isAdmin ? '' : ' AND hidden = 0'} ORDER BY position, id`).all(event.id);
   // Les notes de la tècnica no les veuen els membres.
-  const result = { castell: isAdmin ? castell : { ...castell, ...ADMIN_ONLY_CASTELL }, event, siblings,
+  const result = { castell: tech ? castell : isAdmin ? { ...castell, tech_notes: undefined } : { ...castell, ...ADMIN_ONLY_CASTELL }, event, siblings,
     positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null }
       : { ...p, guest_name: p.guest_name ? publicName({ name: p.guest_name }) : null })) };
-  if (isAdmin) {
+  if (tech) {
     result.candidates = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, ${measures}, ${EFFECTIVE_STATUS_SQL} AS status
       FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
       WHERE p.active = 1 ORDER BY p.name COLLATE NOCASE`).all(event.id);
@@ -1266,12 +1300,12 @@ route('PUT', '/api/castells/:id', ({ params, body }) => {
     if (body.copy_from) copyLineup(getCastell(castell.id), Number(body.copy_from));
   });
   return getCastell(castell.id);
-}, 'admin');
+}, 'castells');
 
 route('DELETE', '/api/castells/:id', ({ params }) => {
   db.prepare('DELETE FROM castells WHERE id = ?').run(params.id);
   return { ok: true };
-}, 'admin');
+}, 'castells');
 
 route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
   const castell = getCastell(params.id);
@@ -1288,7 +1322,7 @@ route('POST', '/api/castells/:id/duplicate', ({ params, body }) => {
       WHERE castell_id = ? AND (person_id IS NOT NULL OR ? = 1)`).run(newId, castell.id, target.id === castell.event_id ? 1 : 0);
     return getCastell(newId);
   });
-}, 'admin');
+}, 'castells');
 
 route('PUT', '/api/castells/:id/positions/:key', ({ params, body }) => {
   const castell = getCastell(params.id);
@@ -1313,7 +1347,7 @@ route('PUT', '/api/castells/:id/positions/:key', ({ params, body }) => {
     }
   });
   return { ok: true };
-}, 'admin');
+}, 'castells');
 
 route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
   const castell = getCastell(params.id);
@@ -1338,7 +1372,7 @@ route('PUT', '/api/castells/:id/positions', ({ params, body }) => {
     }
   });
   return { ok: true, count: list.length };
-}, 'admin');
+}, 'castells');
 
 // ---------- Altaveu ----------
 // Missatges d'informació de l'administració per a tota la colla. Els membres no veuen qui els ha escrit
@@ -1364,18 +1398,18 @@ route('POST', '/api/announcements', ({ body, user }) => {
       (lang) => ({ title: translate(lang, 'Altaveu: {title}', { title: a.title }), body: a.body, url: '#/altaveu' }));
   }
   return a;
-}, 'admin');
+}, 'news');
 
 route('PUT', '/api/announcements/:id', ({ params, body }) => {
   getAnnouncement(params.id);
   updateRow('announcements', params.id, { ...announcementInput(body), updated_at: nowUtc() });
   return getAnnouncement(params.id);
-}, 'admin');
+}, 'news');
 
 route('DELETE', '/api/announcements/:id', ({ params }) => {
   db.prepare('DELETE FROM announcements WHERE id = ?').run(params.id);
   return { ok: true };
-}, 'admin');
+}, 'news');
 
 // ---------- Avisos al mòbil ----------
 // Missatges nous de l'Altaveu (a tothom que els ha activat) i recordatoris de respondre una sessió (a qui encara no
@@ -1529,7 +1563,7 @@ route('GET', '/api/templates/types', () => {
     out.set(name, (out.get(name) || 0) + 1);
   }
   return [...out].map(([name, castells]) => ({ name, castells })).sort((a, b) => b.castells - a.castells || a.name.localeCompare(b.name));
-}, 'admin');
+}, 'staff');
 
 // Quants cops s'ha fet servir cada posició en castells d'aquest tipus (per avisar abans de treure'n una).
 route('GET', '/api/templates/:name/usage', ({ params }) => {
@@ -1546,7 +1580,7 @@ route('GET', '/api/templates/:name/usage', ({ params }) => {
   for (const r of db.prepare('SELECT pos_key, COUNT(*) AS n FROM castell_positions WHERE castell_id IN (SELECT value FROM json_each(?)) GROUP BY pos_key')
     .all(JSON.stringify(ids))) out[r.pos_key] = r.n;
   return { castells: ids.length, cordons, usage: out };
-}, 'admin');
+}, 'staff');
 
 route('PUT', '/api/templates/:name', ({ params, body }) => {
   const layers = templateInput(params.name, body);
@@ -1554,13 +1588,13 @@ route('PUT', '/api/templates/:name', ({ params, body }) => {
     ON CONFLICT(name) DO UPDATE SET layers = excluded.layers, updated_at = excluded.updated_at`).run(params.name, JSON.stringify(layers));
   loadTemplates();
   return { name: params.name, layers };
-}, 'admin');
+}, 'castells');
 
 route('DELETE', '/api/templates/:name', ({ params }) => {
   db.prepare('DELETE FROM castell_templates WHERE name = ?').run(params.name);
   loadTemplates();
   return { ok: true };
-}, 'admin');
+}, 'castells');
 
 // ---------- Memòria de càlculs ----------
 // Les estadístiques i els historials llegeixen milers de posicions: es calculen un sol cop i es reaprofiten fins
@@ -1739,7 +1773,7 @@ route('GET', '/api/castells/:id/history', ({ params, user }) => {
     exact: [...exact.values()].map((e) => ({ ...e, name: people.get(e.person_id)?.name, alias: people.get(e.person_id)?.alias })),
     byCat: user.role === 'admin' ? byCat : undefined,
   };
-}, 'admin');
+}, 'staff');
 
 route('GET', '/api/people/:id/history', ({ params, user }) => {
   const personId = Number(params.id);
@@ -1863,7 +1897,7 @@ route('GET', '/api/stats/people', memo('people', ({ query }) => {
     })
     .sort((a, b) => b.castells - a.castells || b.sessions - a.sessions || a.name.localeCompare(b.name));
   return { seasons: seasons(), people: list };
-}), 'admin');
+}), 'staff');
 
 route('GET', '/api/stats/castells', memo('castells', ({ query }) => {
   const { where, args } = statsFilter(query);
@@ -1889,7 +1923,7 @@ route('GET', '/api/stats/castells', memo('castells', ({ query }) => {
     types.set(name, c);
   }
   return { seasons: seasons(), total: rows.length, results: totals, castells: [...types.values()].sort(byCount) };
-}, { keyOf: castellKey }), 'admin');
+}, { keyOf: castellKey }), 'staff');
 
 // Resum de temporada: castells i sessions, sense dades de ningú (el veu tothom).
 // Dificultat aproximada per trobar el millor castell: mana l'alçada; a igual alçada, com més estret, més difícil.
@@ -2043,7 +2077,7 @@ function attendanceRate(date) {
   return out;
 }
 
-route('GET', '/api/castells/:id/prep', ({ params }) => ({ days: PREP_DAYS, positions: troncPrep(getCastell(params.id)) }), 'admin');
+route('GET', '/api/castells/:id/prep', ({ params }) => ({ days: PREP_DAYS, positions: troncPrep(getCastell(params.id)) }), 'staff');
 
 // Posicions del tronc i de la pinya de cada estructura (les estructures són compartides: es calcula un sol cop).
 const partsCache = new WeakMap();
@@ -2075,7 +2109,7 @@ function failPoints(attempts) {
   return { failed: failed.length, unknown: failed.length - located, causes, levels: [...levels.values()].sort((a, b) => b.level - a.level) };
 }
 
-route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
+route('GET', '/api/stats/tecnica', memo('tecnica', ({ query, user }) => {
   const { where, args } = statsFilter(query);
   const inFilter = new Set(db.prepare(`SELECT c.id FROM castells c JOIN events e ON e.id = c.event_id WHERE ${where.join(' AND ')}`)
     .all(...args).map((r) => r.id));
@@ -2139,7 +2173,7 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
       const { from, to } = levelRange(c);
       const label = (L) => levels.find((l) => l.level === L)?.label;
       t.attempts.push({ castell_id: c.id, date: c.date, title: c.title, type: c.type, result: c.result, partial,
-        range: partial ? `${label(from)} – ${label(to)}` : null, notes: c.tech_notes || null,
+        range: partial ? `${label(from)} – ${label(to)}` : null, notes: (!user || can(user, 'castells')) && c.tech_notes || null,
         fail: c.fail_level || c.fail_cause ? { level: c.fail_level, label: label(c.fail_level) || null, cause: c.fail_cause } : null });
       types.set(name, t);
     }
@@ -2178,7 +2212,7 @@ route('GET', '/api/stats/tecnica', memo('tecnica', ({ query }) => {
         noRelief: rows.filter((r) => r.person_id && !r.reliefs).length };
     }).filter((c) => c.placed),
   };
-}), 'admin');
+}, { variant: ({ user }) => (!user || can(user, 'castells') ? '' : 'sense-notes') }), 'staff');
 
 // ---------- Calendari per subscriure-s'hi (Google Calendar, iPhone…) ----------
 // És públic perquè les apps de calendari no poden identificar-se: només hi surten les sessions, cap persona.
@@ -2362,7 +2396,9 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     const params = Object.fromEntries(match.keys.map((k, i) => [k, values[i]]));
     const user = currentUser(req);
     if (match.auth !== 'public' && !user) fail(401, 'Cal iniciar sessió');
-    if (match.auth === 'admin' && user.role !== 'admin') fail(403, 'Només per a administradors');
+    if (match.auth !== 'public' && match.auth !== 'user' && !can(user, match.auth)) {
+      fail(403, user.role === 'admin' ? 'El teu compte no té permís per fer això' : 'Només per a administradors');
+    }
     const body = req.method === 'GET' ? {} : await readBody(req);
     let result;
     try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }

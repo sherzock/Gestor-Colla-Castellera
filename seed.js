@@ -56,7 +56,11 @@ transaction(() => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const people = [];
   // El compte d'administració és a part; el cap de colla, a més, té la seva fitxa de membre com tothom.
-  db.prepare('INSERT INTO admins (username, password_hash, name) VALUES (?, ?, ?)').run('admin', hashPassword(ADMIN_PASSWORD), 'Junta tècnica');
+  db.prepare('INSERT INTO admins (username, password_hash, name) VALUES (?, ?, ?)').run('admin', hashPassword(ADMIN_PASSWORD), 'Administració');
+  // Per provar els altres rols a la versió de prova (les contrasenyes són públiques, com la d'admin).
+  for (const [username, name] of [['junta', 'Junta'], ['tecnica', 'Tècnica']]) {
+    db.prepare('INSERT INTO admins (username, password_hash, name, roles) VALUES (?, ?, ?, ?)').run(username, hashPassword(`${username}1234`), name, username);
+  }
   const capId = Number(insPerson.run(null, null, 'member', 'Cap de colla', 'Cap', birth(41), 178, 147, 46, 82, null).lastInsertRowid);
   people.push({ id: capId, name: 'Cap', height: 178, weight: 82, reliability: 0.97 });
   // Uns quants músics: les primeres persones toquen la gralla o el timbal.

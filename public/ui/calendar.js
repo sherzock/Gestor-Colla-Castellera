@@ -1,5 +1,5 @@
 // Calendari mensual i subscripció al calendari del mòbil.
-import { $app, LOCALE, TYPES, api, config, copyText, day, esc, fmt, icon, isAdmin, lang, me, modalHead, openModal,
+import { $app, LOCALE, TYPES, api, can, config, copyText, day, esc, fmt, icon, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, statusPill, store, t, todayIso, typeBadge } from './core.js';
 import { eventModal } from './sessions.js';
 
@@ -30,7 +30,7 @@ export async function pageCalendar(ym) {
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Calendari')}</h1>
-      <div class="actions"><button class="btn" id="cal-subscribe">${icon.calAdd}${t('Al meu calendari')}</button>${isAdmin() ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div></div>
+      <div class="actions"><button class="btn" id="cal-subscribe">${icon.calAdd}${t('Al meu calendari')}</button>${can('sessions') ? `<button class="btn primary" id="new-event">${icon.plus}${t('Nova sessió')}</button>` : ''}</div></div>
     <div class="cal-head">
       <button class="btn sm" id="cal-prev" aria-label="${t('Mes anterior')}">‹</button>
       <h2 class="cal-title">${esc(title)}</h2>
@@ -41,12 +41,12 @@ export async function pageCalendar(ym) {
     <div class="card cal">
       <div class="cal-grid">
         ${weekdays.map((w) => `<div class="cal-wd">${esc(w)}</div>`).join('')}
-        ${days.map((d) => `<div class="cal-day ${isAdmin() ? 'add' : ''} ${d.startsWith(calMonth) ? '' : 'out'} ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-date="${d}">
+        ${days.map((d) => `<div class="cal-day ${can('sessions') ? 'add' : ''} ${d.startsWith(calMonth) ? '' : 'out'} ${d === today ? 'today' : ''} ${d < today ? 'past' : ''}" data-date="${d}">
           <span class="cal-n">${Number(d.slice(8))}</span>
           ${(byDay[d] || []).map((e) => `<a class="cal-ev ${e.type} ${e.date >= today && !e.my_status ? 'pending' : ''}" href="#/sessio/${e.id}" title="${esc(`${e.start_time || ''} ${e.title}`)}">${e.start_time ? `<b>${e.start_time}</b> ` : ''}${esc(e.title)}</a>`).join('')}
         </div>`).join('')}
       </div>
-      ${isAdmin() ? `<p class="small muted" style="margin:10px 0 0">${t('Toca un dia buit per crear-hi una sessió.')}</p>` : ''}
+      ${can('sessions') ? `<p class="small muted" style="margin:10px 0 0">${t('Toca un dia buit per crear-hi una sessió.')}</p>` : ''}
     </div>
     <div class="card cal-agenda">
       <h2 style="margin-bottom:10px">${t('Aquest mes')}</h2>
@@ -60,7 +60,7 @@ export async function pageCalendar(ym) {
   qs('#cal-next').onclick = () => { location.hash = `#/calendari/${shiftMonth(calMonth, 1)}`; };
   qs('#cal-today').onclick = () => { location.hash = `#/calendari/${today.slice(0, 7)}`; };
   qs('#cal-subscribe').onclick = calendarModal;
-  if (!isAdmin()) return;
+  if (!can('sessions')) return;
   qs('#new-event').onclick = () => eventModal(null, { date: calMonth === today.slice(0, 7) ? today : `${calMonth}-01` });
   qsa('.cal-day').forEach((cell) => (cell.onclick = (e) => { if (!e.target.closest('a')) eventModal(null, { date: cell.dataset.date }); }));
 }
