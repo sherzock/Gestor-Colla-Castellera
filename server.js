@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import os from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { db, DB_PATH, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
-import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates,
+import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates, templateOf, templateRings,
   LAYER_PREFIX, TEMPLATE_KINDS, levelGaps, weightInversions, SHOULDER_GAP_CM } from './public/castell.js';
 import { translate } from './public/i18n.js';
 import { sendPush, validEndpoint, vapidKeys } from './push.js';
@@ -1508,6 +1508,17 @@ const nowUtc = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const loadTemplates = () => setTemplates(db.prepare('SELECT name, layers FROM castell_templates').all()
   .map((r) => ({ name: r.name, layers: JSON.parse(r.layers) })));
 loadTemplates();
+// Abans, una plantilla ensenyava sempre tots els seus cordons, fos quin fos el número del castell. Ara el número mana:
+// els castells que ja hi havia passen a tenir els de la seva plantilla, perquè no se'ls amagui cap posició.
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'cordons_plantilla'").get()) {
+  transaction(() => {
+    for (const c of db.prepare('SELECT * FROM castells').all()) {
+      const rings = templateRings(templateOf(c));
+      if (rings && c.cordons !== rings) db.prepare('UPDATE castells SET cordons = ? WHERE id = ?').run(rings, c.id);
+    }
+    db.prepare("INSERT INTO settings (key, value) VALUES ('cordons_plantilla', '1')").run();
+  });
+}
 
 function templateInput(name, body) {
   const config = configFromName(name);

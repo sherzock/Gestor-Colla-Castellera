@@ -76,7 +76,7 @@ const STEP = BOX_H + 2;
 const SIDE = BOX_W + 4;
 const DEG = Math.PI / 180;
 
-function overlaps(a, b) {
+export function overlaps(a, b) {
   for (const t of [a.rot, a.rot + Math.PI / 2, b.rot, b.rot + Math.PI / 2]) {
     const ax = Math.cos(t), ay = Math.sin(t);
     const span = (r) => {
@@ -234,6 +234,8 @@ export function setTemplates(list) {
   structureCache.clear();
 }
 export const templateOf = (c) => templates.get(castellName(c)) ?? null;
+// Fins a quin cordó dibuixa la pinya una plantilla (0: la plantilla no en parla o no té caixes de cordó).
+export const templateRings = (tpl) => Math.max(0, ...(tpl?.layers?.pinya || []).map((i) => i.ring || 0));
 
 // Categoria comparable entre castells (la mateixa que fa servir la capa generada).
 export function kindCat(layerId, kind, ring, role) {
@@ -243,9 +245,11 @@ export function kindCat(layerId, kind, ring, role) {
 }
 const LAYER_LABEL = { pinya: 'Pinya', folre: 'Folre', manilles: 'Manilles', puntals: 'Puntals' };
 
-function templateLayer({ id, label, baseKey, centerKey, add }, items) {
+// La plantilla dibuixa fins a un cert cordó i cada castell n'ensenya els que tingui: «maxRing» (només a la pinya).
+function templateLayer({ id, label, baseKey, centerKey, add, maxRing = Infinity }, items) {
   const out = [];
   for (const it of items) {
+    if (it.ring > maxRing) continue;
     const box = { x: it.x, y: it.y, w: it.w, h: it.h, rot: it.rot };
     if (it.base !== undefined) {
       const key = it.base === 'c' ? centerKey : baseKey(it.base);
@@ -327,7 +331,7 @@ export function buildStructure(c, { ignoreTemplate = false } = {}) {
   const center = (L) => (positions.has(`ag${L}`) ? `ag${L}` : null);
   if (!c.net) {
     layers.push(layer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`, centerKey: center(from),
-      rings: Number(c.cordons ?? 3), vents: true, agulles: true, add }));
+      rings: Number(c.cordons ?? 3), maxRing: Number(c.cordons ?? 3), vents: true, agulles: true, add }));
   }
   if (folre && troncLevels >= 2) {
     layers.push(layer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),

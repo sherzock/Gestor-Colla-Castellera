@@ -815,7 +815,16 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .tpl-fields input[type=number] { width: 70px; }
 .tpl-rot { display: flex; gap: 6px; }
 .tpl-reset { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.tpl-reset input { width: 56px; margin-left: 4px; }
+.tpl-reset { justify-content: space-between; flex-wrap: wrap; }
+.tpl-rings { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tpl-toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.tpl-clash { color: var(--bad); font-weight: 600; }
+.tpl-keys { margin-top: 0; }
+.box.ed.clash rect { stroke: var(--bad) !important; stroke-width: 2.5; stroke-dasharray: 5 3; fill: var(--bad-soft); }
+.box.ed.clash text { fill: var(--ink); }
+.ed-guides { pointer-events: none; }
+.ed-guides line { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.ed-band { fill: var(--accent-soft); fill-opacity: .4; stroke: var(--accent); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
 
 /* Acompanyants */
 .check.top { align-items: flex-start; }

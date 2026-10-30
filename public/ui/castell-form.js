@@ -1,5 +1,5 @@
 // Formulari per crear o editar un castell.
-import { RESULTS, WIDTHS, buildStructure, castellName, levelNames, levelRange, templateOf } from '../castell.js';
+import { RESULTS, WIDTHS, buildStructure, castellName, levelNames, levelRange, templateOf, templateRings } from '../castell.js';
 import { api, attempt, closeModal, day, esc, fmt, formData, icon, modalHead, openModal, qs, render, resultLabel, t } from './core.js';
 
 // ---------- Formulari de castell ----------
@@ -15,7 +15,7 @@ export function castellModal(eventId, castell, onLost) {
       <div class="form-grid">
         <label class="field">${t('Persones per pis')}<select name="width">${WIDTHS.map((w) => `<option value="${w.value}" ${Number(c.width) === w.value ? 'selected' : ''}>${w.label}</option>`).join('')}</select></label>
         <label class="field">${t('Pisos')}<input name="height" type="number" min="3" max="11" value="${c.height}" required></label>
-        <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="8" value="${c.cordons}"><span class="small muted hidden" id="cordons-tpl">${t('Els marca la pinya de la colla')}</span></label>
+        <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="8" value="${c.cordons}"><span class="small muted hidden" id="cordons-tpl"></span></label>
         <label class="check" id="ag-wrap"><input type="checkbox" name="agulla" ${c.agulla ? 'checked' : ''}> ${t('Amb agulla (pilar central)')}</label>
         <label class="check"><input type="checkbox" name="folre" ${c.folre ? 'checked' : ''}> ${t('Folre')}</label>
         <label class="check"><input type="checkbox" name="manilles" ${c.manilles ? 'checked' : ''}> ${t('Manilles')}</label>
@@ -85,6 +85,10 @@ export function castellModal(eventId, castell, onLost) {
       [...fromSel.options].forEach((o) => { o.disabled = Number(o.value) > Number(toSel.value); });
       qs('#partial-range', m).classList.toggle('hidden', !form.elements.partial.checked);
     };
+    // El que vol qui omple el formulari: la plantilla el pot limitar, però no se li ha de perdre si canvia de castell.
+    let wantedCordons = Number(c.cordons);
+    let cordonsTouched = !!castell;
+    form.elements.cordons.addEventListener('input', (e) => { wantedCordons = Number(e.target.value); cordonsTouched = true; });
     const sync = () => {
       syncLevels(formData(form));
       const d = read();
@@ -92,12 +96,21 @@ export function castellModal(eventId, castell, onLost) {
       form.elements.folre.disabled = d.net;
       form.elements.manilles.disabled = !d.folre;
       form.elements.puntals.disabled = !d.manilles;
-      // Si la colla té plantilla per a aquest castell, la pinya ja ve dibuixada (amb els seus cordons).
-      const tpl = !d.net && !!templateOf(d);
-      // Només de lectura (no desactivat): així es conserva el valor si un dia s'esborra la plantilla.
-      form.elements.cordons.disabled = d.net;
-      form.elements.cordons.readOnly = tpl;
-      qs('#cordons-tpl', m).classList.toggle('hidden', !tpl);
+      // Si la colla té plantilla per a aquest castell, n'hi ha fins als cordons que dibuixa; aquest castell en tria quants.
+      const tpl = d.net ? null : templateOf(d);
+      const rings = templateRings(tpl);
+      const input = form.elements.cordons;
+      input.disabled = d.net;
+      // Sense cap cordó dibuixat no hi ha res a triar. Només de lectura (no desactivat): així es conserva el valor.
+      input.readOnly = !!tpl && !rings;
+      input.max = rings || 8;
+      // Un castell nou comença amb tota la pinya de la plantilla, fins que algú en digui quants en vol.
+      const shown = rings ? (cordonsTouched ? Math.min(wantedCordons, rings) : rings) : wantedCordons;
+      // Si ja hi diu això no es toca: es podria estar escrivint (el camp buit val 0).
+      if (Number(input.value) !== shown) input.value = shown;
+      const hint = qs('#cordons-tpl', m);
+      hint.classList.toggle('hidden', !tpl);
+      hint.textContent = rings ? t('La pinya de la colla en dibuixa fins a {n}', { n: rings }) : t('La pinya de la colla no en dibuixa cap');
       form.elements.height.min = d.width === 1 ? 3 : 4;
       qs('#cname', m).textContent = castellName(d);
     };
@@ -125,6 +138,8 @@ export function castellModal(eventId, castell, onLost) {
       const x = sources.find((y) => String(y.id) === copySel.value);
       if (!x) return;
       form.elements.cordons.value = x.cordons;
+      wantedCordons = Number(x.cordons);
+      cordonsTouched = true;
       form.elements.gralles.value = x.gralles || 0;
       form.elements.timbals.value = x.timbals || 0;
       const partial = (x.from_level || 1) > 1 || !!x.to_level;

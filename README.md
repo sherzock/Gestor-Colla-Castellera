@@ -145,8 +145,12 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   duplicar-les, afegir-ne de noves (també posicions pròpies amb un altre nom) i treure-les. La plantilla desada val per
   a tots els castells d'aquell tipus, també els passats. Les posicions que es mantenen conserven l'historial i les
   estadístiques. Les que es treuen deixen de comptar, però les alineacions no s'esborren: si es tornen a posar, tornen.
-  «Torna a l'estàndard» parteix de la pinya automàtica amb els cordons que triïs, i «Esborra la plantilla» la deixa
-  com abans.
+  «Torna a l'estàndard» parteix de la pinya automàtica amb els cordons que hi hagi dibuixats, i «Esborra la plantilla»
+  la deixa com abans. L'editor té encaix (les caixes s'enganxen a les altres i al centre, amb guies; Alt per moure'n
+  una lliurement), desfer i refer (Ctrl+Z, Ctrl+Y), selecció de diverses caixes (Maj+clic, requadre pel fons, «Tria
+  diverses» al mòbil o «Tria tot el cordó»), mirall, avís de caixes solapades i «Afegeix un cordó», que continua cada
+  línia. **Cordons**: la plantilla en dibuixa fins a un màxim i cada castell n'ensenya els que digui el seu formulari,
+  de manera que el mateix dibuix serveix per a una pinya de 3 i per a una de 5.
 - **Administradors**: creen/editen sessions i castells, assignen o canvien persones a cada posició
   (cercant per nom o ordenant per alçada d'espatlles, alçada o pes), poden posar convidats d'altres colles,
   i dupliquen castells (amb l'alineació) a una altra sessió. Truc ràpid: toca un nom a «Confirmats sense posició»
