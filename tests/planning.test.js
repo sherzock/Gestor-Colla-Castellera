@@ -7,23 +7,23 @@ import { nextPlanTime, planLayout } from '../public/planning.js';
 const event = { start_time: '20:00', end_time: '22:00' };
 const c = (id, plan_time, plan_minutes, net = 0) => ({ id, position: id, plan_time, plan_minutes, net });
 
-test('horari: els nets van a part, i el que es fa alhora es posa de costat', () => {
-  const plan = planLayout([c(1, '20:15', 20), c(2, '20:25', 20), c(3, '20:45', 20), c(4, '20:15', 30, 1), c(5, null)], event);
+test('horari: el que es fa alhora es posa de costat, sigui net o no', () => {
+  const plan = planLayout([c(1, '20:15', 20), c(2, '20:25', 20), c(3, '20:45', 20, 1), c(4, '20:50', 20), c(5, null)], event);
   assert.deepEqual([plan.from, plan.to], [20 * 60, 22 * 60]);
-  assert.deepEqual(plan.normal.map((b) => [b.c.id, b.col, b.cols]), [[1, 0, 2], [2, 1, 2], [3, 0, 1]]);
-  assert.deepEqual(plan.net.map((b) => [b.c.id, b.col, b.cols]), [[4, 0, 1]]);
+  assert.deepEqual(plan.blocks.map((b) => [b.c.id, b.col, b.cols]), [[1, 0, 2], [2, 1, 2], [3, 0, 2], [4, 1, 2]]);
   assert.deepEqual(plan.unscheduled.map((x) => x.id), [5]);
+  assert.deepEqual(planLayout([c(1, '20:00', 20), c(2, '20:20', 20, 1)], event).blocks.map((b) => [b.col, b.cols]), [[0, 1], [0, 1]], 'un darrere l\'altre, cadascun sencer');
 });
 
 test('horari: el marge s\'amplia si un castell surt de les hores de la sessió, arrodonit a mitges hores', () => {
   const plan = planLayout([c(1, '19:40', 20), c(2, '22:10', 25)], event);
   assert.deepEqual([plan.from, plan.to], [19 * 60 + 30, 23 * 60]);
-  assert.equal(planLayout([c(1, '20:00')], event).normal[0].end, 20 * 60 + 20, 'sense minuts, els de per defecte');
+  assert.equal(planLayout([c(1, '20:00')], event).blocks[0].end, 20 * 60 + 20, 'sense minuts, els de per defecte');
 });
 
-test('horari: l\'hora proposada continua el seu carril', () => {
-  const list = [c(1, '20:15', 25), c(2, null), c(3, '20:00', 60, 1), c(4, null, null, 1)];
-  assert.equal(nextPlanTime(list[1], list, event), '20:40');
+test('horari: l\'hora proposada continua després de l\'últim castell, net o no', () => {
+  const list = [c(1, '20:15', 25), c(2, null), c(3, '20:40', 20, 1), c(4, null, null, 1)];
+  assert.equal(nextPlanTime(list[1], list, event), '21:00');
   assert.equal(nextPlanTime(list[3], list, event), '21:00');
   assert.equal(nextPlanTime(c(9), [], event), '20:00');
 });

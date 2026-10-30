@@ -13,26 +13,25 @@ function item(c, cls, style, body) {
     : `<a class="${cls} ${hidden}" style="${style}" href="#/castell/${c.id}">${body}</a>`;
 }
 
-const lane = (blocks, from) => blocks.map(({ c, start, end, col, cols }) => {
+const blocksHtml = (blocks, from) => blocks.map(({ c, start, end, col, cols }) => {
   const style = `top:${(start - from) * PX}px;height:${Math.max((end - start) * PX, MIN_HEIGHT)}px;left:${(col / cols) * 100}%;width:${100 / cols}%`;
-  return item(c, 'tl-block', style, `<strong>${castellName(c)}</strong><span>${toTime(start)}–${toTime(end)}</span>${c.label ? `<span>${esc(c.label)}</span>` : ''}`);
+  return item(c, `tl-block ${c.net ? 'net' : ''}`, style, `<strong>${castellName(c)}</strong><span>${toTime(start)}–${toTime(end)}</span>${c.label ? `<span>${esc(c.label)}</span>` : ''}`);
 }).join('');
 
 export function timelineCard(event, castells) {
   if (!castells.length) return '';
   const plan = planLayout(castells, event);
-  const scheduled = plan.normal.length + plan.net.length > 0;
+  const scheduled = plan.blocks.length > 0;
   const ticks = [];
   if (scheduled) for (let m = plan.from; m <= plan.to; m += 30) ticks.push(`<span class="tl-tick" style="top:${(m - plan.from) * PX}px">${toTime(m)}</span>`);
   const height = (plan.to - plan.from) * PX;
   return `<div class="card">
     <div class="card-head"><h2>${t("Horari de l'assaig")}</h2><span class="muted small">${t('Només el veuen la tècnica i la junta')}</span></div>
     ${scheduled ? `<div class="tl">
-      <div class="tl-axis-head"></div><div class="tl-head">${t('Castells')}</div><div class="tl-head">${t('Castells nets')}</div>
       <div class="tl-axis" style="height:${height}px">${ticks.join('')}</div>
-      <div class="tl-lane" style="height:${height}px">${lane(plan.normal, plan.from)}</div>
-      <div class="tl-lane" style="height:${height}px">${lane(plan.net, plan.from)}</div>
-    </div>` : ''}
+      <div class="tl-lane" style="height:${height}px">${blocksHtml(plan.blocks, plan.from)}</div>
+    </div>
+    ${plan.blocks.some((b) => b.c.net) ? `<div class="legend"><span><i class="tl-net-mark"></i>${t('Castells nets')}</span></div>` : ''}` : ''}
     ${plan.unscheduled.length ? `<div class="tl-none">
       <span class="small muted">${t('Sense hora')}</span>
       ${plan.unscheduled.map((c) => item(c, 'btn sm', '', castellName(c))).join('')}

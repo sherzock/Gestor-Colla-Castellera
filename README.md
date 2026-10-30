@@ -153,7 +153,7 @@ Appinya't només surt, discret, a les pantalles d'entrada i al títol de la pest
   de manera que el mateix dibuix serveix per a una pinya de 3 i per a una de 5. A més dels tipus habituals, es poden
   afegir **taps** i **tapa-taps**, que també van per cordons.
 - **Horari de l'assaig**: la tècnica posa a cada castell l'hora i els minuts, i la junta ho consulta. Els castells
-  nets surten en un carril a part, perquè es poden fer alhora que la resta. Als membres no els arriba.
+  que coincideixen en el temps surten de costat i els nets es distingeixen pel color. Als membres no els arriba.
 - **Tot es crea ocult**: les sessions i els castells nous no els veuen els membres fins que es mostren. En mostrar una
   sessió, qui porta els castells pot mostrar-los alhora.
 - **Administradors**: creen/editen sessions i castells, assignen o canvien persones a cada posició

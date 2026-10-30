@@ -300,14 +300,13 @@ transaction(() => {
   const insGuest = db.prepare('INSERT INTO event_guests (event_id, name, colla, shoulder_height_cm, weight_kg) VALUES (?, ?, ?, ?, ?)');
   insGuest.run(diada.id, 'Rovelló', 'Colla convidada', 142, 66);
   insGuest.run(diada.id, 'Bolet', 'Colla convidada', 150, 74);
-  // L'horari dels assajos que vénen: els nets es fan alhora que la resta, cada carril a continuació de l'anterior.
+  // L'horari dels assajos que vénen: cada castell a continuació de l'anterior.
   const setPlan = db.prepare('UPDATE castells SET plan_time = ?, plan_minutes = ? WHERE id = ?');
   for (const { id, start_time: start } of db.prepare("SELECT id, start_time FROM events WHERE type = 'assaig' AND date >= date('now')").all()) {
-    const next = { 0: 15, 1: 15 };
-    for (const c of db.prepare('SELECT id, net FROM castells WHERE event_id = ? ORDER BY position').all(id)) {
-      const at = Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5)) + next[c.net];
+    let at = Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5)) + 15;
+    for (const c of db.prepare('SELECT id FROM castells WHERE event_id = ? ORDER BY position').all(id)) {
       setPlan.run(`${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`, 25, c.id);
-      next[c.net] += 25;
+      at += 25;
     }
   }
 });

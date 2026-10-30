@@ -464,8 +464,7 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .is-hidden:hover { opacity: .85; }
 .castell-card.is-hidden, .event-card.is-hidden { border-style: dashed; }
 .castell-group + .castell-group { margin-top: 14px; }
-.tl { display: grid; grid-template-columns: 44px 1fr 1fr; column-gap: 8px; }
-.tl-head { font-size: .8rem; font-weight: 700; color: var(--ink-2); padding-bottom: 6px; }
+.tl { display: grid; grid-template-columns: 44px 1fr; column-gap: 8px; padding-top: 8px; }
 .tl-axis { position: relative; }
 .tl-tick { position: absolute; right: 0; transform: translateY(-50%); font-size: .72rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .tl-lane { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 72px); border-left: 1px solid var(--line); }
@@ -473,6 +472,7 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .tl-block strong { font-size: .9rem; }
 .tl-block span { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-block.is-hidden { border-style: dashed; }
+.tl-block.net, .tl-net-mark { background: var(--surface-2); border: 1px solid var(--ink-3); }
 .tl-none { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
 .tl-none .is-hidden { border-style: dashed; }
 .sibling-nav a.is-hidden svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
