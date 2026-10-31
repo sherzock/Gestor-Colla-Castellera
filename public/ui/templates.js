@@ -49,8 +49,8 @@ export async function pageTemplate(name) {
   const [list, { usage, castells, cordons }] = await Promise.all([api('GET', '/templates'), api('GET', `/templates/${name}/usage`)]);
   setTemplates(list);
   const saved = list.find((x) => x.name === name);
-  const standardStructure = (cordons) => buildStructure({ ...config, cordons }, { ignoreTemplate: true });
-  const standard = (cordons) => Object.fromEntries(standardStructure(cordons).layers.map((l) => [l.id, layerToTemplate(l)]));
+  const standardStructure = (cordons, taps = 0) => buildStructure({ ...config, cordons, taps }, { ignoreTemplate: true });
+  const standard = (cordons, taps = 0) => Object.fromEntries(standardStructure(cordons, taps).layers.map((l) => [l.id, layerToTemplate(l)]));
   const ref = standardStructure(cordons);
   if (!ref.layers.length) throw new Error(t('Aquest castell no té pinya'));
   const labels = Object.fromEntries(ref.layers.map((l) => [l.id, l.label]));
@@ -99,6 +99,7 @@ export async function pageTemplate(name) {
           <button class="btn sm" id="tpl-ring-del">${t("Treu l'últim")}</button>
         </div>
         <button class="btn sm" id="tpl-standard">${t("Torna a l'estàndard")}</button>
+        ${config.width <= 4 ? `<button class="btn sm" id="tpl-standard-taps">${t('Estàndard amb taps')}</button>` : ''}
       </div>
     </div>
     <p class="small muted">${t("Arrossega les caixes per moure-les. Toca'n una per canviar-ne el nom, el tipus o girar-la. Les posicions que es treuen deixen de sortir als castells, però les alineacions guardades no s'esborren: si es tornen a posar, tornen a sortir.")}</p>
@@ -201,6 +202,9 @@ export async function pageTemplate(name) {
   };
   // Es pot desfer, o sigui que no cal demanar confirmació. Es queda amb els cordons que hi ha dibuixats.
   qs('#tpl-standard').onclick = () => editor.replace(standard(maxRing(layers.pinya || []) || cordons));
+  // Com a mínim tres cordons: el tap entra al segon i el tapa-tap al tercer.
+  const withTaps = qs('#tpl-standard-taps');
+  if (withTaps) withTaps.onclick = () => editor.replace(standard(Math.max(3, maxRing(layers.pinya || []) || cordons), 1));
   const onKey = (e) => {
     // Dins d'un camp, Ctrl+Z i les fletxes són les del camp.
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;

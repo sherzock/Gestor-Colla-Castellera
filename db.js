@@ -301,6 +301,7 @@ addColumn('events', 'ask_companions', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('events', 'address', 'TEXT');
 addColumn('castells', 'plan_time', 'TEXT');
 addColumn('castells', 'plan_minutes', 'INTEGER');
+addColumn('castells', 'taps', 'INTEGER NOT NULL DEFAULT 0');
 
 // Encarregats d'una sessió: qui porta el material, la farmaciola… (una feina pot tenir més d'una persona).
 db.exec(`CREATE TABLE IF NOT EXISTS event_roles (

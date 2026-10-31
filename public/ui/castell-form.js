@@ -16,6 +16,7 @@ export function castellModal(eventId, castell, onLost) {
         <label class="field">${t('Persones per pis')}<select name="width">${WIDTHS.map((w) => `<option value="${w.value}" ${Number(c.width) === w.value ? 'selected' : ''}>${w.label}</option>`).join('')}</select></label>
         <label class="field">${t('Pisos')}<input name="height" type="number" min="3" max="11" value="${c.height}" required></label>
         <label class="field">${t('Cordons (persones per línia)')}<input name="cordons" type="number" min="0" max="8" value="${c.cordons}"><span class="small muted hidden" id="cordons-tpl"></span></label>
+        <label class="check" id="taps-wrap"><input type="checkbox" name="taps" ${c.taps ? 'checked' : ''}> ${t('Taps i tapa-taps')}</label>
         <label class="check" id="ag-wrap"><input type="checkbox" name="agulla" ${c.agulla ? 'checked' : ''}> ${t('Amb agulla (pilar central)')}</label>
         <label class="check"><input type="checkbox" name="folre" ${c.folre ? 'checked' : ''}> ${t('Folre')}</label>
         <label class="check"><input type="checkbox" name="manilles" ${c.manilles ? 'checked' : ''}> ${t('Manilles')}</label>
@@ -110,6 +111,9 @@ export function castellModal(eventId, castell, onLost) {
       if (Number(input.value) !== shown) input.value = shown;
       const hint = qs('#cordons-tpl', m);
       hint.classList.toggle('hidden', !tpl);
+      // La plantilla ja dibuixa els seus taps; sense pinya o en un castell compost no n'hi ha, i el tap entra al segon cordó.
+      qs('#taps-wrap', m).classList.toggle('hidden', !!tpl || !!d.net || d.width > 4);
+      form.elements.taps.disabled = d.cordons < 2;
       hint.textContent = rings ? t('La pinya de la colla en dibuixa fins a {n}', { n: rings }) : t('La pinya de la colla no en dibuixa cap');
       form.elements.height.min = d.width === 1 ? 3 : 4;
       qs('#cname', m).textContent = castellName(d);
@@ -138,6 +142,7 @@ export function castellModal(eventId, castell, onLost) {
       const x = sources.find((y) => String(y.id) === copySel.value);
       if (!x) return;
       form.elements.cordons.value = x.cordons;
+      form.elements.taps.checked = !!x.taps;
       wantedCordons = Number(x.cordons);
       cordonsTouched = true;
       form.elements.gralles.value = x.gralles || 0;

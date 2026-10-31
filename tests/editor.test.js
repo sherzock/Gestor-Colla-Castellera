@@ -192,3 +192,45 @@ test('taps i tapa-taps: es poden desar a la plantilla, van per cordons i continu
   assert.equal(extra.find((i) => i.kind === 'tap').ring, 3);
   assert.equal((await A('DELETE', '/templates/3d5')).s, 200);
 });
+
+test('taps de la pinya estàndard: entre mans i laterals, sempre per parelles, i el tapa-tap al darrere', () => {
+  const pinya = (name, cordons, taps) => buildStructure({ ...configFromName(name), cordons, taps }, { ignoreTemplate: true }).layers.find((l) => l.id === 'pinya').items;
+  for (const name of ['pd5', '2d7', '3d7', '4d7']) {
+    const items = pinya(name, 4, 1);
+    const clash = items.filter((a, i) => items.slice(i + 1).some((b) => overlaps(a, b)));
+    assert.deepEqual(clash.map((c) => c.key), [], `${name}: caixes trepitjades`);
+    for (const kind of ['tap', 'tapatap']) {
+      const list = items.filter((i) => i.kind === kind);
+      for (const it of list) assert.ok(list.some((o) => o.key === it.key.replace(/-(e|d)$/, (_, s) => `-${s === 'e' ? 'd' : 'e'}`)), `${name}: ${it.key} sense parella`);
+    }
+    assert.ok(pinya(name, 3, 0).every((i) => i.kind !== 'tap' && i.kind !== 'tapatap'), `${name}: sense l'opció no n'hi ha`);
+    assert.equal(pinya(name, 1, 1).some((i) => i.kind === 'tap'), false, `${name}: amb un sol cordó no n'hi ha`);
+    assert.equal(pinya(name, 2, 1).some((i) => i.kind === 'tapatap'), false, `${name}: el tapa-tap és del tercer cordó`);
+  }
+  // Els castells compostos no en porten, i no perden cap lateral.
+  for (const name of ['5d7', '7d7', '9d7']) assert.deepEqual(pinya(name, 4, 1), pinya(name, 4, 0), name);
+  // Al tres: dos taps i dos tapa-taps per rengla, cada tapa-tap just darrere el seu tap.
+  const tres = pinya('3d7', 3, 1);
+  assert.equal(tres.filter((i) => i.kind === 'tap').length, 6);
+  assert.equal(tres.filter((i) => i.kind === 'tapatap').length, 6);
+  const mans = tres.find((i) => i.key === 'pm1-0');
+  const tap = tres.find((i) => i.key === 'ptap-0-e');
+  const tt = tres.find((i) => i.key === 'ptapatap-0-e');
+  assert.equal(Math.round(Math.abs(tap.x - mans.x)), 56, 'just al costat de la rengla de mans');
+  assert.equal(Math.round(tap.x), Math.round(tt.x), 'el tapa-tap, a la mateixa línia');
+  assert.ok(Math.abs(tt.y) > Math.abs(tap.y), 'el tapa-tap, més enfora');
+});
+
+test('al servidor: els taps es desen, no canvien el nom del castell, es copien en duplicar i es poden treure', async () => {
+  const A = s.admin;
+  const date = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const ev = (await A('POST', '/events', { hidden: false, type: 'assaig', title: 'Taps', date })).d.id;
+  const c = (await A('POST', `/events/${ev}/castells`, { hidden: false, width: 4, height: 7, cordons: 3, taps: true })).d;
+  assert.equal(c.taps, 1);
+  const read = async (id) => (await A('GET', `/castells/${id}`)).d.castell;
+  assert.equal((await read(c.id)).taps, 1);
+  const dup = (await A('POST', `/castells/${c.id}/duplicate`, {})).d;
+  assert.equal((await read(dup.id)).taps, 1);
+  assert.equal((await A('PUT', `/castells/${c.id}`, { taps: false })).s, 200);
+  assert.equal((await read(c.id)).taps, 0);
+});

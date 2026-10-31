@@ -262,6 +262,7 @@ function castellInput(body, existing = {}) {
     from_level: int(merged.from_level, 1, 11, 1),
     to_level: int(merged.to_level, 0, 11, 0),
     cordons: int(merged.cordons, 0, 8, 4),
+    taps: width <= 4 ? bool(merged.taps) : 0,
     gralles: int(merged.gralles, 0, 12, 0),
     timbals: int(merged.timbals, 0, 12, 0),
     label: str(merged.label, 60),
@@ -1237,7 +1238,7 @@ route('GET', '/api/events/:id/castell-sources', ({ params, query }) => {
     const n = placed.get(c.id).n;
     if (!n) continue;
     out.push({ id: c.id, event_id: c.event_id, event_title: c.event_title, event_date: c.event_date, event_type: c.event_type, label: c.label,
-      result: c.result, placed: n, cordons: c.cordons, gralles: c.gralles, timbals: c.timbals, from_level: c.from_level, to_level: c.to_level });
+      result: c.result, placed: n, cordons: c.cordons, taps: c.taps, gralles: c.gralles, timbals: c.timbals, from_level: c.from_level, to_level: c.to_level });
     if (out.length >= SOURCES_LIMIT) break;
   }
   return out;
@@ -1745,13 +1746,13 @@ function HistoryRow(c, pos_key, person_id, pos, castell) {
   this.pos_key = pos_key; this.person_id = person_id; this.cat = pos.cat; this.role = pos.role; this.group = pos.group; this.castell = castell;
   this.castell_id = c.castell_id; this.width = c.width; this.height = c.height; this.agulla = c.agulla; this.folre = c.folre;
   this.manilles = c.manilles; this.puntals = c.puntals; this.sota = c.sota; this.gralles = c.gralles; this.timbals = c.timbals; this.net = c.net;
-  this.from_level = c.from_level; this.to_level = c.to_level; this.cordons = c.cordons; this.result = c.result;
+  this.from_level = c.from_level; this.to_level = c.to_level; this.cordons = c.cordons; this.taps = c.taps; this.result = c.result;
   this.event_id = c.event_id; this.date = c.date; this.title = c.title; this.type = c.type; this.hidden = c.hidden;
 }
 function pastRows() {
   if (pastCache?.key !== historyKey()) {
     const castells = db.prepare(`SELECT c.id AS castell_id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.gralles,
-        c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.result, e.id AS event_id, e.date, e.title, e.type, MAX(c.hidden, e.hidden) AS hidden
+        c.timbals, c.net, c.from_level, c.to_level, c.cordons, c.taps, c.result, e.id AS event_id, e.date, e.title, e.type, MAX(c.hidden, e.hidden) AS hidden
       FROM castells c JOIN events e ON e.id = c.event_id WHERE e.date <= date('now','localtime') ORDER BY e.date DESC, c.position`).all();
     const byCastell = new Map();
     for (const p of db.prepare('SELECT castell_id, pos_key, person_id FROM castell_positions WHERE person_id IS NOT NULL').all()) {

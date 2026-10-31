@@ -65,7 +65,9 @@ function columnName(width, i) {
 //  - darrere el contrafort hi ha la línia de mans (primeres, segones…) i, a cada costat d'aquesta línia,
 //    una línia de laterals (entregirats), que treballen sobre una sola cama del segon;
 //  - pel buit entre dos baixos hi va la línia de vents (daus), que treballen sobre dos segons;
-//  - cada línia té tantes posicions com cordons.
+//  - cada línia té tantes posicions com cordons;
+//  - si el castell porta taps: al forat entre la línia de mans i la de laterals, a partir del segon cordó, i
+//    sempre un a cada banda (si no, la línia de mans es torça); darrere de cada tap, el seu tapa-tap.
 // El pilar no porta crosses: té l'agulla a un costat, el contrafort a l'altre, mans pels dos costats i vents
 // als laterals. La torre té una sola agulla. Els castells compostos són la unió de castells simples
 // (5 = tres i torre, 7 = quatre i tres, 9 = tres i tres torres): els baixos de dins tenen el braç cap enfora
@@ -136,7 +138,7 @@ function pinyaPlan(width) {
   return { baixos, gaps: [[2, 4], [5, 7], [8, 1]] };
 }
 
-function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, add }) {
+function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, taps, add }) {
   const items = [];
   const placed = [];
   // «cat» és la categoria comparable entre castells diferents (per a l'historial).
@@ -163,6 +165,8 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
 
   const plan = pinyaPlan(width);
   const simple = width <= 4;
+  // Als castells compostos els taps quedarien lluny de la seva línia: no en porten.
+  taps = taps && simple;
   // Als castells compostos, l'agulla o una crossa que no hi càpiga a prop del centre no hi va.
   const maybe = (box, fn) => { if (simple || free(box)) fn(box); };
 
@@ -194,6 +198,20 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
     cursor.set(k, found.d + STEP);
     return found.box;
   };
+  // Els taps van de cara a la línia de mans, com les crosses; els laterals s'aparten per fer-los lloc.
+  const tapOff = BOX_W / 2 + BOX_H / 2 + 2;
+  const tapBox = (arm, d, o) => ({ ...across(arm.b, arm.dir, d, o), w: 2 * STEP, h: BOX_H, rot: arm.dir });
+  const tapDist = new Map();
+  // La parella o res: el primer lloc on hi caben tots dos.
+  const tapPair = (arm, kind, role, from) => {
+    for (let d = from; d <= from + 400; d += 2) {
+      const pair = [['e', tapOff], ['d', -tapOff]].map(([side, o]) => [side, tapBox(arm, d, o)]);
+      if (!pair.every(([, box]) => free(box))) continue;
+      for (const [side, box] of pair) put(`${prefix}${kind}-${arm.key}-${side}`, role, kind, box, { ring: kind === 'tap' ? 2 : 3, cat: role });
+      return d;
+    }
+    return null;
+  };
   // Cordó a cordó, perquè cada cordó ocupi el lloc més proper al centre que li quedi.
   for (let n = 1; n <= rings; n++) {
     for (const arm of arms) {
@@ -210,9 +228,15 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
     });
     for (const arm of arms) {
       for (const [side, o] of [['e', SIDE], ['d', -SIDE]]) {
-        const box = step(`l${arm.key}${side}`, arm.b, arm.dir, o, STEP, simple ? Infinity : 2 * STEP);
+        const apart = taps && n >= 2 ? Math.sign(o) * (BOX_H + 4) : 0;
+        const box = step(`l${arm.key}${side}`, arm.b, arm.dir, o + apart, STEP, simple ? Infinity : 2 * STEP);
         if (box) put(`${prefix}l${n}-${arm.key}-${side}`, `Lateral ${n}`, 'lateral', box, { ring: n, cat: 'Lateral' });
       }
+    }
+    if (!taps || n < 2 || n > 3) continue;
+    for (const arm of arms) {
+      if (n === 2) tapDist.set(arm.key, tapPair(arm, 'tap', 'Tap', 2 * STEP));
+      else if (tapDist.get(arm.key) !== null) tapPair(arm, 'tapatap', 'Tapa-tap', tapDist.get(arm.key) + 2 * STEP + 2);
     }
   }
   return { id, label, items };
@@ -331,7 +355,7 @@ export function buildStructure(c, { ignoreTemplate = false } = {}) {
   const center = (L) => (positions.has(`ag${L}`) ? `ag${L}` : null);
   if (!c.net) {
     layers.push(layer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`, centerKey: center(from),
-      rings: Number(c.cordons ?? 3), maxRing: Number(c.cordons ?? 3), vents: true, agulles: true, add }));
+      rings: Number(c.cordons ?? 3), maxRing: Number(c.cordons ?? 3), vents: true, agulles: true, taps: !!c.taps, add }));
   }
   if (folre && troncLevels >= 2) {
     layers.push(layer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),
@@ -367,7 +391,7 @@ export const inTroncView = (pos) => ['tronc', 'baixos', 'pom', 'agulla', 'musica
 const structureCache = new Map();
 export function structureOf(c) {
   const id = [c.width, c.height, c.agulla ? 1 : 0, c.folre ? 1 : 0, c.manilles ? 1 : 0, c.puntals ? 1 : 0, c.cordons ?? 3, c.gralles || 0, c.timbals || 0,
-    c.net ? 1 : 0, c.from_level || 1, c.to_level || 0, c.sota ? 1 : 0].join('|');
+    c.net ? 1 : 0, c.from_level || 1, c.to_level || 0, c.sota ? 1 : 0, c.taps ? 1 : 0].join('|');
   if (!structureCache.has(id)) structureCache.set(id, buildStructure(c));
   return structureCache.get(id);
 }
