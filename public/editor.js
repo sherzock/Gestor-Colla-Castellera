@@ -1,6 +1,6 @@
 // Editor visual de plantilles de pinya: cada caixa es pot arrossegar, girar, reanomenar, duplicar o treure.
 // Treballa sobre una còpia de les capes ({ pinya: [...], folre: [...] }) i avisa amb onChange a cada canvi.
-import { BOX, LAYER_PREFIX, kindCat, overlaps } from './castell.js';
+import { BOX, LAYER_PREFIX, configFromName, kindCat, overlaps } from './castell.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const MARGIN = 140;
@@ -11,6 +11,18 @@ const DEG = Math.PI / 180;
 export const MAX_BOXES = 200;
 
 // Text de la caixa: el tipus i el cordó (com a la vista de pinya) o el nom si és una posició pròpia.
+// De quines plantilles de la colla es pot copiar el dibuix: han de tenir els mateixos baixos (amplada i pilar central).
+export function templateSources(name, list) {
+  const c = configFromName(name);
+  return list.filter((x) => {
+    const o = configFromName(x.name);
+    return x.name !== name && o && x.layers?.pinya && o.width === c.width && o.agulla === c.agulla;
+  });
+}
+// Les capes que aquest castell no té no es copien; les que l'origen no té es queden com estan.
+export const copyLayers = (current, source) => ({ ...current,
+  ...Object.fromEntries(Object.entries(source).filter(([id]) => current[id]).map(([id, items]) => [id, structuredClone(items)])) });
+
 export const KIND_SHORT = { base: 'Baix', contrafort: 'Contrafort', agulla: 'Agulla', crossa: 'Crossa', mans: 'Mans', vent: 'Vent', lateral: 'Lateral', tap: 'Tap', tapatap: 'Tapa-tap', altre: '' };
 export const boxShort = (item) => (item.kind === 'altre' ? item.role : `${KIND_SHORT[item.kind]}${item.ring ? ` ${item.ring}` : ''}`);
 export const autoRole = (kind, ring) => kindCat('pinya', kind, ring, '');

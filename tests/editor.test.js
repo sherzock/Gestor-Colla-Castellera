@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { startServer, sessions } from './helpers.js';
 import { buildStructure, configFromName, overlaps, setTemplates, structureOf, templateRings } from '../public/castell.js';
-import { createHistory, layerToTemplate, maxRing, nextRing, snapBox } from '../public/editor.js';
+import { copyLayers, createHistory, layerToTemplate, maxRing, nextRing, snapBox, templateSources } from '../public/editor.js';
 
 const box = (x, y, rot = 0, extra = {}) => ({ x, y, rot, w: 78, h: 30, ...extra });
 const pinyaOf = (name, cordons) => layerToTemplate(buildStructure({ ...configFromName(name), cordons }, { ignoreTemplate: true }).layers.find((l) => l.id === 'pinya'));
@@ -233,4 +233,20 @@ test('al servidor: els taps es desen, no canvien el nom del castell, es copien e
   assert.equal((await read(dup.id)).taps, 1);
   assert.equal((await A('PUT', `/castells/${c.id}`, { taps: false })).s, 200);
   assert.equal((await read(c.id)).taps, 0);
+});
+
+test('copiar una pinya: només de castells amb els mateixos baixos, i la còpia es pot desar', async () => {
+  const list = ['3d7', '3d8', '3d7a', '4d7', '3d9f'].map((name) => ({ name, layers: { pinya: pinyaOf(name, 2) } }));
+  assert.deepEqual(templateSources('3d8', list).map((x) => x.name), ['3d7', '3d9f']);
+  assert.deepEqual(templateSources('4d8', list).map((x) => x.name), ['4d7']);
+  const tagged = { pinya: [...pinyaOf('3d7', 2)], folre: [] };
+  tagged.pinya.find((i) => i.key === 'pm1-0').x += 40;
+  // El 3d8 no té folre: no se l'endú, i la pinya es desa i es dibuixa igual que a l'origen.
+  const copied = copyLayers({ pinya: pinyaOf('3d8', 3) }, tagged);
+  assert.deepEqual(Object.keys(copied), ['pinya']);
+  assert.notEqual(copied.pinya, tagged.pinya);
+  assert.equal((await s.admin('PUT', '/templates/3d11', { layers: copied })).s, 200);
+  const moved = (await s.admin('GET', '/templates')).d.find((x) => x.name === '3d11').layers.pinya.find((i) => i.key === 'pm1-0');
+  assert.equal(Math.round(moved.x), Math.round(tagged.pinya.find((i) => i.key === 'pm1-0').x));
+  assert.equal((await s.admin('DELETE', '/templates/3d11')).s, 200);
 });

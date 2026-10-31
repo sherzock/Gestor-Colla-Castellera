@@ -194,7 +194,7 @@ function historyView(s, ctx) {
 // ---------- Revisió de l'alineació (administració) ----------
 // Avisos per detectar errors abans de la sessió: gent col·locada que no ve, forats al tronc,
 // espatlles desiguals en un mateix pis i algú que pesa més que qui el porta.
-function lineupWarnings(s, byKey, candidates, event, prep, guests = []) {
+function lineupWarnings(s, byKey, candidates, event, prep, guests = [], clashes = [], castell = null, siblings = []) {
   const guestsById = new Map(guests.map((g) => [g.id, g]));
   const out = [];
   const status = new Map(candidates.map((c) => [c.id, c.status]));
@@ -212,6 +212,12 @@ function lineupWarnings(s, byKey, candidates, event, prep, guests = []) {
   const gone = [...byKey.values()].filter((a) => a.guest_id && (guestsById.get(a.guest_id)?.companion_dropped
     || (guestsById.get(a.guest_id)?.companion_of && status.get(guestsById.get(a.guest_id).companion_of) !== 'si')));
   if (gone.length) out.push({ level: 'bad', text: t('Acompanyants que ja no vénen'), items: gone.map(chip) });
+  // Dos castells alhora: qui és a tots dos només en pot fer un.
+  for (const x of clashes) {
+    const other = siblings.find((c) => c.id === (x.a === castell.id ? x.b : x.a));
+    const items = x.people.map((p) => byKey.get(p.keys[castell.id])).filter(Boolean).map(chip);
+    if (other && items.length) out.push({ level: 'bad', text: t('També surten al {castell}, que es fa a la mateixa hora', { castell: castellName(other) }), items });
+  }
   const tronc = [...s.positions.values()].filter((p) => ['baixos', 'tronc', 'pom', 'agulla'].includes(p.group));
   const empty = tronc.filter((p) => !byKey.has(p.key));
   if (empty.length) out.push({ level: 'bad', text: tn(empty.length, 'Falta {n} posició al tronc', 'Falten {n} posicions al tronc'), items: empty.map((p) => ({ key: p.key, label: p.role })) });
@@ -333,7 +339,7 @@ export async function pageCastell(id) {
   const placedGuests = new Set(guests.map((g) => g.guest_id).filter(Boolean));
   const freeGuests = sessionGuests.filter((g) => !placedGuests.has(g.id));
   const canZoom = castellView !== 'llista';
-  const warnings = admin ? lineupWarnings(s, byKey, candidates, event, prep, sessionGuests) : [];
+  const warnings = admin ? lineupWarnings(s, byKey, candidates, event, prep, sessionGuests, data.plan_clashes, castell, siblings) : [];
 
   $app.innerHTML = `
     <a class="back" href="#/sessio/${event.id}">${icon.back}${esc(event.title)} · ${fmt(event.date, { day: 'numeric', month: 'short' })}</a>
@@ -544,7 +550,7 @@ export async function pageCastell(id) {
     }
   });
 
-  qs('#edit-castell').onclick = () => castellModal(event.id, castell, (keep) => [...positions].filter((p) => !keep.has(p.pos_key)).length);
+  qs('#edit-castell').onclick = () => castellModal(event.id, castell, (keep) => [...positions].filter((p) => !keep.has(p.pos_key)).length, event.type === 'assaig' ? { time: castell.plan_time } : null);
   qs('#hide-castell').onclick = async () => {
     if (await attempt(() => api('PUT', `/castells/${castell.id}/hidden`, { hidden: !castell.hidden }))) {
       toast(castell.hidden ? t('Ara els membres ja el veuen') : t('Castell ocult als membres'));

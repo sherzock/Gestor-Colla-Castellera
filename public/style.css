@@ -484,6 +484,15 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .tl-block span { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-block.is-hidden { border-style: dashed; }
 .tl-block.net, .tl-net-mark { background: var(--surface-2); border: 1px solid var(--ink-3); }
+.tl-block.clash { border-color: var(--c-bad); border-width: 2px; }
+.tl-block.dragging { z-index: 2; opacity: .9; box-shadow: 0 4px 14px rgb(0 0 0 / .35); cursor: grabbing; }
+button.tl-block { cursor: grab; touch-action: pan-y; }
+.tl-grip { position: absolute; top: 0; right: 0; width: 30px; height: 100%; max-height: 44px; touch-action: none; cursor: grab;
+  background: radial-gradient(circle, var(--ink-3) 1.5px, transparent 2px) center / 7px 7px repeat; background-size: 7px 7px; background-clip: content-box; padding: 9px 8px; box-sizing: border-box; }
+.tl-clashes { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: .85rem; }
+.tl-clashes li { display: flex; gap: 6px; align-items: flex-start; color: var(--c-bad); }
+.tl-clashes svg { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.tl-clashes a { color: inherit; }
 .tl-none { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
 .tl-none .is-hidden { border-style: dashed; }
 .sibling-nav a.is-hidden svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
@@ -841,6 +850,7 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .tpl-rot { display: flex; gap: 6px; }
 .tpl-reset { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tpl-reset { justify-content: space-between; flex-wrap: wrap; }
+.tpl-copy { display: flex; gap: 6px; align-items: center; }
 .tpl-rings { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tpl-toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .tpl-clash { color: var(--bad); font-weight: 600; }

@@ -10,6 +10,7 @@ import { db, DB_PATH, hashPassword, hashToken, verifyPassword, transaction } fro
 import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates, templateOf, templateRings,
   LAYER_PREFIX, TEMPLATE_KINDS, levelGaps, weightInversions, SHOULDER_GAP_CM } from './public/castell.js';
 import { translate } from './public/i18n.js';
+import { overlappingPairs } from './public/planning.js';
 import { sendPush, validEndpoint, vapidKeys } from './push.js';
 
 // Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
@@ -880,10 +881,11 @@ route('POST', '/api/events/:id/rsvp', ({ params, body }) => {
 
 // Ocultar o tornar a mostrar una sessió o un castell als membres.
 route('PUT', '/api/events/:id/hidden', ({ params, body, user }) => {
-  getEvent(params.id);
+  const before = getEvent(params.id);
   db.prepare('UPDATE events SET hidden = ? WHERE id = ?').run(bool(body.hidden), params.id);
   // Els castells es creen ocults: qui en porta el permís els pot mostrar d'un cop amb la sessió.
   if (body.castells && !bool(body.hidden) && can(user, 'castells')) db.prepare('UPDATE castells SET hidden = 0 WHERE event_id = ?').run(params.id);
+  if (body.notify && before.hidden && !bool(body.hidden)) announceEvent(before);
   return getEvent(params.id);
 }, 'sessions');
 route('PUT', '/api/castells/:id/hidden', ({ params, body }) => {
@@ -896,6 +898,23 @@ route('DELETE', '/api/events/:id', ({ params }) => {
   db.prepare('DELETE FROM events WHERE id = ?').run(params.id);
   return { ok: true };
 }, 'sessions');
+
+// Qui surt en dos castells que es fan alhora, parella a parella (només ho veuen els comptes d'administració).
+function planClashes(eventId) {
+  const castells = db.prepare('SELECT * FROM castells WHERE event_id = ? AND plan_time IS NOT NULL ORDER BY position, id').all(eventId);
+  const pairs = overlappingPairs(castells);
+  if (!pairs.length) return [];
+  const rows = db.prepare(`SELECT cp.pos_key, cp.person_id, cp.guest_id, COALESCE(g.name, cp.guest_name) AS guest_name, p.name, p.alias
+    FROM castell_positions cp LEFT JOIN people p ON p.id = cp.person_id LEFT JOIN event_guests g ON g.id = cp.guest_id WHERE cp.castell_id = ?`);
+  const placed = new Map(castells.map((c) => [c.id, rows.all(c.id).filter((r) => (r.person_id || r.guest_id) && positionOf(c, r.pos_key))]));
+  const who = (r) => (r.person_id ? `p${r.person_id}` : `g${r.guest_id}`);
+  return pairs.map(([a, b]) => {
+    const inB = new Map(placed.get(b.id).map((r) => [who(r), r.pos_key]));
+    const people = placed.get(a.id).filter((r) => inB.has(who(r))).map((r) => ({ name: r.name, alias: r.alias, guest_name: r.guest_name,
+      keys: { [a.id]: r.pos_key, [b.id]: inB.get(who(r)) } }));
+    return { a: a.id, b: b.id, people };
+  }).filter((x) => x.people.length);
+}
 
 route('GET', '/api/events/:id', ({ params, user }) => {
   const event = visibleEvent(params.id, user);
@@ -932,6 +951,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
       companions: event.ask_companions ? companionsOf(event.id, user.id) : [] } : null,
     attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [] })) : attendance.filter((a) => a.present),
     forecast: isAdmin ? attendanceForecast(event, castells) : undefined,
+    plan_clashes: isAdmin ? planClashes(event.id) : undefined,
     roles: rolesOf(event.id, isAdmin),
     roleLabels: isAdmin ? db.prepare('SELECT label FROM event_roles GROUP BY label ORDER BY COUNT(*) DESC, label LIMIT 30').all().map((r) => r.label) : undefined,
   };
@@ -1288,6 +1308,7 @@ route('GET', '/api/castells/:id', ({ params, user }) => {
   const result = { castell: tech ? castell : isAdmin ? { ...castell, tech_notes: undefined } : { ...castell, ...ADMIN_ONLY_CASTELL }, event, siblings,
     positions: isAdmin ? positions : positions.map(({ name, alias, ...p }) => (p.person_id ? { ...p, name: publicName({ name, alias }), alias: null }
       : { ...p, guest_name: p.guest_name ? publicName({ name: p.guest_name }) : null })) };
+  if (isAdmin) result.plan_clashes = planClashes(event.id).filter((x) => x.a === castell.id || x.b === castell.id);
   if (tech) {
     result.candidates = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, ${measures}, ${EFFECTIVE_STATUS_SQL} AS status
       FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
@@ -1534,6 +1555,16 @@ route('POST', '/api/push/inbox', ({ body }) => {
   });
 }, 'public');
 
+const longDate = (date, lang) => new Date(`${date}T12:00:00`).toLocaleDateString({ ca: 'ca', es: 'es', en: 'en-GB' }[lang], { weekday: 'long', day: 'numeric', month: 'long' });
+
+// La sessió que estava oculta ja es pot veure: a qui hi pot anar (i als comptes d'administració).
+function announceEvent(event) {
+  db.prepare('UPDATE events SET announced_at = ? WHERE id = ?').run(nowUtc(), event.id);
+  notify(db.prepare(`SELECT s.* FROM push_subscriptions s LEFT JOIN people p ON p.id = s.person_id
+    WHERE s.admin_id IS NOT NULL OR (p.active = 1 AND (? != 'musics' OR p.instrument IS NOT NULL))`).all(event.type),
+    (lang) => ({ title: translate(lang, 'Nova sessió: {title}', { title: event.title }), body: longDate(event.date, lang), url: `#/sessio/${event.id}` }));
+}
+
 // Recordatori de respondre: a qui té els avisos activats i encara no ha dit si va a una sessió, un sol cop, 24 hores
 // abans de la data límit o, si no n'hi ha, el dia abans de la sessió.
 function sendReminders() {
@@ -1554,7 +1585,7 @@ function sendReminders() {
     notify(subsOf.all(r.person_id), (lang) => ({
       title: translate(lang, 'Vens a {title}?', { title: r.title }),
       body: translate(lang, "{date}: encara no has dit si vens. Toca aquí per respondre.", {
-        date: new Date(`${r.date}T12:00:00`).toLocaleDateString({ ca: 'ca', es: 'es', en: 'en-GB' }[lang], { weekday: 'long', day: 'numeric', month: 'long' }) }),
+        date: longDate(r.date, lang) }),
       url: `#/sessio/${r.event_id}`,
     }));
   }

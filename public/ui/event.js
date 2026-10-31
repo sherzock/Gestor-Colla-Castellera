@@ -7,6 +7,7 @@ import { castellModal } from './castell-form.js';
 import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
   fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, partialLabel, qs, qsa,
   render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
+import { nextPlanTime } from '../planning.js';
 import { eventModal } from './sessions.js';
 import { bindTimeline, timelineCard } from './timeline.js';
 import { STATUS_ORDER, assignedName } from './viewer.js';
@@ -108,7 +109,7 @@ async function exportSession(event, castells, button) {
 }
 
 export async function pageEvent(id) {
-  const { event, fields, castells, mine, attendance, counts, guests = [], forecast, roles = [], roleLabels = [] } = await api('GET', `/events/${id}`);
+  const { event, fields, castells, mine, attendance, counts, guests = [], forecast, roles = [], roleLabels = [], plan_clashes: clashes = [] } = await api('GET', `/events/${id}`);
   const admin = isAdmin();
   let status = mine?.status ?? null;
   let escoleta = mine?.escoleta ?? null;
@@ -342,7 +343,7 @@ export async function pageEvent(id) {
           </div>
           ${castellCards || `<p class="muted small">${t('Encara no hi ha castells programats.')}</p>`}
         </div>`}
-        ${event.type === 'assaig' && can('staff') ? timelineCard(event, castells) : ''}
+        ${event.type === 'assaig' && can('staff') ? timelineCard(event, castells, clashes) : ''}
         ${admin ? rolesCard : ''}
         ${guestsCard}
         ${fieldsCard}
@@ -384,7 +385,7 @@ export async function pageEvent(id) {
   qs('#add-guest')?.addEventListener('click', () => guestModal(event.id, null, () => render({ keepScroll: true })));
   qsa('[data-edit-guest]').forEach((b) => (b.onclick = () => guestModal(event.id, guests.find((g) => String(g.id) === b.dataset.editGuest), () => render({ keepScroll: true }))));
   const reload = () => render({ keepScroll: true });
-  qs('#add-castell')?.addEventListener('click', () => castellModal(event.id));
+  qs('#add-castell')?.addEventListener('click', () => castellModal(event.id, null, null, event.type === 'assaig' ? { time: nextPlanTime({}, castells, event) } : null));
   bindTimeline(event, castells);
   qs('#add-walkin')?.addEventListener('click', () => walkinModal(event, attendance, reload));
   qs('#export-xlsx')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
@@ -392,16 +393,35 @@ export async function pageEvent(id) {
   bindAttendanceTable(event, attendance, fields, reload);
 }
 
+// Els castells es creen ocults: en mostrar la sessió, millor preguntar-ho que deixar-la buida sense voler.
+function revealModal(event, castells, reload) {
+  const pending = can('castells') ? castells.filter((c) => c.hidden).length : 0;
+  openModal(`${modalHead(t('Mostra la sessió als membres'))}
+    <form id="reveal-form">
+      ${pending ? `<label class="check"><input type="checkbox" name="castells" checked> ${tn(pending, 'Mostra també el {n} castell ocult', 'Mostra també els {n} castells ocults')}</label>` : ''}
+      <label class="check"><input type="checkbox" name="notify" ${event.announced_at ? '' : 'checked'}> ${t('Envia un avís al mòbil de tothom que els té activats')}</label>
+      ${event.announced_at ? `<p class="small muted" style="margin:6px 0 0">${t("D'aquesta sessió ja se n'ha enviat un.")}</p>` : ''}
+      <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${t('Mostra')}</button></div>
+    </form>`, (m) => {
+    qs('#reveal-form', m).onsubmit = async (e) => {
+      e.preventDefault();
+      const { castells: also, notify } = e.target.elements;
+      if (!(await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: false, castells: !!also?.checked, notify: notify.checked })))) return;
+      closeModal();
+      toast(notify.checked ? t('Ara els membres ja la veuen, i els hem avisat') : t('Ara els membres ja la veuen'));
+      reload();
+    };
+  });
+}
+
 // Editar la sessió és de la junta (i de l'administració): sense permís, aquests botons i formularis no hi són.
 function bindSessionEditing(event, reload, castells) {
   if (!can('sessions')) return;
   qs('#edit-event').onclick = () => eventModal(event);
   qs('#hide-event').onclick = async () => {
-    // Els castells es creen ocults: en mostrar la sessió, millor preguntar-ho que deixar-la buida sense voler.
-    const pending = event.hidden && can('castells') ? castells.filter((c) => c.hidden).length : 0;
-    const also = pending > 0 && confirm(tn(pending, 'Aquesta sessió té {n} castell ocult. Vols mostrar-lo també als membres?', 'Aquesta sessió té {n} castells ocults. Vols mostrar-los també als membres?'));
-    if (await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: !event.hidden, castells: also }))) {
-      toast(event.hidden ? t('Ara els membres ja la veuen') : t('Sessió oculta als membres'));
+    if (event.hidden) { revealModal(event, castells, reload); return; }
+    if (await attempt(() => api('PUT', `/events/${event.id}/hidden`, { hidden: true }))) {
+      toast(t('Sessió oculta als membres'));
       reload();
     }
   };

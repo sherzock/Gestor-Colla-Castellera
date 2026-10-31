@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, client, sessions } from './helpers.js';
-import { nextPlanTime, planLayout } from '../public/planning.js';
+import { dragStart, nextPlanTime, overlappingPairs, planLayout } from '../public/planning.js';
 
 const event = { start_time: '20:00', end_time: '22:00' };
 const c = (id, plan_time, plan_minutes, net = 0) => ({ id, position: id, plan_time, plan_minutes, net });
@@ -93,4 +93,38 @@ test('l\'horari: el posa la tècnica, el veu la junta i no arriba als membres', 
 
   const cleared = (await tecnica('PUT', `/castells/${id}`, { plan_time: null, plan_minutes: null })).d;
   assert.deepEqual([cleared.plan_time, cleared.plan_minutes], [null, null]);
+});
+
+test('horari: quins castells coincideixen, i on queda un castell en arrossegar-lo', () => {
+  const ids = (list) => overlappingPairs(list).map(([a, b]) => [a.id, b.id]);
+  // Tocar-se no és coincidir, i un castell sense hora no coincideix amb res.
+  assert.deepEqual(ids([c(1, '20:00', 20), c(2, '20:20', 20), c(3, '20:10', 5), c(4, null)]), [[1, 3]]);
+  assert.deepEqual(ids([c(1, '20:00'), c(2, '20:15')]), [[1, 2]], 'sense minuts, els de defecte');
+  const [from, to] = [20 * 60, 22 * 60];
+  assert.equal(dragStart(from + 30, 20, 12.4, from, to), from + 40, 'de 5 en 5');
+  assert.equal(dragStart(from + 30, 20, -500, from, to), from, 'no surt per dalt');
+  assert.equal(dragStart(from + 30, 20, 500, from, to), to - 20, 'ni per baix');
+});
+
+test('dues persones alhora: ho veu l\'administració, no els membres, i desapareix en separar els castells', async () => {
+  const A = s.admin;
+  const date = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+  const ev = (await A('POST', '/events', { hidden: false, type: 'assaig', title: 'Coincideixen', date, start_time: '20:00' })).d.id;
+  const mk = async (height, plan_time) => (await A('POST', `/events/${ev}/castells`, { hidden: false, width: 3, height, cordons: 2, plan_time })).d.id;
+  const [one, two, far] = [await mk(6, '20:00'), await mk(7, '20:10'), await mk(8, '21:00')];
+  const p = (await A('POST', '/people', { name: 'Coincideix Alhora' })).d;
+  const q = (await A('POST', '/people', { name: 'Nomes Una' })).d;
+  for (const id of [one, two, far]) await A('PUT', `/castells/${id}/positions/t1-0`, { person_id: p.id });
+  await A('PUT', `/castells/${one}/positions/t1-1`, { person_id: q.id });
+  const clashes = (await A('GET', `/events/${ev}`)).d.plan_clashes;
+  assert.equal(clashes.length, 1, 'el tercer es fa més tard');
+  assert.deepEqual([clashes[0].a, clashes[0].b], [one, two]);
+  assert.deepEqual(clashes[0].people.map((x) => x.name), [p.name], 'només qui és a tots dos');
+  assert.deepEqual(clashes[0].people[0].keys, { [one]: 't1-0', [two]: 't1-0' });
+  assert.equal((await A('GET', `/castells/${far}`)).d.plan_clashes.length, 0);
+  assert.equal((await A('GET', `/castells/${two}`)).d.plan_clashes.length, 1);
+  assert.equal((await s.member('GET', `/events/${ev}`)).d.plan_clashes, undefined);
+  assert.equal((await s.member('GET', `/castells/${one}`)).d.plan_clashes, undefined);
+  assert.equal((await A('PUT', `/castells/${two}`, { plan_time: '20:20' })).s, 200);
+  assert.deepEqual((await A('GET', `/events/${ev}`)).d.plan_clashes, []);
 });

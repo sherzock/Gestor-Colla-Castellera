@@ -1,6 +1,6 @@
 // Pinyes de la colla: editor de plantilles.
 import { TEMPLATE_KINDS, buildStructure, configFromName, setTemplates } from '../castell.js';
-import { MAX_BOXES, RING_KINDS, createEditor, layerToTemplate, maxRing } from '../editor.js';
+import { MAX_BOXES, RING_KINDS, copyLayers, createEditor, layerToTemplate, maxRing, templateSources } from '../editor.js';
 import { $app, api, attempt, can, config, esc, icon, qs, qsa, render, store, t, tn, toast } from './core.js';
 
 // ---------- Pinyes de la colla (plantilles) ----------
@@ -49,6 +49,7 @@ export async function pageTemplate(name) {
   const [list, { usage, castells, cordons }] = await Promise.all([api('GET', '/templates'), api('GET', `/templates/${name}/usage`)]);
   setTemplates(list);
   const saved = list.find((x) => x.name === name);
+  const sources = templateSources(name, list);
   const standardStructure = (cordons, taps = 0) => buildStructure({ ...config, cordons, taps }, { ignoreTemplate: true });
   const standard = (cordons, taps = 0) => Object.fromEntries(standardStructure(cordons, taps).layers.map((l) => [l.id, layerToTemplate(l)]));
   const ref = standardStructure(cordons);
@@ -99,6 +100,7 @@ export async function pageTemplate(name) {
           <button class="btn sm" id="tpl-ring-del">${t("Treu l'últim")}</button>
         </div>
         <button class="btn sm" id="tpl-standard">${t("Torna a l'estàndard")}</button>
+        ${sources.length ? `<label class="tpl-copy small">${t('Copia la pinya del')} <select id="tpl-copy"><option value="">…</option>${sources.map((x) => `<option>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
         ${config.width <= 4 ? `<button class="btn sm" id="tpl-standard-taps">${t('Estàndard amb taps')}</button>` : ''}
       </div>
     </div>
@@ -203,6 +205,13 @@ export async function pageTemplate(name) {
   // Es pot desfer, o sigui que no cal demanar confirmació. Es queda amb els cordons que hi ha dibuixats.
   qs('#tpl-standard').onclick = () => editor.replace(standard(maxRing(layers.pinya || []) || cordons));
   // Com a mínim tres cordons: el tap entra al segon i el tapa-tap al tercer.
+  const copy = qs('#tpl-copy');
+  if (copy) copy.onchange = () => {
+    if (!copy.value) return;
+    editor.replace(copyLayers(layers, sources.find((x) => x.name === copy.value).layers));
+    toast(t('Pinya copiada: revisa-la i desa-la'));
+    copy.value = '';
+  };
   const withTaps = qs('#tpl-standard-taps');
   if (withTaps) withTaps.onclick = () => editor.replace(standard(Math.max(3, maxRing(layers.pinya || []) || cordons), 1));
   const onKey = (e) => {

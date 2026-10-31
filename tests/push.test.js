@@ -97,6 +97,24 @@ test('recordatori: a qui no ha respost, un sol cop, i no a qui ja ha dit que sí
   for (const e of [ev, far, answered, deadline]) await s.admin('DELETE', `/events/${e.id}`);
 });
 
+test('en mostrar una sessió oculta es pot avisar: un sol cop i només si estava oculta', async () => {
+  const date = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+  const ev = (await s.admin('POST', '/events', { type: 'assaig', title: 'Assaig nou', date, hidden: true })).d.id;
+  await inbox('m1');
+  const put = (body) => s.admin('PUT', `/events/${ev}/hidden`, body);
+  await put({ hidden: false });
+  assert.deepEqual(await inbox('m1'), [], 'sense demanar-ho, no avisa');
+  await put({ hidden: true, notify: true });
+  assert.deepEqual(await inbox('m1'), [], 'amagar-la no avisa');
+  const shown = (await put({ hidden: false, notify: true })).d;
+  assert.ok(shown.announced_at);
+  const [msg] = await inbox('m1');
+  assert.equal(msg.title, 'Nova sessió: Assaig nou');
+  assert.equal(msg.url, `#/sessio/${ev}`);
+  await put({ hidden: false, notify: true });
+  assert.deepEqual(await inbox('m1'), [], 'ja estava visible');
+});
+
 test('qui surt o es dona de baixa deixa de rebre avisos', async () => {
   await s.member('POST', '/push/unsubscribe', { endpoint: endpoint('m1') });
   hits = [];

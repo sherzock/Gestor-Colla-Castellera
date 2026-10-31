@@ -1,6 +1,7 @@
 // Línia de temps d'un assaig: on cau cada castell. Sense res de pantalla, per poder-ho provar.
 export const PLAN_MINUTES = 20;
 const STEP = 30;
+const DRAG_STEP = 5;
 const toMin = (s) => (s ? Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)) : null);
 export const toTime = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
@@ -37,6 +38,21 @@ export function planLayout(castells, event) {
     blocks: place(timed),
     unscheduled: castells.filter((c) => !c.plan_time),
   };
+}
+
+// Parelles de castells que coincideixen en el temps (qui fa l'un no pot fer l'altre).
+export function overlappingPairs(castells) {
+  const timed = castells.filter((c) => c.plan_time).map((c) => {
+    const start = toMin(c.plan_time);
+    return { c, start, end: start + (c.plan_minutes || PLAN_MINUTES) };
+  });
+  return timed.flatMap((a, i) => timed.slice(i + 1).filter((b) => a.start < b.end && b.start < a.end).map((b) => [a.c, b.c]));
+}
+
+// On queda un castell en arrossegar-lo «delta» minuts: de 5 en 5 i sense sortir de la línia de temps.
+export function dragStart(start, minutes, delta, from, to) {
+  const snapped = Math.round((start + delta) / DRAG_STEP) * DRAG_STEP;
+  return Math.max(from, Math.min(snapped, Math.max(from, to - minutes)));
 }
 
 // Per defecte, a continuació de l'últim castell (o a l'inici de la sessió). Si s'ha de fer alhora, es canvia l'hora.

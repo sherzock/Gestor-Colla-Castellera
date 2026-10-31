@@ -3,7 +3,8 @@ import { RESULTS, WIDTHS, buildStructure, castellName, levelNames, levelRange, t
 import { api, attempt, closeModal, day, esc, fmt, formData, icon, modalHead, openModal, qs, render, resultLabel, t } from './core.js';
 
 // ---------- Formulari de castell ----------
-export function castellModal(eventId, castell, onLost) {
+// «plan»: a l'assaig, l'hora de l'horari ({ time }). Es pot deixar buida.
+export function castellModal(eventId, castell, onLost, plan = null) {
   const c = castell || { width: 3, height: 7, agulla: 0, folre: 0, manilles: 0, cordons: 4, gralles: 0, timbals: 0, result: 'previst', hidden: 1 };
   openModal(`${modalHead(castell ? t('Edita el castell') : t('Nou castell'))}
     <form id="castell-form">
@@ -45,6 +46,7 @@ export function castellModal(eventId, castell, onLost) {
       <div class="form-grid" style="margin-top:14px">
         <label class="field full">${t('Etiqueta (opcional)')}<input name="label" maxlength="60" value="${esc(c.label)}" placeholder="${t('1a ronda, prova de tronc…')}"></label>
         ${castell ? `<label class="field">${t('Resultat')}<select name="result">${Object.keys(RESULTS).map((v) => `<option value="${v}" ${c.result === v ? 'selected' : ''}>${resultLabel(v)}</option>`).join('')}</select></label>` : ''}
+        ${plan ? `<label class="field">${t("Hora a l'horari (opcional)")}<input name="plan_time" type="time" value="${esc(plan.time || '')}"></label>` : ''}
         <label class="field full">${t('Notes')}<textarea name="notes" maxlength="2000">${esc(c.notes)}</textarea></label>
         <label class="check full"><input type="checkbox" name="hidden" ${c.hidden ? 'checked' : ''}> ${icon.eyeOff} ${t('Ocult per als membres (el pots mostrar quan estigui a punt)')}</label>
       </div>
