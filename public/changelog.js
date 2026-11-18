@@ -11,6 +11,7 @@ export const CHANGELOG = [
       "Consentiment de la família per als menors de 14 anys, i avís de qui encara no el té.",
       "Ajuda dins de l'app, llista de primers passos per a l'administració i aquesta pàgina de novetats.",
       "Persones en dos castells alhora, horari que s'arrossega, hora en crear el castell i avís en mostrar una sessió.",
+      "Folre, manilles i puntals més fidels: el folre amb dos cordons; les manilles amb mans, vents i laterals; els puntals al darrere i de dau, sense crosses.",
       "Pinyes: pestanya pròpia per a la tècnica, copiar la d'un altre castell i taps i tapa-taps a l'estàndard.",
     ],
     es: [
@@ -21,6 +22,7 @@ export const CHANGELOG = [
       'Consentimiento de la familia para los menores de 14 años, y aviso de quién aún no lo tiene.',
       'Ayuda dentro de la app, lista de primeros pasos para la administración y esta página de novedades.',
       'Personas en dos castells a la vez, horario que se arrastra, hora al crear el castell y aviso al mostrar una sesión.',
+      'Folre, manilles y puntals más fieles: el folre con dos cordones; las manilles con mans, vents y laterales; los puntals detrás y de dau, sin crosses.',
       'Pinyes: pestaña propia para la técnica, copiar la de otro castell y taps y tapa-taps en la estándar.',
     ],
     en: [
@@ -31,6 +33,7 @@ export const CHANGELOG = [
       'Family consent for children under 14, and a warning for those still missing it.',
       'In-app help, a first-steps checklist for admins and this "What\'s new" page.',
       'People in two castells at once, draggable schedule, time when creating a castell and a notification when showing a session.',
+      "More faithful folre, manilles and puntals: the folre with two rings; manilles with mans, vents and laterals; puntals behind and as daus, without crosses.",
       "Pinyes: their own tab for the technical team, copy another castell's, and taps and tapa-taps in the standard one.",
     ],
   },

@@ -138,7 +138,10 @@ function pinyaPlan(width) {
   return { baixos, gaps: [[2, 4], [5, 7], [8, 1]] };
 }
 
-function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, taps, add }) {
+// Opcions de cada capa: «rings» cordons de mans i vents, «lateralRings» cordons amb laterals (per defecte, tots),
+// «crosses» (dues per columna del tronc), «noMans» (sense línies de mans) i «roles» per canviar el nom d'una
+// posició (els puntals).
+function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, taps, add, crosses = true, lateralRings = rings, roles = {}, noMans = false }) {
   const items = [];
   const placed = [];
   // «cat» és la categoria comparable entre castells diferents (per a l'historial).
@@ -173,10 +176,10 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
   if (centerKey) put(centerKey, null, 'base', { x: 0, y: 0, w: BOX_W, h: BOX_H, rot: 0 }, {}, true);
   plan.baixos.forEach((b, i) => put(baseKey(i), null, 'base', across(b, b.dir, 0), {}, true));
   plan.baixos.forEach((b, i) => {
-    put(`${prefix}c${i}`, 'Contrafort', 'contrafort', across(b, b.dir, STEP));
+    put(`${prefix}c${i}`, roles.contrafort || 'Contrafort', 'contrafort', across(b, b.dir, STEP));
     // La torre té una sola agulla; el pilar la té al costat contrari del contrafort.
     if (agulles && (width !== 2 || i === 0)) maybe(across(b, b.dir, -STEP), (box) => put(`${prefix}a${i}`, 'Agulla', 'agulla', box));
-    if (!plan.pilar) {
+    if (crosses && !plan.pilar) {
       const off = BOX_W / 2 + BOX_H / 2 + 2;
       for (const [side, o] of [['e', off], ['d', -off]]) {
         const p = across(b, b.dir, STEP / 2, o);
@@ -214,7 +217,7 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
   };
   // Cordó a cordó, perquè cada cordó ocupi el lloc més proper al centre que li quedi.
   for (let n = 1; n <= rings; n++) {
-    for (const arm of arms) {
+    if (!noMans) for (const arm of arms) {
       const box = step(`m${arm.key}`, arm.b, arm.dir, 0, 2 * STEP);
       if (box) put(`${prefix}m${n}-${arm.key}`, `${ordinal(n, true)} mans${arm.mans}`, 'mans', box, { ring: n, cat: `${ordinal(n, true)} mans` });
     }
@@ -224,9 +227,9 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
       const A = plan.baixos[a], B = plan.baixos[b];
       const dir = g.dir ?? Math.atan2(Math.sin(Math.atan2(A.y, A.x)) + Math.sin(Math.atan2(B.y, B.x)), Math.cos(Math.atan2(A.y, A.x)) + Math.cos(Math.atan2(B.y, B.x)));
       const box = step(`v${gi}`, { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 }, dir, 0, STEP / 2);
-      if (box) put(`${prefix}v${n}-${gi}`, `${ordinal(n, false)} vent`, 'vent', box, { ring: n });
+      if (box) put(`${prefix}v${n}-${gi}`, roles.vent || `${ordinal(n, false)} vent`, 'vent', box, { ring: n });
     });
-    for (const arm of arms) {
+    if (n <= lateralRings) for (const arm of arms) {
       for (const [side, o] of [['e', SIDE], ['d', -SIDE]]) {
         const apart = taps && n >= 2 ? Math.sign(o) * (BOX_H + 4) : 0;
         const box = step(`l${arm.key}${side}`, arm.b, arm.dir, o + apart, STEP, simple ? Infinity : 2 * STEP);
@@ -357,17 +360,24 @@ export function buildStructure(c, { ignoreTemplate = false } = {}) {
     layers.push(layer({ id: 'pinya', label: 'Pinya', width, prefix: 'p', baseKey: (i) => `t${from}-${i}`, centerKey: center(from),
       rings: Number(c.cordons ?? 3), maxRing: Number(c.cordons ?? 3), vents: true, agulles: true, taps: !!c.taps, add }));
   }
+  // Folre: com una pinya més reduïda i menys compacta (sense agulles ni taps): contrafort i crosses a cada segon,
+  // i dos cordons de mans, vents i laterals.
   if (folre && troncLevels >= 2) {
     layers.push(layer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),
-      rings: 1, vents: true, agulles: false, add }));
+      rings: 2, vents: true, agulles: false, add }));
   }
+  // Manilles: contrafort i crosses a cada terç, primeres i segones mans, primer i segon vent, i un sol cordó de
+  // laterals. Mai no hi va agulla.
   if (folre && c.manilles && troncLevels >= 3) {
     layers.push(layer({ id: 'manilles', label: 'Manilles', width, prefix: 'm', baseKey: (i) => `t3-${i}`,
-      rings: 0, vents: false, agulles: false, add }));
+      rings: 2, lateralRings: 1, vents: true, agulles: false, add }));
   }
+  // Puntals: molt poca gent al pis de quarts: un puntal al darrere de cada quart i un entre quart i quart (el dau),
+  // que l'aguanten de les cames. Sense crosses ni mans.
   if (folre && c.manilles && c.puntals && troncLevels >= 4) {
     layers.push(layer({ id: 'puntals', label: 'Puntals', width, prefix: 'u', baseKey: (i) => `t4-${i}`,
-      rings: 0, vents: false, agulles: false, add }));
+      rings: 1, vents: true, agulles: false, crosses: false, lateralRings: 0, add,
+      roles: { contrafort: 'Puntal', vent: 'Dau' }, noMans: true }));
   }
   // Si el pis del tronc que envolta una capa no es fa, la seva caixa central queda buida i sense persona.
   const names = levelNames(c);
