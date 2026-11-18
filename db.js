@@ -371,3 +371,37 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_positions_guest ON castell_positions(gue
 CREATE INDEX IF NOT EXISTS idx_guests_event ON event_guests(event_id, companion_of);
 CREATE INDEX IF NOT EXISTS idx_fields_event ON event_fields(event_id);
 CREATE INDEX IF NOT EXISTS idx_auth_tokens_person ON auth_tokens(person_id);`);
+
+// Errors de l'app (del servidor i dels mòbils), per saber que alguna cosa falla abans que algú es queixi. Sense
+// res de qui ho feia: només el missatge, on ha passat i quants cops.
+db.exec(`CREATE TABLE IF NOT EXISTS error_log (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  place TEXT NOT NULL DEFAULT '',
+  detail TEXT,
+  count INTEGER NOT NULL DEFAULT 1,
+  first_at TEXT NOT NULL,
+  last_at TEXT NOT NULL,
+  UNIQUE (kind, message, place)
+)`);
+
+// Registre de canvis: què ha fet cada compte d'administració (no els membres quan responen).
+db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  admin_id INTEGER,
+  account TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at)`);
+
+// Segon factor per entrar als comptes d'administració (codis d'una app d'autenticació).
+addColumn('admins', 'totp_secret', 'TEXT');
+addColumn('admins', 'totp_pending', 'TEXT');
+addColumn('admins', 'totp_last', 'INTEGER');
+addColumn('admins', 'recovery_codes', 'TEXT');
+
+// Menors de 14 anys: quan es va rebre el consentiment del pare, mare o tutor/a (data).
+addColumn('people', 'guardian_consent', 'TEXT');

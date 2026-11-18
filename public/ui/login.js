@@ -100,6 +100,8 @@ export async function pageAdminLogin() {
       <p class="muted" style="text-align:center;margin:0">${t("Entra amb el teu usuari d'administrador/a")}</p>
       <label class="field">${t('Usuari')}<input name="username" autocomplete="username" autocapitalize="none" required></label>
       <label class="field">${t('Contrasenya')}<input name="password" type="password" autocomplete="current-password" required></label>
+      <label class="field hidden" id="code-wrap">${t('Codi de verificació')}<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="12">
+        <span class="small muted">${t("Els 6 números de l'app d'autenticació, o un dels codis de recuperació.")}</span></label>
       <div class="error" id="login-error"></div>
       <button class="btn primary" style="width:100%">${t('Entra')}</button>
       <p class="small muted" style="text-align:center;margin:0">${t("El compte d'administració només serveix per editar. Per dir si vens a les sessions, entra com a membre amb el teu nom.")}</p>
@@ -114,6 +116,13 @@ export async function pageAdminLogin() {
       toast(t('Mode administració'));
     } catch (err) {
       qs('#login-error').textContent = err.message;
+      // Contrasenya bona i compte amb segon factor: ara cal el codi.
+      if (err.data?.needsCode) {
+        const code = e.target.elements.code;
+        qs('#code-wrap').classList.remove('hidden');
+        code.required = true;
+        code.focus();
+      }
     }
   };
 }

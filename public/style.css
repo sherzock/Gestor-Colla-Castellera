@@ -7,11 +7,11 @@
   --surface-2: #f0eeeb;
   --ink: #1d1b19;
   --ink-2: #5d5853;
-  --ink-3: #8c867f;
+  --ink-3: #6e6962;
   --line: #e2ded9;
   --ok: #1f7a4d;
   --ok-soft: #e3f3ea;
-  --warn: #9a6200;
+  --warn: #8a5800;
   --warn-soft: #fbf0d9;
   --bad: #b3261e;
   --bad-soft: #fbe6e4;
@@ -43,8 +43,8 @@
 /* Mode fosc: automàtic segons el sistema, o forçat des dels ajustos (data-theme). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --accent: #e0596a; --accent-ink: #1a0b0d; --accent-soft: #3a1c21;
-    --bg: #151413; --surface: #1f1d1b; --surface-2: #2a2725; --ink: #f1eeea; --ink-2: #bdb6ae; --ink-3: #8c867f; --line: #36322f;
+    --accent: #e9707f; --accent-ink: #1a0b0d; --accent-soft: #3a1c21;
+    --bg: #151413; --surface: #1f1d1b; --surface-2: #2a2725; --ink: #f1eeea; --ink-2: #bdb6ae; --ink-3: #a39d95; --line: #36322f;
     --ok: #5cc48d; --ok-soft: #173426; --warn: #e3a948; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1a17;
     --c-ok: #5cc48d; --c-warn: #e3a948; --c-bad: #f08a80;
     --assaig: #7aa7e0; --diada: #e0596a; --esdeveniment: #b39ae6; --musics: #e3b341;
@@ -54,8 +54,8 @@
   }
 }
 :root[data-theme="dark"] {
-    --accent: #e0596a; --accent-ink: #1a0b0d; --accent-soft: #3a1c21;
-    --bg: #151413; --surface: #1f1d1b; --surface-2: #2a2725; --ink: #f1eeea; --ink-2: #bdb6ae; --ink-3: #8c867f; --line: #36322f;
+    --accent: #e9707f; --accent-ink: #1a0b0d; --accent-soft: #3a1c21;
+    --bg: #151413; --surface: #1f1d1b; --surface-2: #2a2725; --ink: #f1eeea; --ink-2: #bdb6ae; --ink-3: #a39d95; --line: #36322f;
     --ok: #5cc48d; --ok-soft: #173426; --warn: #e3a948; --warn-soft: #3a2c12; --bad: #f08a80; --bad-soft: #3d1a17;
     --c-ok: #5cc48d; --c-warn: #e3a948; --c-bad: #f08a80;
     --assaig: #7aa7e0; --diada: #e0596a; --esdeveniment: #b39ae6; --musics: #e3b341;
@@ -449,6 +449,7 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .me-chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me-chip svg { width: 16px; height: 16px; flex: none; color: var(--ink-3); }
 .me-chip .badge { font-size: .62rem; padding: 1px 6px; }
+.badge.warn-badge { background: var(--warn-soft); color: var(--warn); }
 @media (max-width: 799px) { .me-chip { margin-left: auto; } }
 /* El tram més just: el botó del compte es queda només amb la icona. */
 @media (min-width: 800px) and (max-width: 899px) { .me-chip .nm { display: none; } }
@@ -932,3 +933,27 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .forecast-need.ok strong { color: var(--ok); }
 .forecast-need.warn strong { color: var(--warn); }
 .forecast-need.bad strong { color: var(--bad); }
+
+/* ---------- Comptes: segon factor, primers passos, errors i registre ---------- */
+.badge.ok-badge { background: var(--ok-soft); color: var(--ok); }
+.tfa-secret { display: block; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 1.05rem; letter-spacing: .06em; word-break: break-all; user-select: all; }
+.tfa-codes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; }
+.tfa-codes code { display: block; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); text-align: center; }
+.setup-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.setup-list li { display: flex; gap: 10px; align-items: flex-start; }
+.setup-list li > svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--ok); }
+.setup-list li.done strong { font-weight: 500; color: var(--ink-2); }
+.todo-dot { flex: none; width: 12px; height: 12px; margin: 5px 3px 0; border-radius: 50%; border: 2px solid var(--c-warn); }
+.error-list, .audit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.error-list li { display: grid; gap: 2px; }
+.err-msg { color: var(--bad); overflow-wrap: anywhere; }
+.audit-list li { display: grid; grid-template-columns: 9.5em 1fr; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.audit-list li.failed { color: var(--bad); }
+.audit-list li:last-child { border-bottom: 0; }
+@media (max-width: 560px) { .audit-list li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* ---------- Ajuda i novetats ---------- */
+.help-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.help-section { scroll-margin-top: 80px; }
+.help-section p, .help-section li { line-height: 1.55; }
+.help-section code { padding: 1px 5px; border-radius: 4px; background: var(--surface-2); font-size: .88em; overflow-wrap: anywhere; }

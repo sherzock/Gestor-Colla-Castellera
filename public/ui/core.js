@@ -53,7 +53,7 @@ export async function api(method, url, body) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new Error(t('Sense connexió. Torna-ho a provar quan en tinguis.'));
+    throw Object.assign(new Error(t('Sense connexió. Torna-ho a provar quan en tinguis.')), { fromApi: true });
   }
   if (method === 'GET') showOffline(res.headers.get('X-Saved-At'));
   if (res.ok && AUTH_URLS.includes(url)) { clearOfflineData(); window.dispatchEvent(new Event('colla:auth')); }
@@ -62,9 +62,10 @@ export async function api(method, url, body) {
     clearOfflineData();
     me = null;
     location.hash = '#/login';
-    throw new Error(t('Cal iniciar sessió'));
+    throw Object.assign(new Error(t('Cal iniciar sessió')), { status: 401, fromApi: true });
   }
-  if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
+  // «data» porta els detalls que alguna pantalla necessita (p. ex. si l'entrada demana el codi del segon factor).
+  if (!res.ok) throw Object.assign(new Error(data?.error || `Error ${res.status}`), { status: res.status, data, fromApi: true });
   return data;
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "appinyat",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Appinya't: assistència, sessions i castells per a colles castelleres",
@@ -9,6 +9,8 @@
     "start": "node server.js",
     "seed": "node seed.js",
     "demo": "node seed.js && DEMO=1 node server.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "restore": "node restore.js",
+    "reset-password": "node reset-password.js"
   }
 }

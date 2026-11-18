@@ -12,6 +12,8 @@ import { buildStructure, castellName, configFromName, levelNames, levelRange, po
 import { translate } from './public/i18n.js';
 import { overlappingPairs } from './public/planning.js';
 import { sendPush, validEndpoint, vapidKeys } from './push.js';
+import { encryptBackup, offsiteConfig, uploadOffsite } from './backup.js';
+import { newRecoveryCodes, newSecret, normalizeRecovery, otpauthUrl, verifyCode } from './totp.js';
 
 // Les dates i hores de les sessions són hora d'aquí, encara que el servidor sigui en un altre lloc.
 process.env.TZ ||= 'Europe/Madrid';
@@ -21,6 +23,7 @@ const PUBLIC_DIR = path.join(import.meta.dirname, 'public');
 const COLLA_CODE = process.env.COLLA_CODE || '';
 // Mode demostració: la pantalla d'entrada explica com provar l'app (les dades es tornen a crear a cada arrencada amb «npm run demo»).
 const DEMO = process.env.DEMO === '1';
+const VERSION = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf8')).version;
 // Adreça (o nom) a qui es pot escriure per les dades personals: surt a la nota de privadesa.
 const PRIVACY_CONTACT = String(process.env.PRIVACY_CONTACT || '').trim().slice(0, 200);
 // Només darrere d'un proxy (Render el posa sol) es pot fer cas de X-Forwarded-For; si no, el client se la pot inventar.
@@ -45,10 +48,11 @@ setInterval(purgeTokens, 6 * 3600 * 1000).unref();
 
 // ---------- Utilitats ----------
 // Els missatges d'error es tradueixen a l'idioma de l'usuari (capçalera X-Lang).
+// «extra»: dades que acompanyen el missatge d'error (p. ex. que l'entrada demana el codi del segon factor).
 class HttpError extends Error {
-  constructor(status, message, params) { super(message); this.status = status; this.params = params; }
+  constructor(status, message, params, extra) { super(message); this.status = status; this.params = params; this.extra = extra; }
 }
-const fail = (status, message, params) => { throw new HttpError(status, message, params); };
+const fail = (status, message, params, extra) => { throw new HttpError(status, message, params, extra); };
 
 const EVENT_TYPES = ['assaig', 'diada', 'esdeveniment', 'musics'];
 const INSTRUMENTS = ['gralla', 'timbal'];
@@ -73,7 +77,7 @@ const FAIL_CAUSES = ['obert', 'decantat', 'cedit', 'altre'];
 // El que només veuen els administradors d'un castell: les notes i on va fallar podrien assenyalar algú.
 const ADMIN_ONLY_CASTELL = { tech_notes: undefined, fail_level: undefined, fail_cause: undefined, plan_time: undefined, plan_minutes: undefined };
 const NUMERIC_PERSON_FIELDS = ['height_cm', 'shoulder_height_cm', 'shoulder_width_cm', 'weight_kg'];
-const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', ...NUMERIC_PERSON_FIELDS, 'notes', 'instrument', 'section'];
+const PROFILE_FIELDS = ['name', 'alias', 'email', 'phone', 'birthdate', 'guardian_consent', ...NUMERIC_PERSON_FIELDS, 'notes', 'instrument', 'section'];
 
 function str(value, max = 500) {
   if (value === undefined || value === null) return null;
@@ -124,6 +128,7 @@ function atMost(max, message, sql, ...args) {
 const pad = (n) => String(n).padStart(2, '0');
 const localStamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const nowLocal = () => localStamp(new Date());
+const nowUtc = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 // Es pot respondre fins a la data límit o, si la sessió no en té, fins al mateix dia de la sessió.
 const rsvpOpen = (e) => (e.rsvp_until ? nowLocal() < e.rsvp_until : nowLocal().slice(0, 10) <= e.date);
 
@@ -140,7 +145,8 @@ function personRow(p) {
 }
 
 // Dades de la fitxa que només veu i edita qui les necessita: el contacte, la junta; les mides i les notes, la tècnica.
-const CONTACT_FIELDS = ['email', 'phone'];
+// El consentiment dels menors el gestiona la junta, com el contacte (és qui parla amb les famílies).
+const CONTACT_FIELDS = ['email', 'phone', 'guardian_consent'];
 const MEASURE_FIELDS = [...NUMERIC_PERSON_FIELDS, 'notes'];
 const hiddenFieldsFor = (user) => [...(can(user, 'contact') ? [] : CONTACT_FIELDS), ...(can(user, 'measures') ? [] : MEASURE_FIELDS)];
 const editableFields = (user) => PROFILE_FIELDS.filter((f) => !hiddenFieldsFor(user).includes(f));
@@ -162,9 +168,9 @@ function pickPersonFields(body, fields) {
 }
 function pickPersonField(body, f, out) {
   if (NUMERIC_PERSON_FIELDS.includes(f)) out[f] = inRange(body[f], ...MEASURES[f]);
-  else if (f === 'birthdate') {
+  else if (f === 'birthdate' || f === 'guardian_consent') {
     const v = str(body[f], 10);
-    if (v && (!isDate(v) || v < '1900-01-01' || v > nowLocal().slice(0, 10))) fail(400, 'Data de naixement no vàlida');
+    if (v && (!isDate(v) || v < '1900-01-01' || v > nowLocal().slice(0, 10))) fail(400, f === 'birthdate' ? 'Data de naixement no vàlida' : 'Data no vàlida');
     out[f] = v;
   } else if (f === 'instrument') {
     if (body.instrument && !INSTRUMENTS.includes(body.instrument)) fail(400, 'Instrument no vàlid');
@@ -294,7 +300,7 @@ const routes = [];
 function route(method, pattern, handler, auth = 'user') {
   const keys = [];
   const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; }) + '$');
-  routes.push({ method, re, keys, handler, auth });
+  routes.push({ method, pattern, re, keys, handler, auth });
 }
 
 function cookies(req) {
@@ -321,7 +327,7 @@ function adminSession(token) {
   const row = db.prepare(`SELECT a.* FROM admin_tokens t JOIN admins a ON a.id = t.admin_id
     WHERE t.token = ? AND t.expires_at > ?`).get(tokenHash, Date.now());
   // Un compte d'administració no és cap persona de la colla: no té assistència ni posicions (id null).
-  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', roles: row.roles.split(','), mode: 'admin', tokenHash } : null;
+  return row ? { id: null, admin_id: row.id, name: row.name, username: row.username, password_hash: row.password_hash, role: 'admin', roles: row.roles.split(','), mode: 'admin', tokenHash, twoFactor: !!row.totp_secret } : null;
 }
 
 // Crea una sessió (o una marca de mòbil conegut) i en torna el valor per a la cookie.
@@ -435,11 +441,62 @@ function newPassword(password, username) {
 // latestNews: quan es va publicar l'últim missatge de l'altaveu (per marcar la pestanya si n'hi ha de nous).
 const latestNews = () => db.prepare('SELECT MAX(created_at) AS at FROM announcements').get().at;
 const meResponse = (user) => (user.mode === 'admin'
-  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', roles: user.roles, can: capsOf(user), personFields: editableFields(user), mode: 'admin', sessions: user.sessions, latestNews: latestNews() }
+  ? { id: null, admin_id: user.admin_id, name: user.name, username: user.username, role: 'admin', roles: user.roles, can: capsOf(user), personFields: editableFields(user), mode: 'admin', twoFactor: !!user.twoFactor, sessions: user.sessions, latestNews: latestNews() }
   : { ...publicPerson(user), alias: user.alias, instrument: user.instrument, section: user.section, role: 'member', mode: 'member', sessions: user.sessions, latestNews: latestNews() });
 
 // ---------- Rutes: autenticació i perfil ----------
-route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO, privacyContact: PRIVACY_CONTACT }), 'public');
+route('GET', '/api/config', () => ({ collaName: COLLA_NAME, needsCode: !!COLLA_CODE, demo: DEMO, privacyContact: PRIVACY_CONTACT, version: VERSION }), 'public');
+
+// Per als serveis que vigilen si l'app respon (UptimeRobot, Better Stack…): 200 si la base de dades contesta.
+route('GET', '/api/health', ({ res }) => {
+  try { db.prepare('SELECT 1').get(); } catch { res.writeHead(503, { 'Content-Type': 'application/json' }).end('{"ok":false}'); return undefined; }
+  return { ok: true, version: VERSION };
+}, 'public');
+
+// ---------- Errors ----------
+// Es guarden agrupats (mateix missatge al mateix lloc = una línia amb un comptador) i, si hi ha ALERT_WEBHOOK, el primer
+// cop que surt un error nou s'avisa (com a molt un avís cada 10 minuts). El text va en pla: va bé amb ntfy.sh.
+const ERRORS_KEEP = 200;
+const ALERT_WEBHOOK = process.env.ALERT_WEBHOOK || '';
+const ALERT_EVERY_MS = 10 * 60 * 1000;
+let lastAlert = 0;
+// Els números dels camins (/api/castells/12) no diuen res i farien una línia per a cada castell.
+const placeOf = (p) => String(p || '').replace(/\/\d+(?=\/|$)/g, '/:id').slice(0, 120);
+function logError(kind, message, detail = null, place = '') {
+  try {
+    const msg = String(message || 'Error').slice(0, 300);
+    const at = nowUtc();
+    const known = db.prepare('SELECT id FROM error_log WHERE kind = ? AND message = ? AND place = ?').get(kind, msg, placeOf(place));
+    if (known) db.prepare('UPDATE error_log SET count = count + 1, last_at = ?, detail = COALESCE(?, detail) WHERE id = ?').run(at, detail ? String(detail).slice(0, 2000) : null, known.id);
+    else {
+      db.prepare('INSERT INTO error_log (kind, message, place, detail, first_at, last_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(kind, msg, placeOf(place), detail ? String(detail).slice(0, 2000) : null, at, at);
+      db.prepare(`DELETE FROM error_log WHERE id NOT IN (SELECT id FROM error_log ORDER BY last_at DESC LIMIT ${ERRORS_KEEP})`).run();
+      sendAlert(`${kind === 'client' ? 'Error en un mòbil' : 'Error al servidor'}: ${msg}${place ? ` (${placeOf(place)})` : ''}`);
+    }
+  } catch (err) { console.error('No s\'ha pogut desar l\'error:', err.message); }
+}
+function sendAlert(text) {
+  if (!ALERT_WEBHOOK || Date.now() - lastAlert < ALERT_EVERY_MS) return;
+  lastAlert = Date.now();
+  fetch(ALERT_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8', Title: `Appinya't · ${COLLA_NAME}`.replace(/[^\x20-\x7e]/g, '') },
+    body: `${COLLA_NAME}: ${text}`, signal: AbortSignal.timeout(10_000) }).catch((err) => console.error('No s\'ha pogut avisar:', err.message));
+}
+process.on('unhandledRejection', (err) => { console.error(err); logError('server', err?.message || String(err), err?.stack); });
+
+// Errors que es veuen als mòbils (els envia l'app tota sola). Sense identificar ningú, i amb límit per adreça.
+const clientErrorsByIp = new RateLimit(30, 15 * 60 * 1000);
+route('POST', '/api/client-errors', ({ body, req }) => {
+  const ip = clientIp(req);
+  if (clientErrorsByIp.blocked(ip)) return { ok: true };
+  clientErrorsByIp.add(ip);
+  if (typeof body.message !== 'string' || !body.message.trim()) fail(400, 'Dades no vàlides');
+  logError('client', body.message, typeof body.stack === 'string' ? body.stack : null, typeof body.place === 'string' ? body.place.replace(/[^\w/#:-]/g, '') : '');
+  return { ok: true };
+}, 'public');
+
+route('GET', '/api/errors', () => db.prepare('SELECT * FROM error_log ORDER BY last_at DESC').all(), 'admin');
+route('DELETE', '/api/errors', () => { db.prepare('DELETE FROM error_log').run(); return { ok: true }; }, 'admin');
 
 // ---------- Còpies de seguretat ----------
 // Una còpia diària de la base de dades a BACKUP_DIR (es guarden les últimes BACKUP_KEEP), i els administradors en
@@ -470,16 +527,43 @@ function dailyBackup() {
     for (const old of backupList().slice(0, -BACKUP_KEEP)) fs.rmSync(path.join(BACKUP_DIR, old));
   } catch (err) {
     console.error('No s\'ha pogut fer la còpia de seguretat:', err.message);
+    logError('server', `Còpia de seguretat: ${err.message}`);
   }
+}
+
+// Còpia fora del servidor: l'última còpia diària, xifrada, un cop al dia. Si falla, es torna a provar cada hora.
+// Sense BACKUP_KEY no s'envia res: les dades personals no surten mai del servidor sense xifrar.
+const OFFSITE = offsiteConfig();
+const offsiteState = () => JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'backup_offsite'").get()?.value || '{}');
+const setOffsiteState = (v) => db.prepare("INSERT INTO settings (key, value) VALUES ('backup_offsite', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+  .run(JSON.stringify(v));
+let offsiteRunning = null;
+function offsiteBackup() {
+  const latest = backupList().at(-1);
+  if (!OFFSITE || !latest || offsiteRunning || offsiteState().file === latest) return offsiteRunning;
+  offsiteRunning = (async () => {
+    try {
+      if (!OFFSITE.passphrase || OFFSITE.passphrase.length < 12) throw new Error('Falta BACKUP_KEY (almenys 12 caràcters) per xifrar-la');
+      await uploadOffsite(OFFSITE, `${latest}.enc`, encryptBackup(fs.readFileSync(path.join(BACKUP_DIR, latest)), OFFSITE.passphrase));
+      setOffsiteState({ file: latest, at: nowUtc() });
+    } catch (err) {
+      setOffsiteState({ ...offsiteState(), error: err.message, error_at: nowUtc() });
+      logError('server', `Còpia fora del servidor: ${err.message}`);
+    } finally { offsiteRunning = null; }
+  })();
+  return offsiteRunning;
 }
 if (BACKUP_AUTO) {
   dailyBackup();
-  setInterval(dailyBackup, 60 * 60 * 1000).unref();
+  offsiteBackup();
+  setInterval(() => { dailyBackup(); offsiteBackup(); }, Number(process.env.BACKUP_EVERY_MS) || 60 * 60 * 1000).unref();
 }
 
 route('GET', '/api/backup/status', () => {
   const list = backupList();
-  return { auto: BACKUP_AUTO, keep: BACKUP_KEEP, count: list.length, last: list.at(-1)?.slice(6, 16) ?? null };
+  const off = offsiteState();
+  return { auto: BACKUP_AUTO, keep: BACKUP_KEEP, count: list.length, last: list.at(-1)?.slice(6, 16) ?? null,
+    offsite: OFFSITE ? { last: off.file?.slice(6, 16) ?? null, error: off.error_at > (off.at || '') ? off.error : null } : null };
 }, 'admin');
 
 route('GET', '/api/backup', ({ res }) => {
@@ -537,7 +621,20 @@ route('POST', '/api/identify', ({ body, req, res }) => {
 route('POST', '/api/login', async ({ body, req, res }) => {
   const username = String(body.username || '').trim().toLowerCase().slice(0, 60);
   const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username);
-  if (!(await checkPassword(req, username, admin, body.password))) fail(401, 'Usuari o contrasenya incorrectes');
+  if (!(await checkPassword(req, username, admin, body.password))) {
+    if (admin) audit({ admin_id: admin.id, name: admin.name }, 'login-failed');
+    fail(401, 'Usuari o contrasenya incorrectes');
+  }
+  if (admin.totp_secret) {
+    if (!String(body.code || '').trim()) fail(401, 'Escriu el codi de verificació', undefined, { needsCode: true });
+    if (!useSecondFactor(admin, body.code)) {
+      loginByIp.add(clientIp(req));
+      loginByUser.add(username);
+      audit({ admin_id: admin.id, name: admin.name }, 'login-failed');
+      fail(401, 'El codi de verificació no és correcte', undefined, { needsCode: true });
+    }
+  }
+  audit({ admin_id: admin.id, name: admin.name }, 'login');
   const old = cookies(req).atoken;
   if (old) db.prepare('DELETE FROM admin_tokens WHERE token = ?').run(hashToken(old));
   const token = newToken('admin_tokens', 'admin_id', admin.id, TOKEN_TTL_MS);
@@ -588,8 +685,113 @@ route('PUT', '/api/me', async ({ user, body, req }) => {
   return { ok: true, name };
 }, 'staff');
 
+// ---------- Segon factor ----------
+// El codi de l'app d'autenticació (que no s'hagi fet servir abans) o un dels codis de recuperació, que només valen un cop.
+function useSecondFactor(admin, code) {
+  const step = verifyCode(admin.totp_secret, code, admin.totp_last ?? -1);
+  if (step !== null) {
+    db.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').run(step, admin.id);
+    return true;
+  }
+  const hashes = JSON.parse(admin.recovery_codes || '[]');
+  const i = hashes.indexOf(hashToken(normalizeRecovery(code)));
+  if (i < 0 || !normalizeRecovery(code)) return false;
+  hashes.splice(i, 1);
+  db.prepare('UPDATE admins SET recovery_codes = ? WHERE id = ?').run(JSON.stringify(hashes), admin.id);
+  return true;
+}
+const NO_SECOND_FACTOR = { totp_secret: null, totp_pending: null, totp_last: null, recovery_codes: null };
+const adminOf = (user) => db.prepare('SELECT * FROM admins WHERE id = ?').get(user.admin_id);
+
+// Primer es prepara (amb la contrasenya) i només queda activat quan el mòbil ja genera bé els codis.
+route('POST', '/api/me/2fa/setup', async ({ user, body, req }) => {
+  noDemoAccounts();
+  await confirmPassword(req, user, body.currentPassword);
+  const secret = newSecret();
+  db.prepare('UPDATE admins SET totp_pending = ? WHERE id = ?').run(secret, user.admin_id);
+  return { secret, url: otpauthUrl(secret, user.username, `Appinya't ${COLLA_NAME}`) };
+}, 'staff');
+
+route('POST', '/api/me/2fa/enable', ({ user, body }) => {
+  noDemoAccounts();
+  const admin = adminOf(user);
+  if (!admin.totp_pending) fail(400, 'Primer cal preparar el segon factor');
+  const step = verifyCode(admin.totp_pending, body.code);
+  if (step === null) fail(400, 'El codi de verificació no és correcte');
+  const codes = newRecoveryCodes();
+  updateRow('admins', admin.id, { totp_secret: admin.totp_pending, totp_pending: null, totp_last: step,
+    recovery_codes: JSON.stringify(codes.map((c) => hashToken(normalizeRecovery(c)))) });
+  return { recoveryCodes: codes };
+}, 'staff');
+
+route('POST', '/api/me/2fa/disable', async ({ user, body, req }) => {
+  noDemoAccounts();
+  await confirmPassword(req, user, body.currentPassword);
+  const admin = adminOf(user);
+  if (admin.totp_secret && !useSecondFactor(admin, body.code)) fail(400, 'El codi de verificació no és correcte');
+  updateRow('admins', admin.id, NO_SECOND_FACTOR);
+  return { ok: true };
+}, 'staff');
+
+// ---------- Registre de canvis ----------
+// Què ha fet cada compte d'administració, amb una etiqueta llegible de l'element (la sessió, el castell…) que es
+// calcula abans del canvi: així també es veu què s'ha esborrat. Es guarda un any.
+const AUDIT_SKIP = new Set(['/api/logout', '/api/mode', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox', '/api/client-errors',
+  '/api/announcements/images', '/api/directory', '/api/identify', '/api/login', '/api/me/2fa/setup']);
+const AUDIT_DAYS = 365;
+function audit(account, action, target = null) {
+  try {
+    db.prepare('INSERT INTO audit_log (at, admin_id, account, action, target) VALUES (?, ?, ?, ?, ?)')
+      .run(nowUtc(), account.admin_id ?? null, String(account.name || '').slice(0, 60), action, target ? String(target).slice(0, 120) : null);
+  } catch (err) { console.error('No s\'ha pogut apuntar al registre:', err.message); }
+}
+function pruneAudit() {
+  db.prepare(`DELETE FROM audit_log WHERE at < datetime('now', '-${AUDIT_DAYS} days')`).run();
+}
+pruneAudit();
+setInterval(pruneAudit, 24 * 60 * 60 * 1000).unref();
+// Etiqueta de l'element que es toca, a partir de la ruta. De les persones no es guarda el nom: el registre es queda
+// un any i qui demana que l'esborrin no hi ha de continuar sortint (l'app el mostra mentre la persona existeixi).
+const PEOPLE_ROUTE = /^\/api\/people(\/|$)/;
+function auditTarget(pattern, params) {
+  try { return auditLabel(pattern, params); } catch { return null; }
+}
+function auditLabel(pattern, params) {
+  const one = (sql, id) => (id == null ? undefined : db.prepare(sql).get(id));
+  const eventLabel = (id) => { const e = one('SELECT title, date FROM events WHERE id = ?', id); return e ? `${e.title} (${e.date})` : null; };
+  if (params.id && pattern.startsWith('/api/events/')) return eventLabel(params.id);
+  if (params.id && pattern.startsWith('/api/castells/')) {
+    const c = one('SELECT * FROM castells WHERE id = ?', params.id);
+    return c ? `${castellName(c)} · ${eventLabel(c.event_id)}` : null;
+  }
+  if (PEOPLE_ROUTE.test(pattern)) return Number.isInteger(Number(params.id)) && params.id ? `#${Number(params.id)}` : null;
+  if (params.id && pattern.startsWith('/api/admins/')) return one('SELECT name FROM admins WHERE id = ?', params.id)?.name ?? null;
+  if (params.id && pattern.startsWith('/api/announcements/')) return one('SELECT title FROM announcements WHERE id = ?', params.id)?.title ?? null;
+  if (params.id && pattern.startsWith('/api/guests/')) return eventLabel(one('SELECT event_id FROM event_guests WHERE id = ?', params.id)?.event_id);
+  if (params.id && pattern.startsWith('/api/fields/')) return eventLabel(one('SELECT event_id FROM event_fields WHERE id = ?', params.id)?.event_id);
+  if (params.name) return params.name;
+  return null;
+}
+
+// Què falta per tenir l'app a punt (per a la llista «Primers passos» de l'administració).
+route('GET', '/api/setup-status', () => {
+  const admins = db.prepare('SELECT roles, totp_secret FROM admins').all();
+  return {
+    people: db.prepare('SELECT COUNT(*) AS n FROM people WHERE active = 1').get().n,
+    accounts: admins.length,
+    adminsWithout2fa: admins.filter((a) => a.roles.split(',').includes('admin') && !a.totp_secret).length,
+    collaCode: !!COLLA_CODE, privacyContact: !!PRIVACY_CONTACT, offsite: !!OFFSITE, alerts: !!ALERT_WEBHOOK, demo: DEMO,
+    minorsWithoutConsent: minorsWithoutConsent(),
+  };
+}, 'admin');
+
+route('GET', '/api/audit', ({ query }) => {
+  const before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER;
+  return db.prepare('SELECT id, at, account, action, target FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT 200').all(before);
+}, 'admin');
+
 // ---------- Rutes: comptes d'administració ----------
-const adminRow = (a) => ({ id: a.id, username: a.username, name: a.name, roles: a.roles.split(','), created_at: a.created_at });
+const adminRow = (a) => ({ id: a.id, username: a.username, name: a.name, roles: a.roles.split(','), created_at: a.created_at, two_factor: !!a.totp_secret });
 const ADMIN_ACCOUNTS_SQL = "SELECT COUNT(*) AS n FROM admins WHERE ',' || roles || ',' LIKE '%,admin,%'";
 // «admin» ja ho inclou tot: no es combina amb els altres. Sense dir res, un compte nou és d'administració, com abans.
 function rolesInput(value) {
@@ -635,6 +837,8 @@ route('PUT', '/api/admins/:id', async ({ params, body, user, req }) => {
   const admin = db.prepare('SELECT * FROM admins WHERE id = ?').get(params.id) || fail(404, 'Compte no trobat');
   await confirmPassword(req, user, body.currentPassword);
   const data = adminInput(body, admin);
+  // Si algú perd el mòbil, l'administració li pot treure el segon factor (i el torna a activar ell mateix).
+  if (body.disable_2fa) Object.assign(data, NO_SECOND_FACTOR);
   if (data.roles && data.roles !== 'admin' && admin.roles === 'admin' && db.prepare(ADMIN_ACCOUNTS_SQL).get().n <= 1) {
     fail(400, "Ha de quedar almenys un compte d'administració");
   }
@@ -656,6 +860,10 @@ route('DELETE', '/api/admins/:id', async ({ params, user, body, req }) => {
   db.prepare('DELETE FROM admins WHERE id = ?').run(params.id);
   return { ok: true };
 }, 'admin');
+
+// Menors de 14 anys (actius) dels quals encara no s'ha apuntat el consentiment del pare, mare o tutor/a.
+const MINOR_SQL = "p.active = 1 AND p.birthdate > date('now', 'localtime', '-14 years') AND p.guardian_consent IS NULL";
+const minorsWithoutConsent = () => db.prepare(`SELECT COUNT(*) AS n FROM people p WHERE ${MINOR_SQL}`).get().n;
 
 // Qui ha vingut de debò: el que hagi marcat l'admin o, si no ha marcat res, qui havia dit «Vinc».
 const CAME_SQL = "COALESCE(a.came, a.status = 'si', 0) = 1";
@@ -736,7 +944,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     colla: COLLA_NAME, contacte: PRIVACY_CONTACT || null, generat: nowLocal(),
     persona: { nom: p.name, malnom: p.alias, correu: p.email, telefon: p.phone, data_naixement: p.birthdate, alcada_cm: p.height_cm,
       alcada_espatlles_cm: p.shoulder_height_cm, amplada_espatlles_cm: p.shoulder_width_cm, pes_kg: p.weight_kg, notes: p.notes,
-      instrument: p.instrument, grup: p.section, activa: !!p.active, alta: p.created_at },
+      instrument: p.instrument, grup: p.section, activa: !!p.active, alta: p.created_at, consentiment_tutor: p.guardian_consent },
     assistencia: attendance,
     posicions: positions,
     acompanyants: companions,
@@ -1595,7 +1803,6 @@ setInterval(sendReminders, Number(process.env.PUSH_REMINDER_MS) || 15 * 60 * 100
 // ---------- Plantilles de pinya ----------
 // Cada colla dibuixa la pinya de cada tipus de castell a la seva manera. Les plantilles valen per a tots els castells
 // d'aquell nom (passats i futurs): les posicions que es conserven mantenen la clau i, per tant, l'historial.
-const nowUtc = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const loadTemplates = () => setTemplates(db.prepare('SELECT name, layers FROM castell_templates').all()
   .map((r) => ({ name: r.name, layers: JSON.parse(r.layers) })));
 loadTemplates();
@@ -1712,7 +1919,7 @@ const versionKey = () => `${dataVersion}|${today()}`;
 const castellKey = () => `${castellVersion}|${today()}`;
 const historyKey = () => `${historyVersion}|${today()}`;
 // Peticions que no són GET però no toquen cap dada de sessions, castells ni persones.
-const NO_DATA_CHANGE = new Set(['/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me',
+const NO_DATA_CHANGE = new Set(['/api/client-errors', '/api/me/2fa/setup', '/api/me/2fa/enable', '/api/me/2fa/disable', '/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me',
   '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox']);
 // Peticions que només toquen l'assistència, els camps extra, l'altaveu o els comptes d'administració.
 const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/attendance(\/\d+)?$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,
@@ -2503,15 +2710,23 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     }
     // Només les imatges de l'altaveu passen d'aquí, i la ruta ja ha comprovat qui les envia.
     const body = req.method === 'GET' ? {} : await readBody(req, url.pathname === '/api/announcements/images' ? NEWS_IMAGE_BODY : BODY_MAX);
+    // Abans del canvi: si s'esborra, després ja no se'n sabria el nom.
+    const audited = user?.mode === 'admin' && req.method !== 'GET' && !AUDIT_SKIP.has(match.pattern);
+    const target = audited ? auditTarget(match.pattern, params) : null;
     let result;
     try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }
     finally { if (req.method !== 'GET' && !NO_DATA_CHANGE.has(url.pathname)) { dataChanged(url.pathname); warmCaches(); } }
+    if (audited) audit(user, `${req.method} ${match.pattern}`, target ?? (PEOPLE_ROUTE.test(match.pattern) ? (result?.id ? `#${result.id}` : null) : result?.title ?? result?.name ?? null));
     if (result !== undefined) send(200, result);
   } catch (err) {
     const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
-    if (err instanceof HttpError) send(err.status, { error: translate(lang, err.message, err.params) });
+    if (err instanceof HttpError) send(err.status, { error: translate(lang, err.message, err.params), ...err.extra });
     else if (String(err.message).includes('constraint')) send(400, { error: translate(lang, 'Dades no vàlides') });
-    else { console.error(err); send(500, { error: translate(lang, 'Error intern del servidor') }); }
+    else {
+      console.error(err);
+      logError('server', err.message, err.stack, `${req.method} ${url.pathname}`);
+      send(500, { error: translate(lang, 'Error intern del servidor') });
+    }
   }
 });
 

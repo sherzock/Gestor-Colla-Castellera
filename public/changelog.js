@@ -1,0 +1,85 @@
+// Novetats de cada versió, en els tres idiomes (la més nova, a dalt). En publicar-ne una, cal posar el mateix número
+// a package.json: és el que l'app ensenya a «El meu compte».
+export const CHANGELOG = [
+  {
+    version: '1.2.0', date: '2026-11-18',
+    ca: [
+      "Còpia de seguretat diària fora del servidor, xifrada, i una eina per restaurar-la.",
+      "Errors de l'app (del servidor i dels mòbils) a la vista de l'administració, amb avís al mòbil si es vol.",
+      "Segon factor per entrar als comptes d'administració, amb codis de recuperació.",
+      "Registre de canvis: què ha fet cada compte durant l'últim any.",
+      "Consentiment de la família per als menors de 14 anys, i avís de qui encara no el té.",
+      "Ajuda dins de l'app, llista de primers passos per a l'administració i aquesta pàgina de novetats.",
+      "Persones en dos castells alhora, horari que s'arrossega, hora en crear el castell i avís en mostrar una sessió.",
+      "Pinyes: copiar la d'un altre castell i taps i tapa-taps a l'estàndard.",
+    ],
+    es: [
+      'Copia de seguridad diaria fuera del servidor, cifrada, y una herramienta para restaurarla.',
+      'Errores de la app (del servidor y de los móviles) a la vista de la administración, con aviso al móvil si se quiere.',
+      'Segundo factor para entrar en las cuentas de administración, con códigos de recuperación.',
+      'Registro de cambios: qué ha hecho cada cuenta durante el último año.',
+      'Consentimiento de la familia para los menores de 14 años, y aviso de quién aún no lo tiene.',
+      'Ayuda dentro de la app, lista de primeros pasos para la administración y esta página de novedades.',
+      'Personas en dos castells a la vez, horario que se arrastra, hora al crear el castell y aviso al mostrar una sesión.',
+      'Pinyes: copiar la de otro castell y taps y tapa-taps en la estándar.',
+    ],
+    en: [
+      'Daily encrypted off-site backup, and a tool to restore it.',
+      'App errors (server and phones) visible to admins, with an optional phone alert.',
+      'Two-step verification for admin accounts, with recovery codes.',
+      'Activity log: what each account did over the last year.',
+      'Family consent for children under 14, and a warning for those still missing it.',
+      'In-app help, a first-steps checklist for admins and this "What\'s new" page.',
+      'People in two castells at once, draggable schedule, time when creating a castell and a notification when showing a session.',
+      "Pinyes: copy another castell's, and taps and tapa-taps in the standard one.",
+    ],
+  },
+  {
+    version: '1.1.0', date: '2026-10-31',
+    ca: [
+      'Comptes de junta, tècnica i administració, cadascun amb el que necessita.',
+      "Editor de pinyes amb encaix, desfer i cordons que manen; taps i tapa-taps.",
+      "Horari de l'assaig per a la tècnica i la junta.",
+      'Sessions i castells que es creen ocults per als membres.',
+      "Fotos i emojis als missatges de l'altaveu.",
+    ],
+    es: [
+      'Cuentas de junta, técnica y administración, cada una con lo que necesita.',
+      'Editor de pinyes con encaje, deshacer y cordones que mandan; taps y tapa-taps.',
+      'Horario del ensayo para la técnica y la junta.',
+      'Sesiones y castells que se crean ocultos para los miembros.',
+      'Fotos y emojis en los mensajes del altavoz.',
+    ],
+    en: [
+      'Board, technical and admin accounts, each with what it needs.',
+      'Pinya editor with snapping, undo and cordons that rule; taps and tapa-taps.',
+      'Rehearsal schedule for the technical team and the board.',
+      'Sessions and castells are created hidden from members.',
+      'Photos and emojis in announcements.',
+    ],
+  },
+  {
+    version: '1.0.0', date: '2026-10-29',
+    ca: [
+      'Sessions, respostes i assistència; calendari, també al mòbil.',
+      'Castells amb la pinya de cada estructura, alineacions, historial i estadístiques.',
+      'Muntador automàtic, mides del tronc i avisos de l\'alineació.',
+      "App instal·lable, consulta sense connexió i avisos al mòbil.",
+      "Altaveu, importació d'Excel, còpies de seguretat i nota de privadesa.",
+    ],
+    es: [
+      'Sesiones, respuestas y asistencia; calendario, también en el móvil.',
+      'Castells con la pinya de cada estructura, alineaciones, historial y estadísticas.',
+      'Montador automático, medidas del tronc y avisos de la alineación.',
+      'App instalable, consulta sin conexión y avisos en el móvil.',
+      'Altavoz, importación de Excel, copias de seguridad y nota de privacidad.',
+    ],
+    en: [
+      'Sessions, answers and attendance; calendar, also on phones.',
+      'Castells with the pinya of each structure, line-ups, history and statistics.',
+      'Automatic line-up builder, tronc measurements and line-up warnings.',
+      'Installable app, offline viewing and phone notifications.',
+      'Announcements, Excel import, backups and privacy notice.',
+    ],
+  },
+];

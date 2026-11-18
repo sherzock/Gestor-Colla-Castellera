@@ -14,6 +14,8 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
     <p class="small muted full" style="margin:-4px 0 0">${t('El malnom és el que surt a la pinya i al tronc, i no es pot repetir. Si no en té, es mostra el nom i la inicial del cognom.')}</p>
     <label class="field">${t('Malnom')}<input name="alias" maxlength="40" value="${esc(p.alias)}" placeholder="${t('Com et coneixen a la colla')}"></label>
     <label class="field">${t('Data de naixement')}<input name="birthdate" type="date" min="1900-01-01" max="${todayIso()}" value="${esc(p.birthdate)}"></label>
+    ${canField('guardian_consent') && admin ? `<label class="field">${t('Consentiment del pare, mare o tutor/a')}<input name="guardian_consent" type="date" min="1900-01-01" max="${todayIso()}" value="${esc(p.guardian_consent)}">
+      <span class="small muted">${t('Només per als menors de 14 anys: el dia que la família va signar la nota de protecció de dades.')}</span></label>` : ''}
     ${canField('phone') ? `<label class="field">${t('Telèfon')}<input name="phone" type="tel" maxlength="30" value="${esc(p.phone)}"></label>
     <label class="field">${t('Correu')}<input name="email" type="email" maxlength="120" value="${esc(p.email)}"></label>` : ''}
     <label class="field">${t('Músic/a')}<select name="instrument"><option value="">${t('No toca')}</option>${Object.entries(INSTRUMENTS).map(([v, l]) => `<option value="${v}" ${p.instrument === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -28,6 +30,9 @@ function personFields(p = {}, { admin = false, isNew = false } = {}) {
   <label class="field" style="margin-top:12px">${t('Notes')}<textarea name="notes" maxlength="2000" placeholder="${t('Posicions habituals, lesions…')}">${esc(p.notes)}</textarea></label>` : ''}
   ${admin && !isNew ? `<label class="check" style="margin-top:12px"><input type="checkbox" name="active" ${p.active !== 0 ? 'checked' : ''}> ${t('Activa (desmarca-ho si ha deixat la colla)')}</label>` : ''}`;
 }
+
+// Menors de 14 anys sense el consentiment de la família apuntat (només ho veu qui gestiona el consentiment).
+const needsConsent = (p) => p.active && canField('guardian_consent') && age(p.birthdate) !== null && age(p.birthdate) < 14 && !p.guardian_consent;
 
 let peopleSort = store.get('peopleSort', 'name');
 const sectionOrder = (p) => (p.section ? SECTIONS.indexOf(p.section) : SECTIONS.length);
@@ -48,10 +53,13 @@ export async function pagePeople() {
   const sorted = [...people].sort(sorters[peopleSort] || sorters.name);
   const v = (x, unit = '') => (x != null ? `${x}${unit}` : '<span class="muted">—</span>');
   const measures = canField('weight_kg');
+  const noConsent = people.filter(needsConsent).length;
 
   $app.innerHTML = `
     <div class="page-head"><h1>${t('Persones')}</h1>
       <div class="actions">${can('import') ? `<button class="btn" id="import-people">${t('Importa des d\'un Excel')}</button>` : ''}<button class="btn primary" id="new-person">${icon.plus}${t('Nova persona')}</button></div></div>
+    ${noConsent ? `<div class="demo-note">${tn(noConsent, "{n} menor de 14 anys encara no té apuntat el consentiment de la família.", "{n} menors de 14 anys encara no tenen apuntat el consentiment de la família.")}
+      ${t("Imprimeix la nota de protecció de dades perquè la signin i apunta'n la data a la fitxa.")} <a href="#/privadesa">${t('Obre la nota')}</a></div>` : ''}
     <div class="toolbar">
       <input type="search" id="people-q" placeholder="${t('Cerca…')}" style="max-width:280px">
       <label class="check small" style="margin-left:auto">${t('Ordena per')}
@@ -63,7 +71,7 @@ export async function pagePeople() {
     <div class="card"><div class="table-wrap"><table class="responsive" id="people-table">
       <thead><tr><th>${t('Malnom · Nom')}</th><th class="num">${t('Edat')}</th>${measures ? `<th class="num">${t('Alçada')}</th><th class="num">${t('Alç. esp.')}</th><th class="num">${t('Ampl. esp.')}</th><th class="num">${t('Pes')}</th>` : ''}<th class="num">${t('Assistència {year}', { year: season })}</th></tr></thead>
       <tbody>${sorted.map((p) => `<tr class="clickable ${p.active ? '' : 'inactive'}" data-id="${p.id}" data-name="${esc(norm(p.name + ' ' + (p.alias || '')))}">
-        <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.section ? ` <span class="badge section">${sectionLabel(p.section)}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
+        <td class="lead">${p.alias ? `<strong>${esc(p.alias)}</strong> <span class="muted">· ${esc(p.name)}</span>` : esc(p.name)}${needsConsent(p) ? ` <span class="badge warn-badge">${t('Falta el consentiment')}</span>` : ''}${p.instrument ? ` <span class="badge musics">${INSTRUMENTS[p.instrument]}</span>` : ''}${p.section ? ` <span class="badge section">${sectionLabel(p.section)}</span>` : ''}${p.active ? '' : ` <span class="small">(${t('inactiva')})</span>`}</td>
         <td class="num" data-l="${t('Edat')}">${v(age(p.birthdate))}</td>
         ${measures ? `<td class="num" data-l="${t('Alçada')}">${v(p.height_cm, ' cm')}</td>
         <td class="num" data-l="${t('Alç. esp.')}">${v(p.shoulder_height_cm, ' cm')}</td>
@@ -232,6 +240,7 @@ export async function pageProfile() {
         <p class="small muted" style="margin-bottom:0">${t("Per privacitat, a l'app només es veuen els malnoms. Les dades personals (nom, mides, contacte…) només les veuen els administradors; si cal canviar-ne alguna, demana-ho a un administrador.")}</p>
       </div>
       ${historyCard}
-    </div>`;
+    </div>
+    <p class="small muted" style="text-align:center"><a href="#/ajuda">${t('Ajuda')}</a> · <a href="#/novetats">${t('Novetats')}</a> · <a href="#/privadesa">${t('Protecció de dades')}</a></p>`;
   qs('#not-me').onclick = switchPerson;
 }

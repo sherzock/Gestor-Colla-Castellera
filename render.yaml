@@ -7,7 +7,7 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm run demo
-    healthCheckPath: /api/config
+    healthCheckPath: /api/health
     envVars:
       - key: COLLA_NAME
         value: Colla de prova

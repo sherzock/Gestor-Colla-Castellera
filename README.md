@@ -397,6 +397,14 @@ port lliure (no toca `data/colla.db`). Comproven:
 | `BACKUP_DIR` | `backups` al costat de `DB_PATH` | Carpeta de les còpies de seguretat diàries (a la demo només se'n fan si es posa) |
 | `BACKUP_KEEP` | `14` | Quantes còpies diàries es guarden |
 | `PUSH_SUBJECT` | `mailto:` del `PRIVACY_CONTACT` | Contacte que es dona als serveis d'avisos (Google, Apple…) per si hi ha cap problema (`mailto:…` o `https://…`) |
+| `BACKUP_EVERY_MS` | `3600000` | Cada quant es mira si toca fer la còpia del dia |
+| `BACKUP_KEY` | (cap) | Clau per xifrar la còpia que s'envia fora del servidor (almenys 12 caràcters). **Guardeu-la en un altre lloc**: sense ella no es pot obrir |
+| `BACKUP_S3_ENDPOINT` | (cap) | Adreça de l'emmagatzematge compatible amb S3 (Backblaze B2, Cloudflare R2, Scaleway…), p. ex. `https://s3.eu-central-003.backblazeb2.com` |
+| `BACKUP_S3_BUCKET` | (cap) | Nom del bucket |
+| `BACKUP_S3_KEY_ID` / `BACKUP_S3_SECRET` | (cap) | Claus d'accés (millor unes que només puguin escriure en aquest bucket) |
+| `BACKUP_S3_REGION` | `us-east-1` | Regió, si el proveïdor la demana |
+| `BACKUP_S3_PREFIX` | (cap) | Carpeta dins del bucket |
+| `ALERT_WEBHOOK` | (cap) | Adreça on s'envia un avís quan surt un error nou (text pla per POST; p. ex. `https://ntfy.sh/un-tema-dificil`) |
 | `TRUST_PROXY` | (no; sí a Render) | Posa-ho a `1` si l'app és darrere d'un proxy (Nginx, Caddy…), perquè el límit d'intents sàpiga l'adreça real de cada persona. Sense proxy, deixa-ho buit: si no, qualsevol es podria saltar el límit |
 
 ## Versió de prova gratuïta (Render)
@@ -419,11 +427,40 @@ El servidor fa una còpia de seguretat cada dia a `BACKUP_DIR`, però si el disc
 una de tant en tant des de «Comptes» → «Descarrega una còpia» (o copia la carpeta a un altre lloc) i guarda-la en un
 lloc privat: hi ha les dades personals de la colla (les contrasenyes no hi són tal com són, però la resta sí).
 
-Per **restaurar una còpia**: atura el servidor, substitueix el fitxer de la base de dades per la còpia i esborra els
-fitxers `-wal` i `-shm` que hi pugui haver al costat, i torna'l a engegar. Tothom haurà de tornar a entrar.
+### Llista per posar-la en marxa
+
+1. **Servidor amb disc que es conservi** i HTTPS, amb un domini propi si pot ser (p. ex. `app.lavostracolla.cat`).
+2. Variables: `COLLA_NAME`, `COLLA_CODE`, `PRIVACY_CONTACT`, `DB_PATH` (dins del disc), `TRUST_PROXY=1` si hi ha proxy.
+3. **Còpia fora del servidor**: un bucket a Backblaze B2, Cloudflare R2 o semblant, i les variables `BACKUP_S3_*` i
+   `BACKUP_KEY`. Al bucket, una regla de cicle de vida que esborri les còpies de fa més de 30 dies.
+   A «Comptes» es veu quan s'ha enviat l'última o si ha fallat.
+4. **Avisos**: `ALERT_WEBHOOK` amb un tema de ntfy, i un servei de monitoratge (UptimeRobot, Better Stack…) que
+   comprovi `/api/health` cada pocs minuts.
+5. **Segon factor** a tots els comptes d'administració («El meu compte»).
+6. **Proveu una restauració** abans que faci falta.
+7. Reviseu la nota de protecció de dades (millor amb algú que conegui el RGPD) i recolliu el consentiment de les
+   famílies dels menors de 14 anys.
+
+L'app mateixa ho recorda: a «Comptes» surt la llista de **primers passos** fins que està tot fet.
+
+### Restaurar una còpia
 
 ```bash
-cp data/backups/colla-2026-10-28.db data/colla.db && rm -f data/colla.db-wal data/colla.db-shm
+BACKUP_KEY='…' npm run restore -- colla-2026-11-18.db.enc restaurada.db   # també serveix amb una .db sense xifrar
+```
+
+Comprova que la còpia està sencera i la deixa en un fitxer nou (mai en sobreescriu cap). Després atura el servidor,
+posa `DB_PATH` apuntant al fitxer nou (o mou-lo al lloc de l'antic i esborra els `-wal` i `-shm` que hi hagi al costat)
+i torna'l a engegar. Tothom haurà de tornar a entrar.
+
+### Si s'oblida la contrasenya
+
+Un altre compte d'administració li pot posar una contrasenya nova i treure-li el segon factor («Comptes» → «Edita»).
+Si no n'hi ha cap altre, des del servidor:
+
+```bash
+npm run reset-password            # llista els comptes
+npm run reset-password -- admin   # contrasenya nova per a «admin», sense segon factor i amb les sessions tancades
 ```
 
 ## Estructura
