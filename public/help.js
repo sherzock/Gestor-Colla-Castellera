@@ -5,13 +5,15 @@
 const ca = [
   ['respondre', 'all', 'Dir si vens', `
     <p>A l'inici surten les sessions que vénen. Toca <strong>Vinc</strong> o <strong>No vinc</strong> a cada una; ho pots canviar fins a la data límit (si n'hi ha) o fins al mateix dia.</p>
-    <p>Si una sessió té preguntes (per exemple, si vens a sopar), <em>Vinc</em> t'obre la sessió per respondre-les. Els castells on surts es veuen a la sessió i al teu perfil.</p>`],
+    <p>Si una sessió té preguntes (per exemple, si vens a sopar), <em>Vinc</em> t'obre la sessió per respondre-les. Els castells on surts es veuen a la sessió i al teu perfil.</p>
+    <p>Si la sessió es paga (un viatge, un dinar…), en dir que vens hi veuràs quant et toca, l'IBAN o el Bizum de la colla i el concepte amb el teu nom, amb botons per copiar-ho. Quan hagis pagat, toca <em>Ja he pagat</em>; la junta ho comprovarà.</p>`],
   ['mobil', 'all', "Al mòbil: instal·lar l'app i rebre avisos", `
     <p><strong>Instal·lar-la</strong>: a l'iPhone, obre l'app amb Safari, toca <em>Compartir</em> i <em>Afegeix a la pantalla d'inici</em>. A Android, el menú del navegador ofereix <em>Instal·la l'aplicació</em>. Així s'obre com una app i es pot consultar sense connexió.</p>
     <p><strong>Avisos</strong>: al teu perfil, <em>Activa els avisos</em>. Rebràs els missatges de l'altaveu, les sessions noves i un recordatori si no has respost. A l'iPhone, primer cal instal·lar-la.</p>`],
   ['sessions', 'staff', 'Sessions i assistència', `
     <p>Les sessions i els castells es creen <strong>ocults</strong>: els membres no els veuen fins que els mostres. En mostrar una sessió pots mostrar també els seus castells i enviar un avís al mòbil de tothom.</p>
-    <p>A cada sessió hi ha qui ha dit que ve, qui falta per contestar (amb un recordatori per WhatsApp que no assenyala ningú) i, el mateix dia, la llista per marcar qui ha vingut de debò.</p>`],
+    <p>A cada sessió hi ha qui ha dit que ve, qui falta per contestar (amb un recordatori per WhatsApp que no assenyala ningú) i, el mateix dia, la llista per marcar qui ha vingut de debò.</p>
+    <p><strong>Preguntes i pagaments</strong>: a <em>Camps extra</em> hi poses les preguntes (sí/no, número, llista) i, amb <em>Preu</em>, què costa cada resposta. A <em>Pagament</em> hi poses on es paga, el preu per persona i el concepte. Qui diu que ve veu quant ha de pagar i avisa quan ho ha fet; tu comproves el banc i ho marques com a rebut. L'Excel i el CSV de la sessió porten l'import i l'estat de cada pagament. L'app no fa cap cobrament.</p>`],
   ['castells', 'staff', 'Castells i alineacions', `
     <p>Dins de cada castell, toca una posició i tria qui hi va. <strong>Munta automàticament</strong> proposa una alineació amb qui ha dit que ve, anivellant espatlles i vigilant el pes; la pots retocar abans de desar-la.</p>
     <p>Els <strong>avisos a revisar</strong> diuen què no quadra: gent que no ve, forats al tronc, espatlles desiguals, algú en dos castells que es fan alhora…</p>`],
@@ -21,7 +23,7 @@ const ca = [
     <p>A la pestanya <em>Pinyes</em> es redibuixa la pinya de cada castell: moure, girar, afegir o treure posicions, amb encaix i desfer. Els canvis valen per a tots els castells d'aquell tipus, i les posicions que es mantenen conserven l'historial.</p>
     <p>Es pot partir de la pinya d'un altre castell amb els mateixos baixos (per exemple, del 3d7 al 3d8), o de l'estàndard amb taps i tapa-taps.</p>`],
   ['altaveu', 'staff', 'Altaveu', `<p>Missatges per a tota la colla, amb fotos i emojis. Si ho marques, arriben com a avís al mòbil de qui els té activats. Se'n guarden com a molt 50.</p>
-    <p><strong>Preguntes i pagaments</strong>: en escriure'l, marca <em>Afegeix preguntes</em> per fer una enquesta o una inscripció (viatge, sopar, samarretes…). Cada opció pot tenir preu: qui la tria veu quant ha de pagar, l'IBAN o el Bizum de la colla i un concepte amb el seu nom, i avisa quan ha pagat. A <em>Mira les respostes</em> tens qui ha respost què, qui falta i els pagaments per comprovar al banc; marca'ls com a rebuts i exporta-ho a Excel. L'app no fa cap cobrament.</p>`],
+    <p>Un missatge pot portar un botó cap a una sessió: va bé per anunciar un viatge o un sopar i que la gent s'hi apunti i, si cal, pagui.</p>`],
   ['comptes', 'admin', 'Comptes i segon factor', `
     <p>Cada persona que edita hauria de tenir el seu compte, amb el que necessita: <strong>junta</strong> (sessions, assistència, contacte), <strong>tècnica</strong> (castells, pinyes, mides) o <strong>administració</strong> (tot).</p>
     <p><strong>Segon factor</strong>: a <em>El meu compte</em>, <em>Activa el segon factor</em>. Cal una app d'autenticació (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS o Contrasenyes de l'iPhone). Guarda els codis de recuperació fora del mòbil.</p>
@@ -48,13 +50,15 @@ const ca = [
 const es = [
   ['respondre', 'all', 'Decir si vienes', `
     <p>Al inicio salen las próximas sesiones. Toca <strong>Voy</strong> o <strong>No voy</strong> en cada una; puedes cambiarlo hasta la fecha límite (si la hay) o hasta el mismo día.</p>
-    <p>Si una sesión tiene preguntas (por ejemplo, si vienes a cenar), <em>Voy</em> te abre la sesión para responderlas. Los castells en los que sales se ven en la sesión y en tu perfil.</p>`],
+    <p>Si una sesión tiene preguntas (por ejemplo, si vienes a cenar), <em>Voy</em> te abre la sesión para responderlas. Los castells en los que sales se ven en la sesión y en tu perfil.</p>
+    <p>Si la sesión se paga (un viaje, una comida…), al decir que vienes verás cuánto te toca, el IBAN o el Bizum de la colla y el concepto con tu nombre, con botones para copiarlo. Cuando hayas pagado, toca <em>Ya he pagado</em>; la junta lo comprobará.</p>`],
   ['mobil', 'all', 'En el móvil: instalar la app y recibir avisos', `
     <p><strong>Instalarla</strong>: en el iPhone, abre la app con Safari, toca <em>Compartir</em> y <em>Añadir a pantalla de inicio</em>. En Android, el menú del navegador ofrece <em>Instalar aplicación</em>. Así se abre como una app y se puede consultar sin conexión.</p>
     <p><strong>Avisos</strong>: en tu perfil, <em>Activar los avisos</em>. Recibirás los mensajes del altavoz, las sesiones nuevas y un recordatorio si no has respondido. En el iPhone, primero hay que instalarla.</p>`],
   ['sessions', 'staff', 'Sesiones y asistencia', `
     <p>Las sesiones y los castells se crean <strong>ocultos</strong>: los miembros no los ven hasta que los muestras. Al mostrar una sesión puedes mostrar también sus castells y enviar un aviso al móvil de todos.</p>
-    <p>En cada sesión está quién ha dicho que viene, quién falta por contestar (con un recordatorio por WhatsApp que no señala a nadie) y, el mismo día, la lista para marcar quién ha venido de verdad.</p>`],
+    <p>En cada sesión está quién ha dicho que viene, quién falta por contestar (con un recordatorio por WhatsApp que no señala a nadie) y, el mismo día, la lista para marcar quién ha venido de verdad.</p>
+    <p><strong>Preguntas y pagos</strong>: en <em>Campos extra</em> pones las preguntas (sí/no, número, lista) y, con <em>Precio</em>, lo que cuesta cada respuesta. En <em>Pago</em> pones dónde se paga, el precio por persona y el concepto. Quien dice que viene ve cuánto tiene que pagar y avisa cuando lo ha hecho; tú compruebas el banco y lo marcas como recibido. El Excel y el CSV de la sesión llevan el importe y el estado de cada pago. La app no hace ningún cobro.</p>`],
   ['castells', 'staff', 'Castells y alineaciones', `
     <p>Dentro de cada castell, toca una posición y elige quién va. <strong>Montar automáticamente</strong> propone una alineación con quien ha dicho que viene, nivelando hombros y vigilando el peso; puedes retocarla antes de guardarla.</p>
     <p>Los <strong>avisos a revisar</strong> dicen qué no cuadra: gente que no viene, huecos en el tronc, hombros desiguales, alguien en dos castells que se hacen a la vez…</p>`],
@@ -64,7 +68,7 @@ const es = [
     <p>En la pestaña <em>Pinyes</em> se redibuja la pinya de cada castell: mover, girar, añadir o quitar posiciones, con encaje y deshacer. Los cambios valen para todos los castells de ese tipo, y las posiciones que se mantienen conservan el historial.</p>
     <p>Se puede partir de la pinya de otro castell con los mismos baixos (por ejemplo, del 3d7 al 3d8), o de la estándar con taps y tapa-taps.</p>`],
   ['altaveu', 'staff', 'Altavoz', `<p>Mensajes para toda la colla, con fotos y emojis. Si lo marcas, llegan como aviso al móvil de quien los tiene activados. Se guardan como mucho 50.</p>
-    <p><strong>Preguntas y pagos</strong>: al escribirlo, marca <em>Añadir preguntas</em> para hacer una encuesta o una inscripción (viaje, cena, camisetas…). Cada opción puede tener precio: quien la elige ve cuánto tiene que pagar, el IBAN o el Bizum de la colla y un concepto con su nombre, y avisa cuando ha pagado. En <em>Ver las respuestas</em> tienes quién ha respondido qué, quién falta y los pagos por comprobar en el banco; márcalos como recibidos y expórtalo a Excel. La app no hace ningún cobro.</p>`],
+    <p>Un mensaje puede llevar un botón hacia una sesión: va bien para anunciar un viaje o una cena y que la gente se apunte y, si hace falta, pague.</p>`],
   ['comptes', 'admin', 'Cuentas y segundo factor', `
     <p>Cada persona que edita debería tener su cuenta, con lo que necesita: <strong>junta</strong> (sesiones, asistencia, contacto), <strong>técnica</strong> (castells, pinyes, medidas) o <strong>administración</strong> (todo).</p>
     <p><strong>Segundo factor</strong>: en <em>Mi cuenta</em>, <em>Activar el segundo factor</em>. Hace falta una app de autenticación (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS o Contraseñas del iPhone). Guarda los códigos de recuperación fuera del móvil.</p>
@@ -91,13 +95,15 @@ const es = [
 const en = [
   ['respondre', 'all', "Saying whether you're coming", `
     <p>The home page lists upcoming sessions. Tap <strong>Going</strong> or <strong>Not going</strong> on each; you can change it until the deadline (if there is one) or until the day itself.</p>
-    <p>If a session has questions (for example, whether you'll stay for dinner), <em>Going</em> opens the session so you can answer them. The castells you are in show up in the session and on your profile.</p>`],
+    <p>If a session has questions (for example, whether you'll stay for dinner), <em>Going</em> opens the session so you can answer them. The castells you are in show up in the session and on your profile.</p>
+    <p>If the session has a cost (a trip, a lunch…), when you say you're going you'll see how much you owe, the colla's IBAN or Bizum and a reference with your name, with buttons to copy them. Once you've paid, tap <em>I've paid</em>; the board will check it.</p>`],
   ['mobil', 'all', 'On your phone: installing the app and notifications', `
     <p><strong>Installing</strong>: on iPhone, open the app in Safari, tap <em>Share</em> and <em>Add to Home Screen</em>. On Android, the browser menu offers <em>Install app</em>. It then opens like an app and works offline.</p>
     <p><strong>Notifications</strong>: on your profile, <em>Turn on notifications</em>. You'll get announcements, new sessions and a reminder if you haven't answered. On iPhone, install it first.</p>`],
   ['sessions', 'staff', 'Sessions and attendance', `
     <p>Sessions and castells are created <strong>hidden</strong>: members don't see them until you show them. When you show a session you can also show its castells and notify everyone's phone.</p>
-    <p>Each session shows who is coming, who hasn't answered (with a WhatsApp reminder that doesn't single anyone out) and, on the day, the list to mark who actually came.</p>`],
+    <p>Each session shows who is coming, who hasn't answered (with a WhatsApp reminder that doesn't single anyone out) and, on the day, the list to mark who actually came.</p>
+    <p><strong>Questions and payments</strong>: under <em>Extra fields</em> add the questions (yes/no, number, list) and, with <em>Price</em>, what each answer costs. Under <em>Payment</em> set where to pay, the price per person and the reference. Whoever says they're going sees how much to pay and tells you when they have; you check the bank and mark it as received. The session's Excel and CSV include each payment's amount and status. The app never charges anything.</p>`],
   ['castells', 'staff', 'Castells and line-ups', `
     <p>Inside each castell, tap a position and choose who goes there. <strong>Build automatically</strong> proposes a line-up with the people who are coming, levelling shoulders and checking weight; you can adjust it before saving.</p>
     <p>The <strong>warnings to check</strong> point out what doesn't fit: people not coming, gaps in the tronc, uneven shoulders, someone in two castells at the same time…</p>`],
@@ -107,7 +113,7 @@ const en = [
     <p>In the <em>Pinyes</em> tab you redraw the pinya of each castell: move, rotate, add or remove positions, with snapping and undo. Changes apply to every castell of that type, and positions that are kept keep their history.</p>
     <p>You can start from another castell's pinya with the same baixos (for example, from 3d7 to 3d8), or from the standard one with taps and tapa-taps.</p>`],
   ['altaveu', 'staff', 'Announcements', `<p>Messages for the whole colla, with photos and emojis. If you tick it, they arrive as a notification on phones that have them turned on. At most 50 are kept.</p>
-    <p><strong>Questions and payments</strong>: when writing one, tick <em>Add questions</em> to run a poll or a sign-up (trip, dinner, T-shirts…). Each option can have a price: whoever picks it sees how much to pay, the colla's IBAN or Bizum and a reference with their name, and says when they've paid. In <em>See the answers</em> you get who answered what, who is missing and the payments to check at the bank; mark them as received and export to Excel. The app never charges anything.</p>`],
+    <p>A message can carry a button to a session: handy to announce a trip or a dinner so people sign up and, if needed, pay.</p>`],
   ['comptes', 'admin', 'Accounts and two-step verification', `
     <p>Everyone who edits should have their own account with what they need: <strong>board</strong> (sessions, attendance, contact details), <strong>technical</strong> (castells, pinyes, measurements) or <strong>admin</strong> (everything).</p>
     <p><strong>Two-step verification</strong>: in <em>My account</em>, <em>Turn on two-step verification</em>. You need an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS or iPhone Passwords). Keep the recovery codes somewhere other than your phone.</p>

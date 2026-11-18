@@ -1,16 +1,21 @@
-// Preguntes i pagaments de l'altaveu: el que fan servir igual el servidor i l'app.
+// Pagaments de les sessions: el que fan servir igual el servidor i l'app.
 
-// Quant ha de pagar algú: la suma dels preus de les opcions que ha triat (en cèntims).
-export function amountOf(questions, answers) {
-  let total = 0;
-  for (const q of questions || []) {
-    const chosen = answers?.[q.id];
-    if (!Array.isArray(chosen)) continue;
-    for (const o of q.options) if (chosen.includes(o.id) && o.price) total += o.price;
-  }
-  return total;
+// Quant // Preu d'una resposta a una pregunta de la sessió (en cèntims): sí/no, si diu que sí; número, per unitat; llista, el
+// de l'opció triada.
+export function fieldAmount(f, value) {
+  if (value === null || value === undefined || value === '') return 0;
+  if (f.kind === 'bool') return value ? f.price || 0 : 0;
+  if (f.kind === 'number') return Math.max(0, Math.round(Number(value) || 0)) * (f.price || 0);
+  if (f.kind === 'select') return f.option_prices?.[f.options.indexOf(value)] || 0;
+  return 0;
 }
-export const hasPrices = (questions) => (questions || []).some((q) => q.options.some((o) => o.price > 0));
+// Quant ha de pagar algú per la sessió: només qui diu «Vinc», i només si la sessió té on pagar.
+export function eventAmount(payment, fields, { status, extra, companions = 0 }) {
+  if (!payment || status !== 'si') return 0;
+  return (payment.price || 0) + companions * (payment.companion_price || 0)
+    + (fields || []).reduce((sum, f) => sum + fieldAmount(f, extra?.[f.id]), 0);
+}
+export const fieldHasPrice = (f) => !!(f.price || f.option_prices?.some((p) => p));
 
 // IBAN: sense espais i en majúscules, amb el dígit de control comprovat (ISO 13616: mòdul 97).
 export const normalizeIban = (v) => String(v || '').replace(/[\s-]/g, '').toUpperCase();

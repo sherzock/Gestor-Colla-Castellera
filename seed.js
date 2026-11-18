@@ -86,7 +86,7 @@ function sampleCastell(floors, [r, g, b]) {
 }
 
 transaction(() => {
-  for (const t of ['announcement_answers', 'announcement_forms', 'announcements', 'castell_templates', 'castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
+  for (const t of ['event_payments', 'announcements', 'castell_templates', 'castell_positions', 'event_guests', 'castells', 'attendance', 'event_fields', 'events', 'auth_tokens', 'admin_tokens', 'admins', 'people']) db.exec(`DELETE FROM ${t}`);
 
   const insPerson = db.prepare(`INSERT INTO people (username, password_hash, role, name, alias, birthdate, height_cm, shoulder_height_cm, shoulder_width_cm, weight_kg, instrument)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -300,37 +300,31 @@ transaction(() => {
   const insImage = db.prepare("INSERT INTO announcement_images (id, announcement_id, position, mime, data) VALUES (?, ?, ?, 'image/png', ?)");
   insImage.run(crypto.randomBytes(12).toString('hex'), photos, 0, sampleCastell(5, [214, 90, 106]));
   insImage.run(crypto.randomBytes(12).toString('hex'), photos, 1, sampleCastell(7, [90, 140, 214]));
-  // Un viatge amb inscripció i pagament, i algunes respostes, per veure-ho a la demo.
-  insNews.run('Viatge a la diada de Vilafranca', "Anirem en autocar i dinarem tots junts. Apunta't abans de divendres i fes el pagament amb el concepte que et surt.", 0, '-3 days');
-  const tripId = db.prepare("SELECT id FROM announcements WHERE title = 'Viatge a la diada de Vilafranca'").get().id;
-  const tripQs = [
-    { id: 'qbus', text: 'Com hi vens?', multiple: false, options: [{ id: 'obus', text: 'En autocar', price: 1200 }, { id: 'ocot', text: 'Pel meu compte', price: null }, { id: 'ono', text: 'No hi vinc', price: null }] },
-    { id: 'qdin', text: 'Dines amb la colla?', multiple: false, options: [{ id: 'osi', text: 'Sí', price: 1800 }, { id: 'ond', text: 'No', price: null }] },
-  ];
-  db.prepare("INSERT INTO announcement_forms (announcement_id, questions, closes_on, results_public, pay_holder, pay_iban, pay_bizum, pay_concept) VALUES (?, ?, date('now', '+5 days'), 1, ?, ?, ?, 'Vilafranca')")
-    .run(tripId, JSON.stringify(tripQs), 'Colla Castellera', 'ES9121000418450200051332', '612345678');
-  // Amb un atzar a part, perquè la resta de la demo quedi igual que abans.
-  let s2 = 11;
-  const r2 = () => ((s2 = (s2 * 16807) % 2147483647) / 2147483647);
-  const p2 = (arr) => arr[Math.floor(r2() * arr.length)];
-  const b2 = (x, y) => Math.round(x + r2() * (y - x));
-  const insAnswer = db.prepare("INSERT INTO announcement_answers (announcement_id, person_id, answers, answered_at, paid_at, received_at) VALUES (?, ?, ?, datetime('now', ?), ?, ?)");
-  for (const p of people.filter((x) => x.active !== 0).slice(0, 40)) {
-    if (r2() < 0.35) continue;
-    const how = p2(['obus', 'obus', 'obus', 'ocot', 'ono']);
-    const eat = how === 'ono' ? 'ond' : p2(['osi', 'osi', 'ond']);
-    const paying = how === 'obus' || eat === 'osi';
-    const state = paying ? p2(['', 'paid', 'received', 'received']) : '';
-    insAnswer.run(tripId, p.id, JSON.stringify({ qbus: [how], qdin: [eat] }), `-${b2(1, 70)} hours`,
-      state ? new Date(Date.now() - 3600e3 * b2(1, 40)).toISOString().slice(0, 19).replace('T', ' ') : null,
-      state === 'received' ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null);
-  }
   const insCompanion = db.prepare('INSERT INTO event_guests (event_id, name, companion_of) VALUES (?, ?, ?)');
   const companionNames = ['Laia', 'Oriol', 'Marta', 'Pau', 'Núria', 'Jordi', 'Clara', 'Marc'];
   for (const p of people.filter((x) => present.sopar.has(x.id))) {
     const n = rand() < 0.45 ? between(1, 3) : 0;
     const label = p.alias || p.name.replace(/^(\S+)\s+(\S).*$/, '$1 $2.');
     for (let i = 0; i < n; i++) insCompanion.run(events.sopar, rand() < 0.4 ? pick(companionNames) : `Acompanyant ${/^[aeiouàèéíòóúh]/i.test(label) ? "d'" : 'de '}${label}${n > 1 ? ` (${i + 1})` : ''}`, p.id);
+  }
+  // Pagaments: el sopar es paga (per persona i per acompanyant) i a la diada es paga el dinar; un missatge de l'altaveu
+  // porta al sopar. Amb un atzar a part, perquè la resta de la demo quedi igual que abans.
+  const pay = db.prepare("INSERT INTO event_payments (event_id, price, companion_price, holder, iban, bizum, concept) VALUES (?, ?, ?, 'Colla Castellera', 'ES9121000418450200051332', '612345678', ?)");
+  pay.run(events.sopar, 2500, 2500, 'Sopar');
+  pay.run(events.diada, null, null, 'Dinar diada');
+  db.prepare('UPDATE event_fields SET price = 1500 WHERE id IN (?, ?)').run(fDinar, fAcomp);
+  insNews.run('Sopar de final de temporada', "Ja us podeu apuntar al sopar! 25 € per persona, també per als acompanyants. Apunta't i fes el pagament amb el concepte que et surt a la sessió.", 1, '-3 hours');
+  db.prepare("UPDATE announcements SET event_id = ? WHERE title = 'Sopar de final de temporada'").run(events.sopar);
+  let s2 = 11;
+  const r2 = () => ((s2 = (s2 * 16807) % 2147483647) / 2147483647);
+  const stamp = (hours) => new Date(Date.now() - hours * 3600e3).toISOString().slice(0, 19).replace('T', ' ');
+  for (const ev of [events.sopar, events.diada]) {
+    for (const a of db.prepare("SELECT person_id FROM attendance WHERE event_id = ? AND status = 'si'").all(ev)) {
+      const x = r2();
+      if (x < 0.35) continue;
+      db.prepare('UPDATE attendance SET paid_at = ?, received_at = ? WHERE event_id = ? AND person_id = ?')
+        .run(stamp(2 + Math.floor(x * 40)), x > 0.6 ? stamp(1) : null, ev, a.person_id);
+    }
   }
   castell(events.a1, '3d8', { label: 'Prova de tronc', position: 1, ratio: 0.6, present: present.a1, partial: { from_level: 2, to_level: 6 } });
   castell(events.a1, '3d6n', { label: 'Prova neta', position: 2, ratio: 1, present: present.a1 });

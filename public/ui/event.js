@@ -7,7 +7,9 @@ import { castellModal } from './castell-form.js';
 import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
   fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, partialLabel, qs, qsa,
   render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
+import { eventAmount } from '../forms.js';
 import { nextPlanTime } from '../planning.js';
+import { bindPayCard, bindPaymentAdmin, fieldPriceModal, money, payCard, payCell, paymentAdminCard, priceHint, priceSummary } from './pay.js';
 import { eventModal } from './sessions.js';
 import { bindTimeline, timelineCard } from './timeline.js';
 import { STATUS_ORDER, assignedName } from './viewer.js';
@@ -16,12 +18,12 @@ import { STATUS_ORDER, assignedName } from './viewer.js';
 function fieldInput(f, value, prefix = 'x') {
   const name = `${prefix}${f.id}`;
   const req = f.required ? ' *' : '';
-  if (f.kind === 'bool') return `<label class="check"><input type="checkbox" name="${name}" ${value ? 'checked' : ''}> ${esc(f.label)}${req}</label>`;
+  if (f.kind === 'bool') return `<label class="check"><input type="checkbox" name="${name}" ${value ? 'checked' : ''}> ${esc(f.label)}${req}${priceHint.bool(f)}</label>`;
   if (f.kind === 'select') {
-    return `<label class="field">${esc(f.label)}${req}<select name="${name}"><option value="">—</option>${f.options.map((o) => `<option ${value === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
+    return `<label class="field">${esc(f.label)}${req}<select name="${name}"><option value="">—</option>${f.options.map((o, i) => `<option value="${esc(o)}" ${value === o ? 'selected' : ''}>${esc(o)}${priceHint.option(f, i)}</option>`).join('')}</select></label>`;
   }
   const type = f.kind === 'number' ? 'number" min="0" max="100000" step="1" inputmode="numeric' : 'text" maxlength="300';
-  return `<label class="field">${esc(f.label)}${req}<input type="${type}" name="${name}" value="${esc(value)}"></label>`;
+  return `<label class="field"><span>${esc(f.label)}${req}${f.kind === 'number' ? priceHint.number(f) : ''}</span><input type="${type}" name="${name}" value="${esc(value)}"></label>`;
 }
 function readExtra(form, fields, prefix = 'x') {
   const out = {};
@@ -109,7 +111,7 @@ async function exportSession(event, castells, button) {
 }
 
 export async function pageEvent(id) {
-  const { event, fields, castells, mine, attendance, counts, guests = [], forecast, roles = [], roleLabels = [], plan_clashes: clashes = [] } = await api('GET', `/events/${id}`);
+  const { event, fields, castells, mine, attendance, counts, guests = [], forecast, roles = [], roleLabels = [], plan_clashes: clashes = [], payment, payments } = await api('GET', `/events/${id}`);
   const admin = isAdmin();
   let status = mine?.status ?? null;
   let escoleta = mine?.escoleta ?? null;
@@ -140,7 +142,7 @@ export async function pageEvent(id) {
     return groups.map(([k, xs]) => `<h3 class="instr-h">${groupLabel(k)} · ${xs.length}</h3><div class="names">${xs.map(chip).join('')}</div>`).join('');
   };
   // A la taula de l'administració, una fila de capçalera per grup amb quants en vénen.
-  const columns = 3 + passList + !!event.escoleta + !!event.ask_companions + fields.length;
+  const columns = 3 + passList + !!event.escoleta + !!event.ask_companions + fields.length + !!payment;
   const tableGroups = (list, row) => {
     const groups = isMusics ? [[null, list]] : byGroup(list);
     if (groups.length === 1 && !groups[0][0]) return list.map(row).join('');
@@ -216,7 +218,7 @@ export async function pageEvent(id) {
       ${passList ? `<p class="small muted" style="margin:0 0 8px">${t('Qui havia dit «Vinc» compta com a present. Toca «Ha vingut» per marcar qui no ha vingut, o afegeix qui ha vingut sense apuntar-se.')}</p>` : ''}
       <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" aria-label="${t('Cerca persona…')}" style="margin-bottom:6px">
       <div class="table-wrap"><table class="responsive" id="att-table">
-        <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>${t('Comentari')}</th></tr></thead>
+        <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}${payment ? `<th>${t('Pagament')}</th>` : ''}<th>${t('Comentari')}</th></tr></thead>
         <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
           <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}</td>
           <td><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
@@ -224,6 +226,7 @@ export async function pageEvent(id) {
           ${event.escoleta ? `<td data-l="${t('Escoleta')}">${escValue(a.escoleta)}</td>` : ''}
           ${event.ask_companions ? `<td data-l="${t('Acompanyants')}" class="small">${a.companions.length ? `<strong>${a.companions.length}</strong> · ${esc(a.companions.join(', '))}` : ''}</td>` : ''}
           ${fields.map((f) => `<td data-l="${esc(f.label)}">${extraValue(f, a.extra?.[f.id])}</td>`).join('')}
+          ${payment ? `<td data-l="${t('Pagament')}" class="pay-cell">${payCell(a)}</td>` : ''}
           <td data-l="${t('Comentari')}" class="small">${esc(a.comment)}</td>
         </tr>`)}</tbody>
       </table></div>
@@ -281,10 +284,12 @@ export async function pageEvent(id) {
   const fieldsCard = can('sessions') ? `
     <div class="card">
       <div class="card-head"><h2>${t('Camps extra')}</h2></div>
-      <p class="small muted" style="margin-top:-6px">${t('Preguntes addicionals que cada persona respon en confirmar (acompanyants, dinar, autocar…).')}</p>
+      <p class="small muted" style="margin-top:-6px">${t('Preguntes addicionals que cada persona respon en confirmar (acompanyants, dinar, autocar…).')} ${t('Amb «Preu», la resposta es cobra (cal posar on es paga a «Pagament»).')}</p>
       <div class="field-list">${fields.map((f) => `<div class="field-row"><div><div>${esc(f.label)}${f.required ? ' *' : ''}</div>
-        <div class="k">${{ number: t('Número'), text: t('Text'), bool: t('Sí / No'), select: t('Llista') + ': ' + esc(f.options.join(', ')) }[f.kind]}</div></div>
-        <button class="btn ghost sm danger" style="margin-left:auto" data-del-field="${f.id}">${t('Esborra')}</button></div>`).join('') || `<div class="muted small">${t('Cap camp extra.')}</div>`}</div>
+        <div class="k">${{ number: t('Número'), text: t('Text'), bool: t('Sí / No'), select: t('Llista') + ': ' + esc(f.options.join(', ')) }[f.kind]}</div>
+        ${priceSummary(f) ? `<div class="k price-k">${esc(priceSummary(f))}</div>` : ''}</div>
+        ${f.kind === 'text' ? '' : `<button class="btn ghost sm" style="margin-left:auto" data-price-field="${f.id}">${t('Preu')}</button>`}
+        <button class="btn ghost sm danger" ${f.kind === 'text' ? 'style="margin-left:auto"' : ''} data-del-field="${f.id}">${t('Esborra')}</button></div>`).join('') || `<div class="muted small">${t('Cap camp extra.')}</div>`}</div>
       <form id="field-form" class="form-grid">
         <label class="field">${t('Nom del camp')}<input name="label" maxlength="60" placeholder="${t('Acompanyants')}" required></label>
         <label class="field">${t('Tipus')}<select name="kind"><option value="number">${t('Número')}</option><option value="bool">${t('Sí / No')}</option><option value="text">${t('Text')}</option><option value="select">${t("Llista d'opcions")}</option></select></label>
@@ -332,10 +337,12 @@ export async function pageEvent(id) {
             ${event.ask_companions ? companionsInput(ownCompanionNames(mine?.companions || [])) : ''}
             ${mine?.companions?.some((g) => g.dropped) ? `<p class="small muted" style="margin:0">${t("Algun acompanyant que has tret ja era en un castell: la tècnica ho veurà.")}</p>` : ''}
             ${fields.map((f) => fieldInput(f, mine?.extra?.[f.id])).join('')}
+            ${payment ? `<p class="small rsvp-total" id="rsvp-total" aria-live="polite"></p>` : ''}
           </div>
           <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" maxlength="300" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
           ${event.rsvp_open ? `<div class="form-actions"><button class="btn primary" ${status || escoleta !== null ? '' : 'disabled'} id="rsvp-save">${t('Desa')}</button></div>` : ''}
         </form>`}
+        ${admin ? '' : payCard(event, mine, payment)}
         ${admin ? '' : rolesCard}
         ${isMusics ? '' : `<div class="card">
           <div class="card-head"><h2>${t('Castells')}</h2>
@@ -346,6 +353,7 @@ export async function pageEvent(id) {
         ${event.type === 'assaig' && can('staff') ? timelineCard(event, castells, clashes) : ''}
         ${admin ? rolesCard : ''}
         ${guestsCard}
+        ${admin ? paymentAdminCard(event, payment, payments, attendance, fields) : ''}
         ${fieldsCard}
       </div>
       <div class="stack">${forecastCard}${admin ? answersCard(event, attendance) : ''}${adminTable}</div>
@@ -356,6 +364,17 @@ export async function pageEvent(id) {
   if (form && !event.rsvp_open) qsa('input, select, textarea, button', form).forEach((el) => (el.disabled = true));
   if (form && event.rsvp_open) {
   bindCompanions(form);
+  // Mentre respon, quant li costarà (el preu de la sessió més el de les respostes amb preu).
+  const total = qs('#rsvp-total');
+  const showTotal = () => {
+    if (!total) return;
+    const companions = Number(form.elements.companions_n?.value) || 0;
+    const amount = eventAmount(payment, fields, { status: 'si', extra: readExtra(form, fields), companions });
+    total.textContent = amount ? t('Total a pagar: {amount}', { amount: money(amount) }) : '';
+  };
+  showTotal();
+  form.addEventListener('input', showTotal);
+  form.addEventListener('change', showTotal);
   qsa('#rsvp-main button', form).forEach((b) => (b.onclick = () => {
     status = b.dataset.v;
     qsa('#rsvp-main button', form).forEach((x) => x.classList.toggle('on', x === b));
@@ -380,6 +399,7 @@ export async function pageEvent(id) {
   };
   }
 
+  bindPayCard(event);
   if (!admin) return;
   bindAnswersCard(event, attendance);
   qs('#add-guest')?.addEventListener('click', () => guestModal(event.id, null, () => render({ keepScroll: true })));
@@ -391,6 +411,8 @@ export async function pageEvent(id) {
   qs('#export-xlsx')?.addEventListener('click', (e) => exportSession(event, castells, e.currentTarget));
   bindSessionEditing(event, reload, castells);
   bindAttendanceTable(event, attendance, fields, reload);
+  bindPaymentAdmin(event, payment, reload);
+  qsa('[data-price-field]').forEach((b) => (b.onclick = () => fieldPriceModal(fields.find((f) => String(f.id) === b.dataset.priceField), reload)));
 }
 
 // Els castells es creen ocults: en mostrar la sessió, millor preguntar-ho que deixar-la buida sense voler.

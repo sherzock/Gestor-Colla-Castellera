@@ -4,16 +4,16 @@ export const CHANGELOG = [
   {
     version: '1.3.0', date: '2026-11-18',
     ca: [
-      "Preguntes a l'altaveu: enquestes i inscripcions amb la resposta de cada persona, que la junta veu i pot exportar.",
-      "Pagaments: cada opció pot tenir preu; qui la tria veu quant ha de pagar, l'IBAN o el Bizum i el concepte, i la junta apunta què ha rebut.",
+      "Pagaments a les sessions: preu per persona, per acompanyant i a les respostes; qui ve veu quant ha de pagar, l'IBAN o el Bizum i el concepte, avisa quan ha pagat i la junta ho marca com a rebut.",
+      "Els missatges de l'altaveu poden portar un botó cap a una sessió, per apuntar-s'hi i, si cal, pagar.",
     ],
     es: [
-      'Preguntas en el altavoz: encuestas e inscripciones con la respuesta de cada persona, que la junta ve y puede exportar.',
-      'Pagos: cada opción puede tener precio; quien la elige ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, y la junta apunta qué ha recibido.',
+      'Pagos en las sesiones: precio por persona, por acompañante y en las respuestas; quien viene ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, avisa cuando ha pagado y la junta lo marca como recibido.',
+      'Los mensajes del altavoz pueden llevar un botón hacia una sesión, para apuntarse y, si hace falta, pagar.',
     ],
     en: [
-      "Questions in announcements: polls and sign-ups with each person's answer, which the board can see and export.",
-      'Payments: each option can have a price; whoever picks it sees how much to pay, the IBAN or Bizum and the reference, and the board marks what it has received.',
+      'Payments in sessions: price per person, per companion and per answer; whoever goes sees how much to pay, the IBAN or Bizum and the reference, says when they have paid and the board marks it as received.',
+      'Announcements can carry a button to a session, to sign up and, if needed, pay.',
     ],
   },
   {

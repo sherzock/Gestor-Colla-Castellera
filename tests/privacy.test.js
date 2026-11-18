@@ -133,13 +133,13 @@ const PERSON_EXPORT = { name: 'nom', alias: 'malnom', email: 'correu', phone: 't
   notes: 'notes', instrument: 'instrument', section: 'grup', active: 'activa', created_at: 'alta', guardian_consent: 'consentiment_tutor' };
 // id; i usuari, contrasenya i rol de quan els administradors eren persones (ara sempre buits: veure db.js).
 const PERSON_NOT_DATA = ['id', 'username', 'password_hash', 'role'];
-const ATTENDANCE_EXPORT = { status: 'resposta', came: 'ha_vingut', escoleta: 'escoleta', extra: 'camps', comment: 'comentari', updated_at: 'actualitzat' };
+const ATTENDANCE_EXPORT = { status: 'resposta', came: 'ha_vingut', escoleta: 'escoleta', extra: 'camps', comment: 'comentari', updated_at: 'actualitzat',
+  paid_at: 'diu_que_ha_pagat', received_at: 'pagament_rebut' };
 // «present» és d'una versió antiga (ara es calcula, veure CAME_SQL).
 const ATTENDANCE_NOT_DATA = ['event_id', 'person_id', 'present'];
 // Cada taula que guarda alguna cosa d'una persona i on surt a la descàrrega.
 const PERSON_TABLES = { attendance: 'assistencia', castell_positions: 'posicions', event_guests: 'acompanyants',
-  push_subscriptions: 'mobils_amb_avisos', push_reminders: 'recordatoris', auth_tokens: 'sessions_obertes', event_roles: 'encarrecs',
-  announcement_answers: 'respostes_altaveu' };
+  push_subscriptions: 'mobils_amb_avisos', push_reminders: 'recordatoris', auth_tokens: 'sessions_obertes', event_roles: 'encarrecs' };
 
 test('la descàrrega de les dades d\'una persona porta tot el que se\'n guarda', async () => {
   const db = new DatabaseSync(server.dbPath, { readOnly: true });
@@ -168,11 +168,9 @@ test('esborrar una persona no en deixa cap rastre: ni a la base de dades, ni din
   await m('POST', '/identify', { person_id: p.id });
   assert.equal((await m('PUT', `/events/${ev.id}/attendance`, { status: 'si', comment: 'comentariesborrable',
     companions: ['Acompesborrable Roca'], extra: { [field.id]: 'tallaesborrable' } })).s, 200);
-  // També una resposta a una enquesta de l'altaveu, amb pagament.
-  const news = (await A('POST', '/announcements', { title: 'Enquesta esborrable', notify: false, form: { pay_iban: 'ES9121000418450200051332',
-    questions: [{ text: 'Bus?', options: [{ text: 'Sí', price: 1500 }, { text: 'No' }] }] } })).d;
-  const q = (await m('GET', '/announcements')).d.find((a) => a.id === news.id).form.questions[0];
-  assert.equal((await m('PUT', `/announcements/${news.id}/answer`, { answers: { [q.id]: [q.options[0].id] } })).s, 200);
+  // La sessió es paga i ha avisat que ha pagat.
+  assert.equal((await A('PUT', `/events/${ev.id}/payment`, { price: 1500, iban: 'ES9121000418450200051332' })).s, 200);
+  assert.equal((await m('PUT', `/events/${ev.id}/paid`, { paid: true })).s, 200);
   const companion = (await A('GET', `/events/${ev.id}`)).d.guests.find((g) => g.companion_of === p.id);
   await A('PUT', `/castells/${c.id}/positions/t1-0`, { person_id: p.id });
   await A('PUT', `/castells/${c.id}/positions/t2-0`, { guest_id: companion.id });

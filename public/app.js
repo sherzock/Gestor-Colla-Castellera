@@ -8,7 +8,6 @@ import { pageEvent } from './ui/event.js';
 import { pageAdminLogin, pageIdentify, pagePrivacy } from './ui/login.js';
 import { pageChangelog, pageHelp } from './ui/help.js';
 import { pageNews } from './ui/news.js';
-import { pageAnswers } from './ui/poll.js';
 import { pagePeople, pageProfile } from './ui/people.js';
 import { pageHome } from './ui/sessions.js';
 import { renderNav } from './ui/shell.js';
@@ -33,7 +32,6 @@ const routes = [
   [/^#\/estadistiques\/persona\/(\d+)$/, pagePersonStats],
   [/^#\/plantilles$/, pageTemplates],
   [/^#\/altaveu$/, pageNews],
-  [/^#\/altaveu\/(\d+)$/, pageAnswers],
   [/^#\/plantilla\/([a-z0-9]{2,12})$/, pageTemplate],
   [/^#\/registre$/, pageAudit],
   [/^#\/ajuda(?:\/([a-z]+))?$/, pageHelp],
