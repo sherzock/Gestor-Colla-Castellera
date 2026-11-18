@@ -139,9 +139,11 @@ function pinyaPlan(width) {
 }
 
 // Opcions de cada capa: «rings» cordons de mans i vents, «lateralRings» cordons amb laterals (per defecte, tots),
-// «crosses» (dues per columna del tronc), «noMans» (sense línies de mans) i «roles» per canviar el nom d'una
-// posició (els puntals).
-function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, taps, add, crosses = true, lateralRings = rings, roles = {}, noMans = false }) {
+// «crosses» (dues per columna del tronc; «pilarCrosses», també al pilar), «noMans» (sense línies de mans),
+// «mansRings» (quants cordons de mans té cada braç, si no són tots iguals), «ventRings» i «roles» per canviar el nom
+// d'una posició (els puntals).
+function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents, agulles, taps, add, crosses = true, pilarCrosses = false,
+  lateralRings = rings, ventRings = rings, mansRings = null, roles = {}, noMans = false }) {
   const items = [];
   const placed = [];
   // «cat» és la categoria comparable entre castells diferents (per a l'historial).
@@ -179,7 +181,7 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
     put(`${prefix}c${i}`, roles.contrafort || 'Contrafort', 'contrafort', across(b, b.dir, STEP));
     // La torre té una sola agulla; el pilar la té al costat contrari del contrafort.
     if (agulles && (width !== 2 || i === 0)) maybe(across(b, b.dir, -STEP), (box) => put(`${prefix}a${i}`, 'Agulla', 'agulla', box));
-    if (crosses && !plan.pilar) {
+    if (crosses && (!plan.pilar || pilarCrosses)) {
       const off = BOX_W / 2 + BOX_H / 2 + 2;
       for (const [side, o] of [['e', off], ['d', -off]]) {
         const p = across(b, b.dir, STEP / 2, o);
@@ -190,7 +192,8 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
 
   // Braços amb línia de mans: un per baix (i el pilar en té un altre darrere l'agulla).
   const arms = plan.baixos.map((b, i) => ({ b, i, dir: b.dir, key: i, mans: '' }));
-  if (plan.pilar) arms.push({ b: plan.baixos[0], i: 1, dir: plan.baixos[0].dir + Math.PI, key: 1, mans: " de l'agulla" });
+  // Al folre i a les manilles no hi ha agulla: les mans d'aquest costat són les del davant.
+  if (plan.pilar) arms.push({ b: plan.baixos[0], i: 1, dir: plan.baixos[0].dir + Math.PI, key: 1, mans: agulles ? " de l'agulla" : ' del davant' });
   const cursor = new Map();
   // maxJump: si la línia hauria de saltar més enllà d'això per trobar lloc, s'acaba (no hi cap).
   const step = (k, from, dir, o, start, maxJump = Infinity) => {
@@ -218,11 +221,11 @@ function buildLayer({ id, label, width, prefix, baseKey, centerKey, rings, vents
   // Cordó a cordó, perquè cada cordó ocupi el lloc més proper al centre que li quedi.
   for (let n = 1; n <= rings; n++) {
     if (!noMans) for (const arm of arms) {
+      if (mansRings && n > (mansRings[arm.key] ?? rings)) continue;
       const box = step(`m${arm.key}`, arm.b, arm.dir, 0, 2 * STEP);
       if (box) put(`${prefix}m${n}-${arm.key}`, `${ordinal(n, true)} mans${arm.mans}`, 'mans', box, { ring: n, cat: `${ordinal(n, true)} mans` });
     }
-    if (!vents) continue;
-    plan.gaps.forEach((g, gi) => {
+    if (vents && n <= ventRings) plan.gaps.forEach((g, gi) => {
       const [a, b] = Array.isArray(g) ? g : [g.a, g.b];
       const A = plan.baixos[a], B = plan.baixos[b];
       const dir = g.dir ?? Math.atan2(Math.sin(Math.atan2(A.y, A.x)) + Math.sin(Math.atan2(B.y, B.x)), Math.cos(Math.atan2(A.y, A.x)) + Math.cos(Math.atan2(B.y, B.x)));
@@ -364,13 +367,15 @@ export function buildStructure(c, { ignoreTemplate = false } = {}) {
   // i dos cordons de mans, vents i laterals.
   if (folre && troncLevels >= 2) {
     layers.push(layer({ id: 'folre', label: 'Folre', width, prefix: 'f', baseKey: (i) => `t2-${i}`, centerKey: center(2),
-      rings: 2, vents: true, agulles: false, add }));
+      rings: 2, vents: true, agulles: false, pilarCrosses: true, add }));
   }
   // Manilles: contrafort i crosses a cada terç, primeres i segones mans, primer i segon vent, i un sol cordó de
-  // laterals. Mai no hi va agulla.
+  // laterals. Mai no hi va agulla. Al pilar: contrafort, dues crosses, tres mans al darrere i una al davant, un
+  // vent (dau) a cada costat i els laterals (diagonals).
   if (folre && c.manilles && troncLevels >= 3) {
+    const pilar = width === 1 ? { rings: 3, mansRings: { 0: 3, 1: 1 }, ventRings: 1 } : { rings: 2 };
     layers.push(layer({ id: 'manilles', label: 'Manilles', width, prefix: 'm', baseKey: (i) => `t3-${i}`,
-      rings: 2, lateralRings: 1, vents: true, agulles: false, add }));
+      lateralRings: 1, vents: true, agulles: false, pilarCrosses: true, add, ...pilar }));
   }
   // Puntals: molt poca gent al pis de quarts: un puntal al darrere de cada quart i un entre quart i quart (el dau),
   // que l'aguanten de les cames. Sense crosses ni mans.
