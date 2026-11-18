@@ -92,18 +92,13 @@ function twoFactorOffModal() {
   });
 }
 
-const templatesCard = () => `<div class="card stack">
-          <h2>${t('Pinyes de la colla')}</h2>
-          <p class="small muted" style="margin:0">${t('Redibuixa la pinya de cada castell a la manera de la colla: mou, afegeix o treu posicions.')}</p>
-          <div class="form-actions"><a class="btn" href="#/plantilles">${t('Obre l\'editor de pinyes')}</a></div>
-        </div>`;
 
 // Els comptes de junta i tècnica només hi veuen el que és seu; els comptes els gestiona l'administració.
 function pageMyAccount() {
   $app.innerHTML = `
     <div class="page-head"><h1>${t('El meu compte')}</h1></div>
     <p class="muted" style="margin-top:0">${t('Compte de {what}. Per canviar què pot fer, parla amb l\'administració.', { what: `<strong>${esc(accountLabel(me.roles))}</strong>` })}</p>
-    <div class="grid-2"><div class="stack">${passwordCard()}${twoFactorCard()}</div><div class="stack">${can('castells') ? templatesCard() : ''}${helpCard()}</div></div>`;
+    <div class="grid-2"><div class="stack">${passwordCard()}${twoFactorCard()}</div><div class="stack">${helpCard()}</div></div>`;
   bindPassword();
   bindTwoFactor();
 }
@@ -199,7 +194,6 @@ export async function pageAccounts() {
       <div class="stack">
         ${passwordCard()}
         ${twoFactorCard()}
-        ${templatesCard()}
         ${helpCard()}
       </div>
     </div>`;

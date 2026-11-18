@@ -95,9 +95,11 @@ export function renderNav() {
     link('#/altaveu', 'megaphone', t('Altaveu'), path.startsWith('#/altaveu'), !isAdmin() && newsUnread()),
     link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')),
     isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones')) : '',
+    can('castells') ? link('#/plantilles', 'pinya', t('Pinyes'), path.startsWith('#/plantill')) : '',
     link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques')),
     isAdmin() ? link('#/comptes', 'lock', can('admin') ? t('Comptes') : t('El meu compte'), path.startsWith('#/comptes')) : link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
   ].join('');
+  document.getElementById('nav').classList.toggle('many', document.querySelectorAll('#nav a').length > 6);
   document.body.classList.toggle('admin-mode', isAdmin());
   const chip = document.getElementById('me-chip');
   chip.title = t('Ajustos i canvi de persona');

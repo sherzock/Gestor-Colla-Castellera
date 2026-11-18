@@ -18,7 +18,7 @@ const ca = [
   ['horari', 'staff', "Horari de l'assaig", `
     <p>A cada assaig, la tècnica i la junta veuen quan es fa cada castell. Arrossega un bloc per canviar-ne l'hora (amb el dit, agafa'l pels punts de la dreta) o toca'l per posar-hi l'hora i els minuts exactes. Si dos castells coincideixen i tenen gent en comú, surt en vermell.</p>`],
   ['pinyes', 'staff', 'Pinyes de la colla', `
-    <p>A <em>El meu compte → Pinyes de la colla</em> es redibuixa la pinya de cada castell: moure, girar, afegir o treure posicions, amb encaix i desfer. Els canvis valen per a tots els castells d'aquell tipus, i les posicions que es mantenen conserven l'historial.</p>
+    <p>A la pestanya <em>Pinyes</em> es redibuixa la pinya de cada castell: moure, girar, afegir o treure posicions, amb encaix i desfer. Els canvis valen per a tots els castells d'aquell tipus, i les posicions que es mantenen conserven l'historial.</p>
     <p>Es pot partir de la pinya d'un altre castell amb els mateixos baixos (per exemple, del 3d7 al 3d8), o de l'estàndard amb taps i tapa-taps.</p>`],
   ['altaveu', 'staff', 'Altaveu', `<p>Missatges per a tota la colla, amb fotos i emojis. Si ho marques, arriben com a avís al mòbil de qui els té activats. Se'n guarden com a molt 50.</p>`],
   ['comptes', 'admin', 'Comptes i segon factor', `
@@ -60,7 +60,7 @@ const es = [
   ['horari', 'staff', 'Horario del ensayo', `
     <p>En cada ensayo, la técnica y la junta ven cuándo se hace cada castell. Arrastra un bloque para cambiar su hora (con el dedo, cógelo por los puntos de la derecha) o tócalo para poner la hora y los minutos exactos. Si dos castells coinciden y tienen gente en común, sale en rojo.</p>`],
   ['pinyes', 'staff', 'Pinyes de la colla', `
-    <p>En <em>Mi cuenta → Pinyes de la colla</em> se redibuja la pinya de cada castell: mover, girar, añadir o quitar posiciones, con encaje y deshacer. Los cambios valen para todos los castells de ese tipo, y las posiciones que se mantienen conservan el historial.</p>
+    <p>En la pestaña <em>Pinyes</em> se redibuja la pinya de cada castell: mover, girar, añadir o quitar posiciones, con encaje y deshacer. Los cambios valen para todos los castells de ese tipo, y las posiciones que se mantienen conservan el historial.</p>
     <p>Se puede partir de la pinya de otro castell con los mismos baixos (por ejemplo, del 3d7 al 3d8), o de la estándar con taps y tapa-taps.</p>`],
   ['altaveu', 'staff', 'Altavoz', `<p>Mensajes para toda la colla, con fotos y emojis. Si lo marcas, llegan como aviso al móvil de quien los tiene activados. Se guardan como mucho 50.</p>`],
   ['comptes', 'admin', 'Cuentas y segundo factor', `
@@ -102,7 +102,7 @@ const en = [
   ['horari', 'staff', 'Rehearsal schedule', `
     <p>At each rehearsal, the technical team and the board see when each castell happens. Drag a block to change its time (with a finger, hold it by the dots on the right) or tap it to set the exact time and minutes. If two castells overlap and share people, it shows in red.</p>`],
   ['pinyes', 'staff', "Colla's pinyes", `
-    <p>In <em>My account → Colla's pinyes</em> you redraw the pinya of each castell: move, rotate, add or remove positions, with snapping and undo. Changes apply to every castell of that type, and positions that are kept keep their history.</p>
+    <p>In the <em>Pinyes</em> tab you redraw the pinya of each castell: move, rotate, add or remove positions, with snapping and undo. Changes apply to every castell of that type, and positions that are kept keep their history.</p>
     <p>You can start from another castell's pinya with the same baixos (for example, from 3d7 to 3d8), or from the standard one with taps and tapa-taps.</p>`],
   ['altaveu', 'staff', 'Announcements', `<p>Messages for the whole colla, with photos and emojis. If you tick it, they arrive as a notification on phones that have them turned on. At most 50 are kept.</p>`],
   ['comptes', 'admin', 'Accounts and two-step verification', `

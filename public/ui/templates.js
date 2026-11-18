@@ -19,7 +19,6 @@ export async function pageTemplates() {
   const rows = [...types];
   for (const x of list) if (!rows.some((r) => r.name === x.name)) rows.push({ name: x.name, castells: 0 });
   $app.innerHTML = `
-    <a class="back" href="#/comptes">${icon.back}${can('admin') ? t('Comptes') : t('El meu compte')}</a>
     <div class="page-head"><h1>${t('Pinyes de la colla')}</h1></div>
     <p class="muted" style="margin-top:0">${t("Tria un castell per redibuixar-ne la pinya a la manera de la colla. Els canvis valen per a tots els castells d'aquest tipus, també els que ja s'han fet.")}</p>
     <div class="card">

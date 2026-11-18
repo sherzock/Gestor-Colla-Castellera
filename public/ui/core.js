@@ -164,6 +164,7 @@ export const icon = {
   plus: svg('<path d="M12 5v14M5 12h14"/>', 2.4),
   expand: svg('<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>'),
   chevron: svg('<path d="M6 9l6 6 6-6"/>'),
+  pinya: svg('<circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="4.5" r="1.4"/><circle cx="12" cy="19.5" r="1.4"/><circle cx="4.5" cy="12" r="1.4"/><circle cx="19.5" cy="12" r="1.4"/><circle cx="6.7" cy="6.7" r="1.4"/><circle cx="17.3" cy="17.3" r="1.4"/><circle cx="17.3" cy="6.7" r="1.4"/><circle cx="6.7" cy="17.3" r="1.4"/>', 1.8),
   music: svg('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),
   back: '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
 };
