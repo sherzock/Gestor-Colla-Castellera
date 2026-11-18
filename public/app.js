@@ -38,8 +38,18 @@ const routes = [
   [/^#\/novetats$/, pageChangelog],
 ];
 
+// Quan la mateixa pàgina es torna a pintar (en triar una pestanya, desar…), el focus del teclat torna al mateix botó.
+function focusKey(el) {
+  if (!el || el === document.body || !$app.contains(el)) return null;
+  if (el.id) return `#${CSS.escape(el.id)}`;
+  const box = el.parentElement?.closest('[id]');
+  const data = [...el.attributes].filter((x) => x.name.startsWith('data-')).map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join('');
+  return box && data ? `#${CSS.escape(box.id)} ${el.tagName.toLowerCase()}${data}` : null;
+}
+
 async function renderPage({ keepScroll = false } = {}) {
   const scroll = window.scrollY;
+  const refocus = focusKey(document.activeElement);
   const hash = location.hash || '#/';
   if (!me && !PUBLIC_ROUTES.includes(hash)) {
     try { setMe(await api('GET', '/me')); } catch { return; }
@@ -53,15 +63,31 @@ async function renderPage({ keepScroll = false } = {}) {
   const args = hash.match(re)?.slice(1) || [];
   try {
     await page(...args);
-    document.title = `${config.collaName} · Appinya't`;
+    // Cada pàgina té el seu títol (el que es llegeix en canviar de pàgina i surt a la pestanya i a l'historial).
+    const h1 = $app.querySelector('h1')?.textContent.trim();
+    document.title = h1 && h1 !== config.collaName ? `${h1} · ${config.collaName}` : `${config.collaName} · Appinya't`;
   } catch (err) {
     if (!err.fromApi) reportError(err.message, err.stack);
     $app.innerHTML = `<div class="empty"><h2>${t("No s'ha pogut carregar")}</h2><p>${esc(err.message)}</p><a class="btn" href="#/">${t("Torna a l'inici")}</a></div>`;
   }
   window.scrollTo(0, keepScroll ? scroll : 0);
+  // En canviar de pàgina, el focus va al principi del contingut nou (el lector de pantalla no es queda al menú).
+  if (moved && !document.querySelector('.modal-back')) { moved = false; $app.focus({ preventScroll: true }); }
+  else if (refocus && !document.querySelector('.modal-back')) $app.querySelector(refocus)?.focus({ preventScroll: true });
+  markTabs();
 }
 setRenderer(renderPage);
-window.addEventListener('hashchange', () => { closeModal(); render(); });
+let moved = false;
+window.addEventListener('hashchange', () => { moved = true; closeModal({ restore: false }); render(); });
+
+// Les pestanyes i els selectors (botons amb la classe «on») diuen quin està triat als lectors de pantalla.
+function markTabs(root = $app) {
+  for (const b of root.querySelectorAll('.tabs > button')) b.setAttribute('aria-pressed', b.classList.contains('on'));
+}
+new MutationObserver((list) => {
+  for (const m of list) if (m.target.matches?.('.tabs > button')) m.target.setAttribute('aria-pressed', m.target.classList.contains('on'));
+    else if (m.type === 'childList') for (const n of m.addedNodes) if (n.nodeType === 1 && (n.matches('.tabs, .tabs > button') || n.querySelector('.tabs'))) markTabs(n.parentElement || n);
+}).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
 
 // ---------- Errors ----------
 // Els errors de l'app (no els que diu el servidor ni els de connexió) s'envien perquè l'administració els vegi.

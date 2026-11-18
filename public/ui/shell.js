@@ -33,8 +33,8 @@ async function adminLogout() {
 export function settingsControls() {
   const seg = (name, options, current) => `<div class="tabs seg" data-seg="${name}">${options.map(([v, l]) =>
     `<button type="button" data-v="${v}" class="${v === current ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  return `<div class="set-group"><h3>${t('Idioma')}</h3>${seg('lang', Object.entries(LANGS), lang)}</div>
-    <div class="set-group"><h3>${t('Aparença')}</h3>${seg('theme', [['auto', t('Automàtic')], ['light', t('Clar')], ['dark', t('Fosc')]], theme)}</div>`;
+  return `<div class="set-group"><h2>${t('Idioma')}</h2>${seg('lang', Object.entries(LANGS), lang)}</div>
+    <div class="set-group"><h2>${t('Aparença')}</h2>${seg('theme', [['auto', t('Automàtic')], ['light', t('Clar')], ['dark', t('Fosc')]], theme)}</div>`;
 }
 export function bindSettings(root, onLang) {
   qsa('[data-seg] button', root).forEach((b) => (b.onclick = () => {
@@ -69,7 +69,7 @@ function settingsModal() {
              : `<a class="btn ghost block" href="#/admin">${t('Entrar com a administrador/a')}</a>`}`}
     </div>
     ${settingsControls()}
-    <div class="set-group"><h3>${t('Avisos al mòbil')}</h3><div id="push-box"></div></div>
+    <div class="set-group"><h2>${t('Avisos al mòbil')}</h2><div id="push-box"></div></div>
     <a href="#/privadesa" class="small muted" style="display:block;text-align:center;margin-top:14px">${t('Protecció de dades')}</a>`, (m) => {
     qs('#switch-person', m)?.addEventListener('click', switchPerson);
     qs('#admin-logout', m)?.addEventListener('click', adminLogout);
@@ -84,10 +84,12 @@ function settingsModal() {
 export function renderNav() {
   const topbar = document.getElementById('topbar');
   topbar.hidden = !me;
+  document.getElementById('skip-link').textContent = t('Salta al contingut');
+  document.getElementById('nav').setAttribute('aria-label', t('Seccions'));
   document.getElementById('brand-name').textContent = config.collaName;
   if (!me) return;
   const path = location.hash || '#/';
-  const link = (href, ic, label, match, dot = false) => `<a href="${href}" class="${match ? 'active' : ''}">${icon[ic]}<span>${label}</span>${dot ? `<i class="nav-dot" title="${t('Hi ha missatges nous')}"></i>` : ''}</a>`;
+  const link = (href, ic, label, match, dot = false) => `<a href="${href}" class="${match ? 'active' : ''}"${match ? ' aria-current="page"' : ''}>${icon[ic]}<span>${label}</span>${dot ? `<i class="nav-dot" aria-hidden="true"></i><span class="sr-only">${t('Hi ha missatges nous')}</span>` : ''}</a>`;
   document.getElementById('nav').innerHTML = [
     link('#/', 'calendar', t('Sessions'), path === '#/' || path.startsWith('#/sessio') || path.startsWith('#/castell')),
     link('#/altaveu', 'megaphone', t('Altaveu'), path.startsWith('#/altaveu'), !isAdmin() && newsUnread()),
@@ -105,3 +107,5 @@ export function renderNav() {
     : `<span class="avatar">${esc(initial(me))}</span><span class="nm">${esc(shortName(me))}</span>${icon.chevron}`;
 }
 document.getElementById('me-chip').onclick = () => settingsModal();
+// L'enllaç per saltar el menú no pot canviar l'adreça (l'app fa servir el # per a les pàgines).
+document.getElementById('skip-link').onclick = (e) => { e.preventDefault(); document.getElementById('app').focus(); };

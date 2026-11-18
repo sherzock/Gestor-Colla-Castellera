@@ -12,13 +12,14 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <a class="skip-link" href="#app" id="skip-link">Salta al contingut</a>
   <header class="topbar" id="topbar" hidden>
     <a href="#/" class="brand"><span class="brand-mark" aria-hidden="true"></span><span id="brand-name">Colla</span></a>
-    <nav class="nav" id="nav"></nav>
+    <nav class="nav" id="nav" aria-label="Seccions"></nav>
     <button class="me-chip" id="me-chip" type="button"></button>
   </header>
   <div id="offline" class="offline-bar" role="status" hidden></div>
-  <main id="app" class="page"></main>
+  <main id="app" class="page" tabindex="-1"></main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module" src="/app.js"></script>
 </body>

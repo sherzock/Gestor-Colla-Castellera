@@ -28,7 +28,7 @@ export async function pageIdentify() {
   const askCode = (error = '') => {
     $app.innerHTML = shell(`
       <p class="muted" style="text-align:center;margin:0">${t('Escriu el codi de la colla per entrar')}</p>
-      <form id="code-form" class="stack"><input name="code" autocomplete="off" required placeholder="${t('Codi de la colla')}">
+      <form id="code-form" class="stack"><input name="code" autocomplete="off" required placeholder="${t('Codi de la colla')}" aria-label="${t('Codi de la colla')}">
         <div class="error">${esc(error)}</div><button class="btn primary">${t('Continua')}</button></form>`);
     qs('#code-form').onsubmit = (e) => { e.preventDefault(); code = e.target.elements.code.value.trim(); store.set('collaCode', code); load(); };
     bind(() => askCode(error));
@@ -47,7 +47,7 @@ export async function pageIdentify() {
         <strong>${esc(p.alias || p.name)}</strong>${p.alias ? `<span class="muted small">${esc(p.name)}</span>` : ''}</button>`;
       $app.innerHTML = shell(`
         <p class="muted" style="text-align:center;margin:0">${t("Qui ets? Tria el teu nom per confirmar l'assistència i trobar-te als castells.")}</p>
-        <input type="search" id="who-q" placeholder="${t('Busca el teu nom o malnom…')}" autocomplete="off">
+        <input type="search" id="who-q" placeholder="${t('Busca el teu nom o malnom…')}" aria-label="${t('Busca el teu nom o malnom…')}" autocomplete="off">
         <div class="who-list" id="who-list">${people.map(item).join('')}</div>`);
       const q = qs('#who-q');
       q.focus();

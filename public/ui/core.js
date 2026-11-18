@@ -140,7 +140,8 @@ export async function copyText(text) {
   toast(t('Copiat'));
 }
 
-const svg = (path, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+// Les icones són decoratives: el text del costat (o l'aria-label del botó) ja diu què fan.
+const svg = (path, w = 2) => `<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 export const icon = {
   month: svg('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>'),
   alert: svg('<circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h.01"/>', 2.2),
@@ -164,28 +165,42 @@ export const icon = {
   expand: svg('<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>'),
   chevron: svg('<path d="M6 9l6 6 6-6"/>'),
   music: svg('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),
-  back: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+  back: '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
 };
 
 // ---------- Modal ----------
+// Mentre hi ha una finestra oberta, la resta de la pàgina queda inerta (el teclat i el lector de pantalla no en
+// surten) i, en tancar-la, el focus torna on era.
+let modalOpener = null;
+const BEHIND = ['topbar', 'app', 'offline'];
 export function openModal(html, onMount) {
-  closeModal();
+  const opener = document.querySelector('.modal-back') ? modalOpener : document.activeElement;
+  closeModal({ restore: false });
+  modalOpener = opener;
   const back = document.createElement('div');
   back.className = 'modal-back';
-  back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+  back.innerHTML = `<div class="modal" role="dialog" aria-modal="true" tabindex="-1">${html}</div>`;
+  const dialog = back.firstElementChild;
+  const title = dialog.querySelector('h2');
+  if (title) { title.id ||= 'modal-title'; dialog.setAttribute('aria-labelledby', title.id); }
   back.addEventListener('click', (e) => { if (e.target === back || e.target.closest('[data-close]')) closeModal(); });
   document.body.appendChild(back);
+  for (const id of BEHIND) document.getElementById(id)?.setAttribute('inert', '');
   document.addEventListener('keydown', escClose);
-  onMount?.(back.firstElementChild);
-  back.querySelector('input:not([type=checkbox]), select, textarea')?.focus({ preventScroll: true });
-  return back.firstElementChild;
+  onMount?.(dialog);
+  (back.querySelector('input:not([type=checkbox]), select, textarea') || dialog).focus({ preventScroll: true });
+  return dialog;
 }
-export function closeModal() {
-  document.querySelector('.modal-back')?.remove();
+export function closeModal({ restore = true } = {}) {
+  const open = document.querySelector('.modal-back');
+  open?.remove();
   document.removeEventListener('keydown', escClose);
+  for (const id of BEHIND) document.getElementById(id)?.removeAttribute('inert');
+  if (open && restore && modalOpener?.isConnected) modalOpener.focus({ preventScroll: true });
+  if (open && restore) modalOpener = null;
 }
 function escClose(e) { if (e.key === 'Escape') closeModal(); }
-export const modalHead = (title) => `<div class="modal-head"><h2>${title}</h2><button class="btn ghost sm x" data-close aria-label="${t('Tanca')}">✕</button></div>`;
+export const modalHead = (title) => `<div class="modal-head"><h2>${title}</h2><button class="btn ghost sm x" data-close aria-label="${t('Tanca')}"><span aria-hidden="true">✕</span></button></div>`;
 
 export function formData(form) {
   const out = {};

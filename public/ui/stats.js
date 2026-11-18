@@ -363,7 +363,7 @@ function attemptsModal(c) {
 function peopleStatsHtml(data) {
   const cell = (n, l) => `<td class="num" data-l="${l}">${n || '<span class="muted">—</span>'}</td>`;
   return `<div class="card">
-    <input type="search" id="st-q" placeholder="${t('Cerca…')}" style="max-width:280px;margin-bottom:12px">
+    <input type="search" id="st-q" placeholder="${t('Cerca…')}" aria-label="${t('Cerca…')}" style="max-width:280px;margin-bottom:12px">
     <div class="table-wrap"><table class="responsive stats-table" id="st-people">
       <thead><tr><th>${t('Persona')}</th><th class="num">${t('Castells')}</th><th class="num">${RESULTS.descarregat}</th><th class="num">${RESULTS.carregat}</th>
         <th class="num">${t('Intents')}</th><th class="num">${t('Sessions')}</th><th>${t('Posició més feta')}</th></tr></thead>

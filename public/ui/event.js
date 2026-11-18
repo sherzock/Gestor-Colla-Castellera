@@ -40,7 +40,7 @@ function companionsInput(list = []) {
     <p class="small muted" style="margin:0">${t('La tècnica els podrà col·locar als castells. El nom és opcional.')}</p>
   </div>`;
 }
-const companionName = (name, i) => `<input name="comp${i}" maxlength="60" value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}">`;
+const companionName = (name, i) => `<input name="comp${i}" maxlength="60" value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}" aria-label="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}">`;
 function bindCompanions(root) {
   const box = qs('[data-companions]', root);
   if (!box) return;
@@ -214,7 +214,7 @@ export async function pageEvent(id) {
         ${totals.map((x) => `<span class="status none">${esc(x.f.label)}: ${x.sum}</span>`).join('')}
       </div>
       ${passList ? `<p class="small muted" style="margin:0 0 8px">${t('Qui havia dit «Vinc» compta com a present. Toca «Ha vingut» per marcar qui no ha vingut, o afegeix qui ha vingut sense apuntar-se.')}</p>` : ''}
-      <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" style="margin-bottom:6px">
+      <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" aria-label="${t('Cerca persona…')}" style="margin-bottom:6px">
       <div class="table-wrap"><table class="responsive" id="att-table">
         <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}<th>${t('Comentari')}</th></tr></thead>
         <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
@@ -593,11 +593,11 @@ function walkinModal(event, attendance, reload) {
   };
   openModal(`${modalHead(t('Afegeix qui ha vingut'))}
     <p class="muted" style="margin:-6px 0 10px">${t("Toca les persones que han vingut tot i no estar apuntades. Es poden col·locar als castells d'aquesta sessió.")}</p>
-    <input type="search" id="walk-q" placeholder="${t('Cerca per nom o malnom…')}" autocomplete="off">
+    <input type="search" id="walk-q" placeholder="${t('Cerca per nom o malnom…')}" aria-label="${t('Cerca per nom o malnom…')}" autocomplete="off">
     <div class="people-pick" id="walk-list">${absent.map((a) => `<button data-pid="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}">
       <span class="nm">${esc(fullName(a))}</span>${statusPill(a.status)}</button>`).join('') || `<p class="muted">${t('Tothom ja consta com a present.')}</p>`}</div>
     <form id="walk-new" class="pick-bar">
-      <input name="name" maxlength="60" placeholder="${t("No és a l'app? Escriu nom i cognoms")}" autocomplete="off">
+      <input name="name" maxlength="60" placeholder="${t("No és a l'app? Escriu nom i cognoms")}" aria-label="${t("No és a l'app? Escriu nom i cognoms")}" autocomplete="off">
       <button class="btn">${t('Crea i afegeix')}</button>
     </form>
     <div class="form-actions"><button class="btn primary" data-close>${t('Fet')}</button></div>`, (m) => {

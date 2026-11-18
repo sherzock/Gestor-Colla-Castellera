@@ -38,6 +38,13 @@ function proposalMeta(a, p) {
 const GROUP_VAR = { baixos: 'var(--k-baix)', tronc: 'var(--k-tronc)', pom: 'var(--k-pom)', agulla: 'var(--k-agulla)', musica: 'var(--k-musica)' };
 const colorOf = (p) => GROUP_VAR[p.group] || KIND_VAR[p.kind] || 'var(--ink-3)';
 
+// «Quart · Rengla»: al mòbil, el nivell ja surt a l'esquerra de la fila i només es veu «Rengla» (el lector de pantalla
+// ho continua dient tot).
+const roleHtml = (role) => {
+  const i = role.indexOf(' · ');
+  return i < 0 ? esc(role) : `<span class="lvl">${esc(role.slice(0, i))} · </span>${esc(role.slice(i + 3))}`;
+};
+
 function posCell(p, byKey, ctx) {
   const a = byKey.get(p.key);
   const mine = a && a.person_id === me.id;
@@ -47,7 +54,7 @@ function posCell(p, byKey, ctx) {
     meta = `<span class="meta">${a.shoulder_height_cm ? `esp. ${a.shoulder_height_cm}` : ''}${a.shoulder_height_cm && a.height_cm ? ' · ' : ''}${a.height_cm ? `${a.height_cm} cm` : ''}</span>`;
   }
   return `<button class="pos g-${p.group} ${p.kind ? `k-${p.kind}` : ''} ${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(a)}">
-    <span class="role">${esc(p.role)}</span><span class="who">${a ? esc(assignedName(a)) : ctx.admin ? t('+ Afegeix') : t('Buit')}</span>${meta}</button>`;
+    <span class="role">${roleHtml(p.role)}</span><span class="who">${a ? esc(assignedName(a)) : ctx.admin ? t('+ Afegeix') : t('Buit')}</span>${meta}</button>`;
 }
 
 // Cel·la de la vista d'historial: qui ha fet aquesta posició i quants cops.
@@ -343,12 +350,12 @@ export async function pageCastell(id) {
 
   $app.innerHTML = `
     <a class="back" href="#/sessio/${event.id}">${icon.back}${esc(event.title)} · ${fmt(event.date, { day: 'numeric', month: 'short' })}</a>
-    ${siblings.length > 1 ? `<nav class="sibling-nav">${siblings.map((c) => `<a href="#/castell/${c.id}" class="${c.id === castell.id ? 'on' : ''} ${c.hidden ? 'is-hidden' : ''}">${c.hidden ? icon.eyeOff : ''}${castellName(c)}${c.label ? ` · ${esc(c.label)}` : ''}</a>`).join('')}</nav>` : ''}
+    ${siblings.length > 1 ? `<nav class="sibling-nav" aria-label="${t('Castells de la sessió')}">${siblings.map((c) => `<a href="#/castell/${c.id}" class="${c.id === castell.id ? 'on' : ''} ${c.hidden ? 'is-hidden' : ''}">${c.hidden ? icon.eyeOff : ''}${castellName(c)}${c.label ? ` · ${esc(c.label)}` : ''}</a>`).join('')}</nav>` : ''}
     <div class="page-head">
       <div>
-        <div class="castell-title">${s.name}${castell.hidden
+        <h1 class="castell-title">${s.name}${castell.hidden
           ? ` <span title="${t('Aquest castell està ocult: els membres no el veuen.')}">${hiddenBadge(t('Ocult'))}</span>`
-          : event.hidden ? ` <span title="${t('La sessió està oculta: els membres no veuen cap dels seus castells.')}">${hiddenBadge(t('Sessió oculta'))}</span>` : ''}</div>
+          : event.hidden ? ` <span title="${t('La sessió està oculta: els membres no veuen cap dels seus castells.')}">${hiddenBadge(t('Sessió oculta'))}</span>` : ''}</h1>
         ${partialLabel(castell) ? `<div class="parts big">${partialLabel(castell)}</div>` : ''}
         <div class="muted">${castell.net ? `<span class="result">${t('Net: sense pinya')}</span> ` : ''}${castell.sota ? '<span class="result">Aixecat per sota</span> ' : ''}${esc(castell.label || '')} ${resultPill(castell.result)}</div>
       </div>
@@ -367,7 +374,7 @@ export async function pageCastell(id) {
           <select id="fail-cause"><option value="">${t('No consta')}</option>${FAIL_CAUSES.map((c) => `<option value="${c}" ${castell.fail_cause === c ? 'selected' : ''}>${failCauseLabel(c)}</option>`).join('')}</select></label>
       </div>` : ''}
       <label class="tech-notes"><span class="small muted">${t('Notes de la tècnica')} · ${t('només les veuen els administradors')}</span>
-        <textarea id="tech-notes" rows="2" maxlength="1000" placeholder="${t('Com ha anat? Què cal assajar?')}">${esc(castell.tech_notes || '')}</textarea></label>
+        <textarea id="tech-notes" rows="2" maxlength="1000" placeholder="${t('Com ha anat? Què cal assajar?')}" aria-label="${t('Com ha anat? Què cal assajar?')}">${esc(castell.tech_notes || '')}</textarea></label>
     </div>` : ''}
     ${!admin && mineKey ? `<div class="card my-pos"><span class="small muted">${t('La teva posició')}</span><strong>${esc(s.positions.get(mineKey).role)}</strong></div>` : ''}
     ${castell.notes ? `<div class="card description" style="margin-bottom:14px">${esc(castell.notes)}</div>` : ''}
@@ -389,19 +396,19 @@ export async function pageCastell(id) {
           ${canZoom ? `<button class="btn sm zoom-btn" id="zoom-all">${icon.expand}<span>${t('Pantalla completa')}</span></button>` : ''}
         </div>
         <div class="search-row">
-          <input type="search" id="pos-search" placeholder="${castellView === 'historial' ? t('Cerca qui ha fet cada posició…') : t('Cerca una persona al castell…')}" value="${esc(searchQuery)}" autocomplete="off">
+          <input type="search" id="pos-search" aria-label="${t('Cerca una persona al castell…')}" placeholder="${castellView === 'historial' ? t('Cerca qui ha fet cada posició…') : t('Cerca una persona al castell…')}" value="${esc(searchQuery)}" autocomplete="off">
           <div class="hits" id="search-hits"></div>
         </div>
         <div id="viewer" class="view-${castellView}">${body}</div>
       </div>
       ${admin ? `<aside class="stack">
         <div class="card">
-          <h3>${t('Confirmats sense posició')}</h3>
+          <h2>${t('Confirmats sense posició')}</h2>
           <p class="small muted" style="margin:4px 0 10px">${t('{a} de {b} confirmats. Toca un nom i després una posició.', { a: unplaced.length, b: confirmed.length })}</p>
           <div class="side-list">${unplaced.map((c) => `<button data-pick="${c.id}" class="${selectedPerson?.id === c.id ? 'assigned' : ''}">${esc(shortName(c))}${c.instrument ? ` ${icon.music}` : ''}${c.shoulder_height_cm ? ` <span class="muted small">${c.shoulder_height_cm}</span>` : ''}</button>`).join('') || `<span class="muted small">${t('Tothom col·locat 👌')}</span>`}</div>
         </div>
         <div class="card">
-          <h3>${t('Persones temporals')}</h3>
+          <h2>${t('Persones temporals')}</h2>
           <p class="small muted" style="margin:4px 0 10px">${t("De tota la sessió (d'una altra colla, de prova…). Toca un nom i després una posició.")}</p>
           ${freeGuests.length ? `<div class="side-list">${freeGuests.map((g) => `<button data-pick-guest="${g.id}" class="${selectedPerson?.guest && selectedPerson.id === g.id ? 'assigned' : ''}">${esc(g.name)}${g.colla ? ` <span class="muted small">${esc(g.colla)}</span>` : ''}</button>`).join('')}</div>` : ''}
           <button class="btn sm" id="new-guest" style="margin-top:10px">${icon.plus}${t('Nova persona temporal')}</button>
@@ -680,7 +687,7 @@ function assignModal(castell, pos, current, candidates, keyByPerson, s, hist, re
   openModal(`${modalHead(esc(pos.role))}
     ${current ? `<p style="margin:-6px 0 10px">${t('Ara: {name}.', { name: `<strong>${esc(assignedName(current))}</strong>` })}</p>` : ''}
     <div class="pick-bar">
-      <input type="search" id="pick-q" placeholder="${t('Cerca per nom o malnom…')}">
+      <input type="search" id="pick-q" placeholder="${t('Cerca per nom o malnom…')}" aria-label="${t('Cerca per nom o malnom…')}">
       <select id="pick-sort" aria-label="${t('Ordena')}">
         <option value="status">${t('Disponibilitat')}</option><option value="experience">${t('Experiència')}</option><option value="shoulder">${t('Alçada espatlles')}</option>
         <option value="height">${t('Alçada')}</option><option value="weight">${t('Pes (lleuger primer)')}</option><option value="name">${t('Nom')}</option>

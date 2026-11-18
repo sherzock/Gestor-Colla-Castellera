@@ -61,7 +61,7 @@ export async function pagePeople() {
     ${noConsent ? `<div class="demo-note">${tn(noConsent, "{n} menor de 14 anys encara no té apuntat el consentiment de la família.", "{n} menors de 14 anys encara no tenen apuntat el consentiment de la família.")}
       ${t("Imprimeix la nota de protecció de dades perquè la signin i apunta'n la data a la fitxa.")} <a href="#/privadesa">${t('Obre la nota')}</a></div>` : ''}
     <div class="toolbar">
-      <input type="search" id="people-q" placeholder="${t('Cerca…')}" style="max-width:280px">
+      <input type="search" id="people-q" placeholder="${t('Cerca…')}" aria-label="${t('Cerca…')}" style="max-width:280px">
       <label class="check small" style="margin-left:auto">${t('Ordena per')}
         <select id="people-sort" style="width:auto">
           <option value="name">${t('Nom')}</option>${measures ? `<option value="height">${t('Alçada')}</option><option value="shoulder">${t('Alçada espatlles')}</option>
