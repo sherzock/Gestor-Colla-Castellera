@@ -1004,3 +1004,34 @@ h1.castell-title { margin: 0; line-height: 1.1; }
   .nav.many { padding-left: 0; padding-right: 0; }
   .nav.many a { padding: 6px 0; font-size: .66rem; letter-spacing: -.015em; }
 }
+
+/* Preguntes i pagaments de l'altaveu */
+.poll { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.poll-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.poll-head h3 { margin: 0; font-size: 1rem; }
+.poll-q { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; min-width: 0; }
+.poll-q legend { font-weight: 700; margin-bottom: 6px; padding: 0; }
+.poll-opt { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: var(--surface); }
+.poll-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.poll-q:disabled .poll-opt { cursor: default; opacity: .8; }
+.poll-opt input { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.poll-opt > span { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; flex: 1; min-width: 0; }
+.poll-price { font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums; }
+.poll-count { font-size: .8rem; color: var(--ink-3); }
+.poll-done { display: flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600; margin: 8px 0 0; }
+.poll-done svg { width: 16px; height: 16px; }
+.pay-box { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); display: grid; gap: 6px; }
+.pay-amount { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pay-amount strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.pay-line { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 40px; }
+.pay-line strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pay-line .btn { min-width: 40px; min-height: 40px; justify-content: center; }
+.pay-line svg { width: 16px; height: 16px; }
+.poll-editor { padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.poll-edit-q, .poll-pay { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.poll-edit-q legend, .poll-pay legend { font-weight: 700; padding: 0 4px; }
+.poll-edit-o { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; gap: 6px; align-items: center; }
+.poll-edit-o input { width: 100%; min-width: 0; }
+.poll-edit-price { display: flex; align-items: center; gap: 4px; }
+.poll-results { margin: 16px 0; }
+.poll-results .bar-row { grid-template-columns: minmax(0, 1.5fr) minmax(60px, 1fr) auto 0; margin-bottom: 6px; }

@@ -2,14 +2,14 @@
 // alineacions). Sempre es prova primer la xarxa: amb connexió no es veu mai res antic.
 // En sortir o canviar de persona, l'app esborra les dades desades (OFFLINE_DATA) d'aquest dispositiu.
 // També rep els avisos al mòbil: l'avís arriba buit i el text es demana a l'app (veure push.js).
-const VERSION = 7;
+const VERSION = 8;
 const SHELL = `colla-app-${VERSION}`;
 const DATA = 'colla-dades';
 
 // Tot el que cal per obrir l'app sense connexió (una prova comprova que no en falta cap fitxer).
 const FILES = ['/', '/index.html', '/style.css', '/theme.js', '/app.js', '/castell.js', '/editor.js', '/export.js',
-  '/i18n.js', '/import.js', '/muntador.js', '/planning.js', '/privacy.js', '/zoom.js', '/help.js', '/changelog.js', '/ui/accounts.js', '/ui/audit.js', '/ui/calendar.js',
-  '/ui/castell-form.js', '/ui/core.js', '/ui/event.js', '/ui/help.js', '/ui/login.js', '/ui/news.js', '/ui/notifications.js',
+  '/i18n.js', '/import.js', '/muntador.js', '/planning.js', '/privacy.js', '/zoom.js', '/help.js', '/changelog.js', '/forms.js', '/ui/accounts.js', '/ui/audit.js', '/ui/calendar.js',
+  '/ui/castell-form.js', '/ui/core.js', '/ui/event.js', '/ui/help.js', '/ui/login.js', '/ui/news.js', '/ui/notifications.js', '/ui/poll.js',
   '/ui/people.js', '/ui/sessions.js', '/ui/shell.js', '/ui/stats.js', '/ui/templates.js', '/ui/timeline.js', '/ui/viewer.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg', '/icons/mark.svg'];
 

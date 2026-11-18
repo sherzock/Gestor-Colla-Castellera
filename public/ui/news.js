@@ -1,6 +1,7 @@
 // Altaveu: missatges de l'administració per a tota la colla.
 import { $app, LOCALE, api, attempt, closeModal, day, esc, formData, icon, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, render, store, t, toast } from './core.js';
+import { bindPollEditor, bindPolls, pollCard, pollEditorHtml } from './poll.js';
 import { renderNav } from './shell.js';
 
 // ---------- Altaveu ----------
@@ -70,8 +71,10 @@ export async function pageNews() {
       </div>
       ${a.body ? `<div class="news-body">${richText(a.body)}</div>` : ''}
       ${a.images?.length ? `<div class="news-images ${a.images.length === 1 ? 'one' : ''}">${a.images.map((id) => `<button type="button" data-photo="${esc(id)}" aria-label="${t('Amplia la imatge')}"><img src="${imageUrl(id)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+      ${pollCard(a)}
     </article>`).join('') || `<div class="empty">${icon.megaphone}<p>${t('Encara no hi ha cap missatge.')}</p></div>`}</div>`;
   qsa('[data-photo]').forEach((b) => (b.onclick = () => openModal(`${modalHead(t('Imatge'))}<img class="news-photo" src="${imageUrl(b.dataset.photo)}" alt="">`)));
+  bindPolls(list);
   if (!admin) return;
   qs('#new-news').onclick = () => newsModal();
   qsa('[data-edit-news]').forEach((b) => (b.onclick = () => newsModal(list.find((a) => String(a.id) === b.dataset.editNews))));
@@ -93,6 +96,7 @@ function newsModal(a) {
       </div>
       <div class="emoji-grid hidden" id="news-emojis">${EMOJIS.map((e) => `<button type="button" data-emoji="${e}">${e}</button>`).join('')}</div>
       <div class="news-picks" id="news-picks"></div>
+      ${pollEditorHtml(a)}
       <label class="check"><input type="checkbox" name="pinned" ${a?.pinned ? 'checked' : ''}> ${t('Fixa-ho a dalt de tot')}</label>
       ${a ? '' : `<label class="check"><input type="checkbox" name="notify" checked> ${t('Envia un avís al mòbil de tothom que els té activats')}</label>`}
       <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${a ? t('Desa') : t('Publica')}</button></div>
@@ -127,12 +131,17 @@ function newsModal(a) {
       target.setRangeText(b.dataset.emoji, target.selectionStart, target.selectionEnd, 'end');
       target.focus();
     }));
+    const pollValue = bindPollEditor(m, a);
     let sending = false;
     form.onsubmit = async (e) => {
       e.preventDefault();
       if (sending) return;
       sending = true;
       const data = formData(e.target);
+      for (const k of Object.keys(data)) if (k.startsWith('poll_') || k.startsWith('pay_')) delete data[k];
+      let poll;
+      try { poll = pollValue(); } catch { sending = false; return; }
+      if (poll !== undefined) data.form = poll;
       const saved = await attempt(async () => {
         // Primer les imatges: així, quan arriba l'avís al mòbil, el missatge ja és sencer.
         for (const p of picks) if (!p.id) p.id = (await api('POST', '/announcements/images', { data: p.data.slice(p.data.indexOf(',') + 1) })).id;

@@ -2,6 +2,21 @@
 // a package.json: és el que l'app ensenya a «El meu compte».
 export const CHANGELOG = [
   {
+    version: '1.3.0', date: '2026-11-18',
+    ca: [
+      "Preguntes a l'altaveu: enquestes i inscripcions amb la resposta de cada persona, que la junta veu i pot exportar.",
+      "Pagaments: cada opció pot tenir preu; qui la tria veu quant ha de pagar, l'IBAN o el Bizum i el concepte, i la junta apunta què ha rebut.",
+    ],
+    es: [
+      'Preguntas en el altavoz: encuestas e inscripciones con la respuesta de cada persona, que la junta ve y puede exportar.',
+      'Pagos: cada opción puede tener precio; quien la elige ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, y la junta apunta qué ha recibido.',
+    ],
+    en: [
+      "Questions in announcements: polls and sign-ups with each person's answer, which the board can see and export.",
+      'Payments: each option can have a price; whoever picks it sees how much to pay, the IBAN or Bizum and the reference, and the board marks what it has received.',
+    ],
+  },
+  {
     version: '1.2.0', date: '2026-11-18',
     ca: [
       "Còpia de seguretat diària fora del servidor, xifrada, i una eina per restaurar-la.",

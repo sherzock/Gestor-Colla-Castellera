@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { db, DB_PATH, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates, templateOf, templateRings,
   LAYER_PREFIX, TEMPLATE_KINDS, levelGaps, weightInversions, SHOULDER_GAP_CM } from './public/castell.js';
+import { amountOf, hasPrices, ibanValid, normalizeIban, normalizePhone, phoneValid } from './public/forms.js';
 import { translate } from './public/i18n.js';
 import { overlappingPairs } from './public/planning.js';
 import { sendPush, validEndpoint, vapidKeys } from './push.js';
@@ -940,6 +941,15 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     WHERE r.person_id = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title }));
   const roles = db.prepare(`SELECT e.date, e.title, r.label FROM event_roles r JOIN events e ON e.id = r.event_id
     WHERE r.person_id = ? ORDER BY e.date`).all(p.id).map((r) => ({ data: r.date, sessio: r.title, encarrec: r.label }));
+  // Respostes a les preguntes de l'altaveu, amb el text de cada opció triada i el pagament.
+  const forms = db.prepare(`SELECT a.title, f.questions, x.answers, x.answered_at, x.paid_at, x.received_at FROM announcement_answers x
+    JOIN announcements a ON a.id = x.announcement_id JOIN announcement_forms f ON f.announcement_id = x.announcement_id
+    WHERE x.person_id = ? ORDER BY x.answered_at`).all(p.id).map((r) => {
+    const questions = parseJSON(r.questions, []);
+    const answers = parseJSON(r.answers, {});
+    return { missatge: r.title, respostes: Object.fromEntries(questions.map((q) => [q.text, q.options.filter((o) => answers[q.id]?.includes(o.id)).map((o) => o.text)])),
+      import_euros: amountOf(questions, answers) / 100, respost: r.answered_at, diu_que_ha_pagat: r.paid_at, pagament_rebut: r.received_at };
+  });
   const out = {
     colla: COLLA_NAME, contacte: PRIVACY_CONTACT || null, generat: nowLocal(),
     persona: { nom: p.name, malnom: p.alias, correu: p.email, telefon: p.phone, data_naixement: p.birthdate, alcada_cm: p.height_cm,
@@ -948,6 +958,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     assistencia: attendance,
     posicions: positions,
     acompanyants: companions,
+    respostes_altaveu: forms,
     mobils_amb_avisos: devices,
     recordatoris: reminders,
     encarrecs: roles,
@@ -1647,7 +1658,8 @@ function setImages(announcementId, ids) {
 }
 
 route('GET', '/api/announcements', ({ user }) => db.prepare(`SELECT * FROM announcements
-  ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 200`).all().map(withImages).map((a) => (user.role === 'admin' ? a : { ...a, author: undefined })));
+  ORDER BY pinned DESC, created_at DESC, id DESC LIMIT 200`).all().map(withImages).map((a) => withForm(a, user))
+  .map((a) => (user.role === 'admin' ? a : { ...a, author: undefined })));
 
 route('POST', '/api/announcements/images', ({ body }) => {
   // Les que es van pujar però mai es van arribar a publicar.
@@ -1675,6 +1687,7 @@ route('POST', '/api/announcements', ({ body, user }) => {
   const a = transaction(() => {
     const id = insertRow('announcements', { ...announcementInput(body), author: user.name, created_at: nowUtc() });
     if (body.image_ids) setImages(id, body.image_ids);
+    if (body.form) setForm(id, body.form);
     return withImages(getAnnouncement(id));
   });
   if (body.notify !== false) {
@@ -1691,6 +1704,7 @@ route('PUT', '/api/announcements/:id', ({ params, body }) => {
   transaction(() => {
     updateRow('announcements', params.id, { ...announcementInput(body), updated_at: nowUtc() });
     if (body.image_ids) setImages(params.id, body.image_ids);
+    if (body.form !== undefined) setForm(Number(params.id), body.form);
   });
   return withImages(getAnnouncement(params.id));
 }, 'news');
@@ -1699,6 +1713,179 @@ route('DELETE', '/api/announcements/:id', ({ params }) => {
   db.prepare('DELETE FROM announcements WHERE id = ?').run(params.id);
   return { ok: true };
 }, 'news');
+
+// ---------- Preguntes i pagaments de l'altaveu ----------
+// Un missatge pot dur preguntes (enquesta, viatge, sopar…) i cada membre hi respon un cop (i ho pot canviar fins
+// a la data límit). Les opcions poden tenir preu: qui les tria veu quant ha de pagar, a quin compte o Bizum i amb
+// quin concepte. L'app no mou ni guarda diners: la junta apunta quan ha rebut cada pagament.
+const FORM_MAX = { questions: 6, options: 12, price: 1_000_000 };
+const formOf = (id) => {
+  const f = db.prepare('SELECT * FROM announcement_forms WHERE announcement_id = ?').get(id);
+  return f && { ...f, questions: parseJSON(f.questions, []), results_public: !!f.results_public };
+};
+const formOpen = (f) => !f.closes_on || nowLocal().slice(0, 10) <= f.closes_on;
+
+function formInput(raw) {
+  if (typeof raw !== 'object' || !Array.isArray(raw.questions)) fail(400, 'Preguntes no vàlides');
+  if (!raw.questions.length) fail(400, 'Afegeix almenys una pregunta');
+  if (raw.questions.length > FORM_MAX.questions) fail(400, 'Com a molt {n} preguntes', { n: FORM_MAX.questions });
+  // Les preguntes i opcions que ja hi eren conserven l'identificador: així les respostes d'abans continuen valent.
+  const used = new Set();
+  const idFor = (prefix, old) => {
+    let id = typeof old === 'string' && /^[a-z0-9]{2,16}$/.test(old) && !used.has(old) ? old : null;
+    while (!id || used.has(id)) id = prefix + crypto.randomBytes(4).toString('hex');
+    used.add(id);
+    return id;
+  };
+  const questions = raw.questions.map((q) => {
+    if (typeof q !== 'object' || !q) fail(400, 'Preguntes no vàlides');
+    const text = str(q.text, 200) || fail(400, 'Cada pregunta necessita un text');
+    if (!Array.isArray(q.options) || !q.options.length) fail(400, 'Cada pregunta necessita almenys una opció');
+    if (q.options.length > FORM_MAX.options) fail(400, 'Com a molt {n} opcions per pregunta', { n: FORM_MAX.options });
+    return {
+      id: idFor('q', q.id), text, multiple: !!bool(q.multiple),
+      options: q.options.map((o) => {
+        if (typeof o !== 'object' || !o) fail(400, 'Preguntes no vàlides');
+        const price = o.price === null || o.price === undefined || o.price === '' || o.price === 0 ? null : int(o.price, 0, FORM_MAX.price);
+        return { id: idFor('o', o.id), text: str(o.text, 120) || fail(400, 'Cada opció necessita un text'), price };
+      }),
+    };
+  });
+  const closes = raw.closes_on || null;
+  if (closes !== null && !isDate(closes)) fail(400, 'Data no vàlida');
+  const pay = { pay_holder: str(raw.pay_holder, 80), pay_iban: str(raw.pay_iban, 60), pay_bizum: str(raw.pay_bizum, 20), pay_concept: str(raw.pay_concept, 40) };
+  if (pay.pay_iban) { if (!ibanValid(pay.pay_iban)) fail(400, "L'IBAN no és correcte"); pay.pay_iban = normalizeIban(pay.pay_iban); }
+  if (pay.pay_bizum) { if (!phoneValid(pay.pay_bizum)) fail(400, 'El número de Bizum no és correcte'); pay.pay_bizum = normalizePhone(pay.pay_bizum); }
+  if (hasPrices(questions) && !pay.pay_iban && !pay.pay_bizum) fail(400, 'Per cobrar, posa un IBAN o un número de Bizum');
+  return { questions: JSON.stringify(questions), closes_on: closes, results_public: bool(raw.results_public), ...pay };
+}
+
+function setForm(id, raw) {
+  if (raw === null || raw === false) {
+    db.prepare('DELETE FROM announcement_answers WHERE announcement_id = ?').run(id);
+    db.prepare('DELETE FROM announcement_forms WHERE announcement_id = ?').run(id);
+    return;
+  }
+  const f = formInput(raw);
+  db.prepare(`INSERT INTO announcement_forms (announcement_id, questions, closes_on, results_public, pay_holder, pay_iban, pay_bizum, pay_concept)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (announcement_id) DO UPDATE SET questions = excluded.questions, closes_on = excluded.closes_on,
+    results_public = excluded.results_public, pay_holder = excluded.pay_holder, pay_iban = excluded.pay_iban, pay_bizum = excluded.pay_bizum,
+    pay_concept = excluded.pay_concept`).run(id, f.questions, f.closes_on, f.results_public, f.pay_holder, f.pay_iban, f.pay_bizum, f.pay_concept);
+  // Les dades de pagament de la colla es recorden per a la propera vegada.
+  if (f.pay_iban || f.pay_bizum) {
+    db.prepare("INSERT INTO settings (key, value) VALUES ('pay_defaults', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value")
+      .run(JSON.stringify({ pay_holder: f.pay_holder, pay_iban: f.pay_iban, pay_bizum: f.pay_bizum }));
+  }
+}
+
+// El que es veu de les preguntes d'un missatge: tothom, les preguntes i (si n'hi ha) on pagar; cada membre, la seva
+// resposta; si el missatge ho permet, quanta gent ha triat cada opció (sense noms); i l'administració, el resum.
+function withForm(a, user) {
+  const form = formOf(a.id);
+  if (!form) return a;
+  const priced = hasPrices(form.questions);
+  const answers = db.prepare(`SELECT x.* FROM announcement_answers x JOIN people p ON p.id = x.person_id
+    WHERE x.announcement_id = ?`).all(a.id).map((x) => ({ ...x, answers: parseJSON(x.answers, {}) }));
+  const staff = can(user, 'news');
+  const out = {
+    questions: form.questions, closes_on: form.closes_on, open: formOpen(form), results_public: form.results_public,
+    pay: priced ? { holder: form.pay_holder, iban: form.pay_iban, bizum: form.pay_bizum, concept: form.pay_concept || a.title } : null,
+    answered: answers.length,
+  };
+  if (staff || form.results_public) {
+    const counts = {};
+    for (const x of answers) for (const ids of Object.values(x.answers)) if (Array.isArray(ids)) for (const id of ids) counts[id] = (counts[id] || 0) + 1;
+    out.counts = counts;
+  }
+  if (user.role === 'member') {
+    const mine = answers.find((x) => x.person_id === user.id);
+    out.mine = mine ? { answers: mine.answers, amount: amountOf(form.questions, mine.answers), paid_at: mine.paid_at, received_at: mine.received_at } : null;
+  }
+  if (staff) {
+    const amounts = answers.map((x) => ({ amount: amountOf(form.questions, x.answers), received: !!x.received_at, paid: !!x.paid_at }));
+    out.summary = {
+      total: amounts.reduce((s, x) => s + x.amount, 0),
+      received: amounts.filter((x) => x.received).reduce((s, x) => s + x.amount, 0),
+      to_check: amounts.filter((x) => x.paid && !x.received && x.amount).length,
+    };
+  }
+  return { ...a, form: out };
+}
+
+const formFor = (id) => formOf(getAnnouncement(id).id) || fail(404, 'Aquest missatge no té preguntes');
+const memberOnly = (user) => { if (user.mode === 'admin' || user.role !== 'member') fail(403, 'Per respondre, canvia a la teva fitxa de membre'); };
+const answerOf = (id, personId) => db.prepare('SELECT * FROM announcement_answers WHERE announcement_id = ? AND person_id = ?').get(id, personId);
+const LOCKED_PAYMENT = "Ja t'han confirmat el pagament: per canviar-ho, parla amb la junta";
+
+route('PUT', '/api/announcements/:id/answer', ({ params, body, user }) => {
+  memberOnly(user);
+  const form = formFor(params.id);
+  if (!formOpen(form)) fail(400, 'Ja no es pot respondre');
+  const raw = typeof body.answers === 'object' && body.answers && !Array.isArray(body.answers) ? body.answers : fail(400, 'Respon totes les preguntes');
+  const answers = {};
+  for (const q of form.questions) {
+    const ids = Array.isArray(raw[q.id]) ? [...new Set(raw[q.id])] : [];
+    if (!ids.length) fail(400, 'Respon totes les preguntes');
+    if (!q.multiple && ids.length > 1) fail(400, 'Tria només una opció');
+    if (!ids.every((id) => q.options.some((o) => o.id === id))) fail(400, 'Opció no vàlida');
+    answers[q.id] = ids;
+  }
+  const before = answerOf(form.announcement_id, user.id);
+  const amount = amountOf(form.questions, answers);
+  if (before?.received_at && amount !== amountOf(form.questions, parseJSON(before.answers, {}))) fail(400, LOCKED_PAYMENT);
+  // Si canvia l'import, el pagament que deia haver fet ja no quadra.
+  const paid = before?.paid_at && amount === amountOf(form.questions, parseJSON(before.answers, {})) ? before.paid_at : null;
+  db.prepare(`INSERT INTO announcement_answers (announcement_id, person_id, answers, answered_at, paid_at) VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (announcement_id, person_id) DO UPDATE SET answers = excluded.answers, answered_at = excluded.answered_at, paid_at = excluded.paid_at`)
+    .run(form.announcement_id, user.id, JSON.stringify(answers), nowUtc(), paid);
+  return { ok: true, amount };
+});
+
+route('DELETE', '/api/announcements/:id/answer', ({ params, user }) => {
+  memberOnly(user);
+  const form = formFor(params.id);
+  if (!formOpen(form)) fail(400, 'Ja no es pot respondre');
+  if (answerOf(form.announcement_id, user.id)?.received_at) fail(400, LOCKED_PAYMENT);
+  db.prepare('DELETE FROM announcement_answers WHERE announcement_id = ? AND person_id = ?').run(form.announcement_id, user.id);
+  return { ok: true };
+});
+
+// «Ja he pagat»: només un avís perquè la junta ho comprovi al banc.
+route('PUT', '/api/announcements/:id/answer/paid', ({ params, body, user }) => {
+  memberOnly(user);
+  const form = formFor(params.id);
+  const mine = answerOf(form.announcement_id, user.id) || fail(400, 'Primer respon les preguntes');
+  if (mine.received_at) fail(400, LOCKED_PAYMENT);
+  if (!amountOf(form.questions, parseJSON(mine.answers, {}))) fail(400, 'No has de pagar res');
+  db.prepare('UPDATE announcement_answers SET paid_at = ? WHERE announcement_id = ? AND person_id = ?')
+    .run(bool(body.paid) ? nowUtc() : null, form.announcement_id, user.id);
+  return { ok: true };
+});
+
+// Totes les respostes, amb noms, per a la junta: qui ha triat què, quant ha de pagar i si ja s'ha rebut.
+route('GET', '/api/announcements/:id/answers', ({ params }) => {
+  const a = getAnnouncement(params.id);
+  const form = formFor(params.id);
+  const rows = db.prepare(`SELECT x.*, p.name, p.alias FROM announcement_answers x JOIN people p ON p.id = x.person_id
+    WHERE x.announcement_id = ? ORDER BY p.name`).all(a.id).map((x) => {
+    const answers = parseJSON(x.answers, {});
+    return { person_id: x.person_id, name: x.name, alias: x.alias, answers, amount: amountOf(form.questions, answers),
+      answered_at: x.answered_at, paid_at: x.paid_at, received_at: x.received_at };
+  });
+  const pending = db.prepare(`SELECT id, name, alias FROM people WHERE active = 1 AND id NOT IN
+    (SELECT person_id FROM announcement_answers WHERE announcement_id = ?) ORDER BY name`).all(a.id);
+  return { announcement: { id: a.id, title: a.title }, form: withForm(a, { role: 'admin', mode: 'admin', roles: ['admin'] }).form, rows, pending };
+}, 'news');
+
+route('PUT', '/api/announcements/:id/answers/:personId', ({ params, body }) => {
+  const form = formFor(params.id);
+  const row = answerOf(form.announcement_id, Number(params.personId)) || fail(404, 'Aquesta persona no ha respost');
+  db.prepare('UPDATE announcement_answers SET received_at = ? WHERE announcement_id = ? AND person_id = ?')
+    .run(bool(body.received) ? nowUtc() : null, form.announcement_id, row.person_id);
+  return { ok: true };
+}, 'news');
+
+route('GET', '/api/pay-defaults', () => parseJSON(db.prepare("SELECT value FROM settings WHERE key = 'pay_defaults'").get()?.value, {}), 'news');
 
 // ---------- Avisos al mòbil ----------
 // Missatges nous de l'Altaveu (a tothom que els ha activat) i recordatoris de respondre una sessió (a qui encara no
@@ -1923,7 +2110,7 @@ const NO_DATA_CHANGE = new Set(['/api/client-errors', '/api/me/2fa/setup', '/api
   '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox']);
 // Peticions que només toquen l'assistència, els camps extra, l'altaveu o els comptes d'administració.
 const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/attendance(\/\d+)?$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,
-  /^\/api\/fields\/\d+$/, /^\/api\/announcements(\/\d+|\/images)?$/, /^\/api\/admins(\/\d+)?$/];
+  /^\/api\/fields\/\d+$/, /^\/api\/announcements(\/\d+(\/answer(\/paid)?|\/answers\/\d+)?|\/images)?$/, /^\/api\/admins(\/\d+)?$/];
 const POSITIONS_ROUTE = /^\/api\/castells\/(\d+)\/positions(\/[^/]+)?$/;
 function dataChanged(pathname) {
   dataVersion++;

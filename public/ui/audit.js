@@ -41,6 +41,7 @@ const ACTIONS = {
   'POST /api/announcements': () => t("Ha publicat un missatge a l'altaveu"),
   'PUT /api/announcements/:id': () => t("Ha editat un missatge de l'altaveu"),
   'DELETE /api/announcements/:id': () => t("Ha esborrat un missatge de l'altaveu"),
+  'PUT /api/announcements/:id/answers/:personId': () => t("Ha marcat si s'ha rebut un pagament"),
   'PUT /api/templates/:name': () => t('Ha desat una pinya de la colla'),
   'DELETE /api/templates/:name': () => t("Ha tornat una pinya a l'estàndard"),
   'DELETE /api/errors': () => t("Ha buidat la llista d'errors"),

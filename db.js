@@ -405,3 +405,26 @@ addColumn('admins', 'recovery_codes', 'TEXT');
 
 // Menors de 14 anys: quan es va rebre el consentiment del pare, mare o tutor/a (data).
 addColumn('people', 'guardian_consent', 'TEXT');
+
+// Preguntes d'un missatge de l'altaveu (enquestes, viatges, sopars…). Les opcions poden tenir preu: qui les tria ha
+// de pagar la suma, per transferència o Bizum a la colla. L'app no mou diners: només diu quant, on i amb quin
+// concepte, i la junta hi apunta quan l'ha rebut.
+db.exec(`CREATE TABLE IF NOT EXISTS announcement_forms (
+  announcement_id INTEGER PRIMARY KEY REFERENCES announcements(id) ON DELETE CASCADE,
+  questions TEXT NOT NULL,
+  closes_on TEXT,
+  results_public INTEGER NOT NULL DEFAULT 0,
+  pay_holder TEXT,
+  pay_iban TEXT,
+  pay_bizum TEXT,
+  pay_concept TEXT
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS announcement_answers (
+  announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+  person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  answers TEXT NOT NULL,
+  answered_at TEXT NOT NULL,
+  paid_at TEXT,
+  received_at TEXT,
+  PRIMARY KEY (announcement_id, person_id)
+)`);

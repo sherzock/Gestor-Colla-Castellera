@@ -20,7 +20,8 @@ const ca = [
   ['pinyes', 'staff', 'Pinyes de la colla', `
     <p>A la pestanya <em>Pinyes</em> es redibuixa la pinya de cada castell: moure, girar, afegir o treure posicions, amb encaix i desfer. Els canvis valen per a tots els castells d'aquell tipus, i les posicions que es mantenen conserven l'historial.</p>
     <p>Es pot partir de la pinya d'un altre castell amb els mateixos baixos (per exemple, del 3d7 al 3d8), o de l'estàndard amb taps i tapa-taps.</p>`],
-  ['altaveu', 'staff', 'Altaveu', `<p>Missatges per a tota la colla, amb fotos i emojis. Si ho marques, arriben com a avís al mòbil de qui els té activats. Se'n guarden com a molt 50.</p>`],
+  ['altaveu', 'staff', 'Altaveu', `<p>Missatges per a tota la colla, amb fotos i emojis. Si ho marques, arriben com a avís al mòbil de qui els té activats. Se'n guarden com a molt 50.</p>
+    <p><strong>Preguntes i pagaments</strong>: en escriure'l, marca <em>Afegeix preguntes</em> per fer una enquesta o una inscripció (viatge, sopar, samarretes…). Cada opció pot tenir preu: qui la tria veu quant ha de pagar, l'IBAN o el Bizum de la colla i un concepte amb el seu nom, i avisa quan ha pagat. A <em>Mira les respostes</em> tens qui ha respost què, qui falta i els pagaments per comprovar al banc; marca'ls com a rebuts i exporta-ho a Excel. L'app no fa cap cobrament.</p>`],
   ['comptes', 'admin', 'Comptes i segon factor', `
     <p>Cada persona que edita hauria de tenir el seu compte, amb el que necessita: <strong>junta</strong> (sessions, assistència, contacte), <strong>tècnica</strong> (castells, pinyes, mides) o <strong>administració</strong> (tot).</p>
     <p><strong>Segon factor</strong>: a <em>El meu compte</em>, <em>Activa el segon factor</em>. Cal una app d'autenticació (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS o Contrasenyes de l'iPhone). Guarda els codis de recuperació fora del mòbil.</p>
@@ -62,7 +63,8 @@ const es = [
   ['pinyes', 'staff', 'Pinyes de la colla', `
     <p>En la pestaña <em>Pinyes</em> se redibuja la pinya de cada castell: mover, girar, añadir o quitar posiciones, con encaje y deshacer. Los cambios valen para todos los castells de ese tipo, y las posiciones que se mantienen conservan el historial.</p>
     <p>Se puede partir de la pinya de otro castell con los mismos baixos (por ejemplo, del 3d7 al 3d8), o de la estándar con taps y tapa-taps.</p>`],
-  ['altaveu', 'staff', 'Altavoz', `<p>Mensajes para toda la colla, con fotos y emojis. Si lo marcas, llegan como aviso al móvil de quien los tiene activados. Se guardan como mucho 50.</p>`],
+  ['altaveu', 'staff', 'Altavoz', `<p>Mensajes para toda la colla, con fotos y emojis. Si lo marcas, llegan como aviso al móvil de quien los tiene activados. Se guardan como mucho 50.</p>
+    <p><strong>Preguntas y pagos</strong>: al escribirlo, marca <em>Añadir preguntas</em> para hacer una encuesta o una inscripción (viaje, cena, camisetas…). Cada opción puede tener precio: quien la elige ve cuánto tiene que pagar, el IBAN o el Bizum de la colla y un concepto con su nombre, y avisa cuando ha pagado. En <em>Ver las respuestas</em> tienes quién ha respondido qué, quién falta y los pagos por comprobar en el banco; márcalos como recibidos y expórtalo a Excel. La app no hace ningún cobro.</p>`],
   ['comptes', 'admin', 'Cuentas y segundo factor', `
     <p>Cada persona que edita debería tener su cuenta, con lo que necesita: <strong>junta</strong> (sesiones, asistencia, contacto), <strong>técnica</strong> (castells, pinyes, medidas) o <strong>administración</strong> (todo).</p>
     <p><strong>Segundo factor</strong>: en <em>Mi cuenta</em>, <em>Activar el segundo factor</em>. Hace falta una app de autenticación (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS o Contraseñas del iPhone). Guarda los códigos de recuperación fuera del móvil.</p>
@@ -104,7 +106,8 @@ const en = [
   ['pinyes', 'staff', "Colla's pinyes", `
     <p>In the <em>Pinyes</em> tab you redraw the pinya of each castell: move, rotate, add or remove positions, with snapping and undo. Changes apply to every castell of that type, and positions that are kept keep their history.</p>
     <p>You can start from another castell's pinya with the same baixos (for example, from 3d7 to 3d8), or from the standard one with taps and tapa-taps.</p>`],
-  ['altaveu', 'staff', 'Announcements', `<p>Messages for the whole colla, with photos and emojis. If you tick it, they arrive as a notification on phones that have them turned on. At most 50 are kept.</p>`],
+  ['altaveu', 'staff', 'Announcements', `<p>Messages for the whole colla, with photos and emojis. If you tick it, they arrive as a notification on phones that have them turned on. At most 50 are kept.</p>
+    <p><strong>Questions and payments</strong>: when writing one, tick <em>Add questions</em> to run a poll or a sign-up (trip, dinner, T-shirts…). Each option can have a price: whoever picks it sees how much to pay, the colla's IBAN or Bizum and a reference with their name, and says when they've paid. In <em>See the answers</em> you get who answered what, who is missing and the payments to check at the bank; mark them as received and export to Excel. The app never charges anything.</p>`],
   ['comptes', 'admin', 'Accounts and two-step verification', `
     <p>Everyone who edits should have their own account with what they need: <strong>board</strong> (sessions, attendance, contact details), <strong>technical</strong> (castells, pinyes, measurements) or <strong>admin</strong> (everything).</p>
     <p><strong>Two-step verification</strong>: in <em>My account</em>, <em>Turn on two-step verification</em>. You need an authenticator app (Google Authenticator, Microsoft Authenticator, Aegis, 2FAS or iPhone Passwords). Keep the recovery codes somewhere other than your phone.</p>
