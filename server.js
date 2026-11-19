@@ -1443,7 +1443,10 @@ const MAX_COMPANIONS = LIMITS.companions;
 function companionNames(body) {
   if (!('companions' in body)) return undefined;
   if (!Array.isArray(body.companions) || body.companions.length > MAX_COMPANIONS) fail(400, 'Com a molt {n} acompanyants', { n: MAX_COMPANIONS });
-  return body.companions.map((n) => (typeof n === 'string' ? str(n, 60) : null));
+  // A la pinya s'han de poder reconèixer: cada acompanyant porta el seu nom.
+  const names = body.companions.map((n) => (typeof n === 'string' ? str(n, 60) : null));
+  if (names.some((n) => !n)) fail(400, 'Posa el nom de cada acompanyant');
+  return names;
 }
 function syncCompanions(event, personId, names) {
   if (!event.ask_companions) return;
@@ -1451,15 +1454,11 @@ function syncCompanions(event, personId, names) {
   // Qui no ve no porta ningú; si diu que ve sense dir res dels acompanyants, es deixen com estaven.
   if (status !== 'si') names = [];
   else if (names === undefined) return;
-  const person = db.prepare('SELECT name, alias FROM people WHERE id = ?').get(personId);
-  const who = publicName(person);
-  const label = (i) => `Acompanyant ${/^[aeiouàèéíòóúh]/i.test(who) ? "d'" : 'de '}${who}${names.length > 1 ? ` (${i + 1})` : ''}`;
   const list = db.prepare(`SELECT g.*, (SELECT COUNT(*) FROM castell_positions WHERE guest_id = g.id) AS placed
     FROM event_guests g WHERE g.event_id = ? AND g.companion_of = ? ORDER BY g.companion_dropped, placed DESC, g.id`).all(event.id, personId);
   const rename = db.prepare('UPDATE event_guests SET name = ?, companion_dropped = 0 WHERE id = ?');
   const renamePlaced = db.prepare('UPDATE castell_positions SET guest_name = ? WHERE guest_id = ?');
-  names.forEach((n, i) => {
-    const name = n || label(i);
+  names.forEach((name, i) => {
     const g = list[i];
     if (g) { rename.run(name, g.id); renamePlaced.run(name, g.id); }
     else insertRow('event_guests', { event_id: event.id, name, companion_of: personId });

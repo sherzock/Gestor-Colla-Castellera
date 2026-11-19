@@ -12,14 +12,16 @@ after(() => server.stop());
 const futureEvent = async () => (await s.admin('GET', '/events')).d.find((e) => e.rsvp_open && e.type === 'assaig');
 
 // ---------- Acompanyants ----------
-test('acompanyants: es creen com a persones temporals, amb nom o «Acompanyant de …»', async () => {
+test('acompanyants: es creen com a persones temporals i cadascun ha de tenir nom', async () => {
   const ev = await futureEvent();
   await s.admin('PUT', `/events/${ev.id}`, { ...ev, ask_companions: 1 });
-  assert.equal((await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si', companions: ['Laia', ''] })).s, 200);
+  assert.equal((await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si', companions: ['Laia', ''] })).s, 400);
+  assert.equal((await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si', companions: ['Laia', '   '] })).s, 400);
+  assert.equal((await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si', companions: ['Laia', 'Marc'] })).s, 200);
   const mine = (await s.member('GET', `/events/${ev.id}`)).d.mine.companions;
   assert.equal(mine.length, 2);
   assert.equal(mine[0].name, 'Laia');
-  assert.match(mine[1].name, /^Acompanyant d(e |')/);
+  assert.equal(mine[1].name, 'Marc');
   const guests = (await s.admin('GET', `/events/${ev.id}`)).d.guests.filter((g) => g.companion_of === s.personId);
   assert.equal(guests.length, 2);
   const csv = (await s.admin('GET', `/events/${ev.id}/attendance.csv`)).text;

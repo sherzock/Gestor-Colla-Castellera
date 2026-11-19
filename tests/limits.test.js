@@ -51,12 +51,12 @@ test('respostes d\'un membre: comentari i textos tallats a 300, com a molt 6 aco
   const { fields } = (await s.admin('GET', `/events/${ev.id}`)).d;
   const num = fields.find((f) => f.kind === 'number').id, text = fields.find((f) => f.kind === 'text').id;
   const att = (body) => s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si', ...body });
-  assert.equal((await att({ comment: long(1000), extra: { [num]: 5, [text]: long(1000) }, companions: Array(6).fill('') })).s, 200);
+  assert.equal((await att({ comment: long(1000), extra: { [num]: 5, [text]: long(1000) }, companions: Array.from({ length: 6 }, (_, i) => `Amic ${i}`) })).s, 200);
   const { mine } = (await s.member('GET', `/events/${ev.id}`)).d;
   assert.equal(mine.comment.length, 300);
   assert.equal(mine.extra[text].length, 300);
   assert.equal(mine.companions.length, 6);
-  assert.equal((await att({ companions: Array(7).fill('') })).s, 400);
+  assert.equal((await att({ companions: Array.from({ length: 7 }, (_, i) => `Amic ${i}`) })).s, 400);
   assert.equal((await att({ extra: { [num]: 1e12 } })).s, 400);
 });
 

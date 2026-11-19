@@ -55,7 +55,7 @@ test('qui ve veu quant ha de pagar i on, avisa que ha pagat i la junta ho marca 
   const { ev, bus, meals, menu } = await tripEvent();
   assert.equal((await s.admin('PUT', `/events/${ev.id}/payment`, { price: 1000, companion_price: 500, holder: 'Colla', iban: IBAN, concept: 'Viatge' })).s, 200);
   const answer = (body) => s.member('PUT', `/events/${ev.id}/attendance`, body);
-  assert.equal((await answer({ status: 'si', extra: { [bus.id]: true, [meals.id]: 2, [menu.id]: 'Peix' }, companions: ['', ''] })).s, 200);
+  assert.equal((await answer({ status: 'si', extra: { [bus.id]: true, [meals.id]: 2, [menu.id]: 'Peix' }, companions: ['Anna', 'Biel'] })).s, 200);
   let d = (await s.member('GET', `/events/${ev.id}`)).d;
   assert.equal(d.payment.iban, IBAN.replace(/\s/g, ''));
   assert.equal(d.payment.concept, 'Viatge');

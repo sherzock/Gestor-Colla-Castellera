@@ -9,6 +9,8 @@ export const CHANGELOG = [
       "Data límit per pagar amb recordatori al mòbil, qui va fora de termini, rebuts en efectiu i marcar-ne diversos alhora.",
       "La resposta a una sessió es desa sola mentre respons: ja no hi ha botó de desar.",
       "Esborrar una persona en treu tot el que la identifica, però als castells i a les sessions passades hi posa «Persona esborrada»: les alineacions, l'assistència i els pagaments queden sencers.",
+      "Llistes d'assistència llargues més manejables: filtres (vénen, no, sense resposta, han vingut…) i se'n carreguen 30 cada cop; els membres veuen un tros de qui hi va i la resta en una finestra amb cercador.",
+      "Cada acompanyant ha de portar el seu nom, perquè a la pinya se'l pugui reconèixer.",
     ],
     es: [
       'Pagos en las sesiones: precio por persona, por acompañante y en las respuestas; quien viene ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, avisa cuando ha pagado y la junta lo marca como recibido.',
@@ -16,6 +18,8 @@ export const CHANGELOG = [
       'Fecha límite para pagar con recordatorio en el móvil, quién va fuera de plazo, recibos en efectivo y marcar varios a la vez.',
       'La respuesta a una sesión se guarda sola mientras respondes: ya no hay botón de guardar.',
       'Borrar a una persona quita todo lo que la identifica, pero en los castells y las sesiones pasadas pone «Persona esborrada»: las alineaciones, la asistencia y los pagos quedan enteros.',
+      'Listas de asistencia largas más manejables: filtros (vienen, no, sin respuesta, han venido…) y se cargan de 30 en 30; los miembros ven una parte de quién va y el resto en una ventana con buscador.',
+      'Cada acompañante tiene que llevar su nombre, para que en la pinya se le pueda reconocer.',
     ],
     en: [
       'Payments in sessions: price per person, per companion and per answer; whoever goes sees how much to pay, the IBAN or Bizum and the reference, says when they have paid and the board marks it as received.',
@@ -23,6 +27,8 @@ export const CHANGELOG = [
       'Payment deadline with a phone reminder, who is overdue, cash payments and marking several as received at once.',
       'Your answer to a session saves by itself as you go: no more save button.',
       'Deleting a person removes everything that identifies them, but past castells and sessions show “Persona esborrada”: line-ups, attendance and payments stay complete.',
+      'Long attendance lists are easier to handle: filters (coming, not coming, no answer, came…) and 30 rows at a time; members see part of who is going and the rest in a window with a search box.',
+      'Each companion needs a name, so they can be recognised in the pinya.',
     ],
   },
   {

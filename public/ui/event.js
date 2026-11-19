@@ -33,16 +33,16 @@ function readExtra(form, fields, prefix = 'x') {
   }
   return out;
 }
-// Acompanyants: quants i, si es vol, el nom de cadascun (si no, «Acompanyant de …»). El màxim és el del servidor.
+// Acompanyants: quants i el nom de cadascun (a la pinya s'han de poder reconèixer). El màxim és el del servidor.
 const MAX_COMPANIONS = 6;
 function companionsInput(list = []) {
   return `<div class="companions" data-companions>
     <label class="field">${t('Acompanyants')}<input type="number" name="companions_n" min="0" max="${MAX_COMPANIONS}" step="1" inputmode="numeric" value="${list.length}"></label>
     <div class="comp-names">${list.map((name, i) => companionName(name, i)).join('')}</div>
-    <p class="small muted" style="margin:0">${t('La tècnica els podrà col·locar als castells. El nom és opcional.')}</p>
+    <p class="small muted" style="margin:0">${t('Posa el nom de cadascun: la tècnica els podrà col·locar als castells.')}</p>
   </div>`;
 }
-const companionName = (name, i) => `<input name="comp${i}" maxlength="60" value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}" aria-label="${t('Nom de l\'acompanyant {n} (opcional)', { n: i + 1 })}">`;
+const companionName = (name, i) => `<input name="comp${i}" maxlength="60" required value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n}', { n: i + 1 })}" aria-label="${t('Nom de l\'acompanyant {n}', { n: i + 1 })}">`;
 function bindCompanions(root) {
   const box = qs('[data-companions]', root);
   if (!box) return;
@@ -56,7 +56,7 @@ function bindCompanions(root) {
   };
 }
 const readCompanions = (form) => [...form.querySelectorAll('.comp-names input')].map((el) => el.value.trim());
-// Els noms automàtics («Acompanyant de …») no es tornen a mostrar a la casella: el nom és opcional.
+// Els noms automàtics d'abans («Acompanyant de …») no es mostren a la casella: cal posar-hi el nom de debò.
 const ownCompanionNames = (list) => list.filter((g) => !g.dropped).map((g) => (/^Acompanyant d(e |')/.test(g.name) ? '' : g.name));
 
 function extraValue(f, v) {
@@ -125,7 +125,7 @@ export async function pageEvent(id) {
     ? Object.entries(INSTRUMENTS).map(([k, l]) => `<span class="status none">${icon.music} ${l}: ${going.filter((a) => a.instrument === k).length}</span>`).join('')
     : '';
   const namesByInstrument = (list) => {
-    const chip = (a) => `<span class="${a.id === me.id ? 'me' : ''}">${esc(shortName(a))}</span>`;
+    const chip = (a) => `<span class="${a.id === me.id ? 'me' : ''}" data-n="${esc(norm(shortName(a)))}">${esc(shortName(a))}</span>`;
     const groups = [...Object.entries(INSTRUMENTS), [null, t('Altres')]]
       .map(([k, l]) => [l, list.filter((a) => (a.instrument || null) === k)])
       .filter(([, xs]) => xs.length);
@@ -136,11 +136,30 @@ export async function pageEvent(id) {
   const groupLabel = (k) => (k === 'musica' ? t('Músics') : sectionLabel(k));
   const byGroup = (list) => [...SECTIONS, 'musica', null].map((k) => [k, list.filter((a) => groupOf(a) === k)]).filter(([, xs]) => xs.length);
   const namesByGroup = (list) => {
-    const chip = (a) => `<span class="${a.id === me.id ? 'me' : ''}">${esc(shortName(a))}</span>`;
+    const chip = (a) => `<span class="${a.id === me.id ? 'me' : ''}" data-n="${esc(norm(shortName(a)))}">${esc(shortName(a))}</span>`;
     const groups = byGroup(list);
     if (groups.length === 1 && !groups[0][0]) return `<div class="names">${list.map(chip).join('')}</div>`;
     return groups.map(([k, xs]) => `<h3 class="instr-h">${groupLabel(k)} · ${xs.length}</h3><div class="names">${xs.map(chip).join('')}</div>`).join('');
   };
+  // Si hi va molta gent, a la pàgina només se'n veu un tros (tu primer) i la resta, en una finestra amb cercador.
+  const namesPreview = (list) => {
+    const first = [...list].sort((a, b) => (b.id === me.id) - (a.id === me.id) || shortName(a).localeCompare(shortName(b))).slice(0, NAMES_PREVIEW);
+    return `<div class="names">${first.map((a) => `<span class="${a.id === me.id ? 'me' : ''}">${esc(shortName(a))}</span>`).join('')}</div>
+      <button type="button" class="btn sm more-btn" id="names-all">${t('Mostra-ho tot · {n}', { n: list.length })}</button>`;
+  };
+  const namesModal = () => openModal(`${modalHead(passList ? t('Qui ha vingut') : t('Qui hi va'))}
+      <input type="search" id="names-search" placeholder="${t('Cerca persona…')}" aria-label="${t('Cerca persona…')}">
+      <div id="names-full">${isMusics ? namesByInstrument(attendance) : namesByGroup(attendance)}</div>`, (m) => {
+    qs('#names-search', m).oninput = (e) => {
+      const q = norm(e.target.value.trim());
+      qsa('#names-full .names', m).forEach((box) => {
+        let shown = 0;
+        qsa('span[data-n]', box).forEach((sp) => { const hide = q && !sp.dataset.n.includes(q); sp.classList.toggle('hidden', hide); if (!hide) shown++; });
+        box.classList.toggle('hidden', !shown);
+        if (box.previousElementSibling?.matches('h3')) box.previousElementSibling.classList.toggle('hidden', !shown);
+      });
+    };
+  });
   // A la taula de l'administració, una fila de capçalera per grup amb quants en vénen.
   const columns = 3 + passList + !!event.escoleta + !!event.ask_companions + fields.length + !!payment;
   const tableGroups = (list, row) => {
@@ -216,11 +235,14 @@ export async function pageEvent(id) {
         ${totals.map((x) => `<span class="status none">${esc(x.f.label)}: ${x.sum}</span>`).join('')}
       </div>
       ${passList ? `<p class="small muted" style="margin:0 0 8px">${t('Qui havia dit «Vinc» compta com a present. Toca «Ha vingut» per marcar qui no ha vingut, o afegeix qui ha vingut sense apuntar-se.')}</p>` : ''}
-      <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" aria-label="${t('Cerca persona…')}" style="margin-bottom:6px">
+      <div class="att-tools">
+        <div class="chips" id="att-filter">${attFilters(passList, attendance).map(([k, l, n]) => `<button type="button" class="chip" data-f="${k}">${l} · ${n}</button>`).join('')}</div>
+        <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" aria-label="${t('Cerca persona…')}">
+      </div>
       ${payment ? payBulkBar() : ''}
       <div class="table-wrap"><table class="responsive" id="att-table">
         <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}${payment ? `<th>${t('Pagament')}</th>` : ''}<th>${t('Comentari')}</th></tr></thead>
-        <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
+        <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" data-f="${attKeys(a).join(' ')}" class="${passList && !a.present ? 'not-present' : ''}">
           <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}</td>
           <td class="st"><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
           ${cameCell(a)}
@@ -231,6 +253,7 @@ export async function pageEvent(id) {
           <td data-l="${t('Comentari')}" class="small">${esc(a.comment)}</td>
         </tr>`)}</tbody>
       </table></div>
+      <button type="button" class="btn sm more-btn hidden" id="att-more"></button>
       <p class="small muted">${t("Toca el nom d'una persona per editar els seus camps extra.")}</p>
     </div>` : `
     <div class="card">
@@ -240,6 +263,7 @@ export async function pageEvent(id) {
         : `<span class="status si">${t('{n} vénen', { n: counts.si })}${counts.companions ? ` ${t('+ {n} acompanyants', { n: counts.companions })}` : ''}</span>`}
         ${event.escoleta ? `<span class="status none">${t('Escoleta: {n}', { n: counts.escoleta })}</span>` : ''}${instrumentCounts}</div>
       ${!attendance.length ? `<div class="names"><span class="muted">${t('Encara ningú')}</span></div>`
+        : attendance.length > NAMES_PREVIEW ? namesPreview(attendance)
         : isMusics ? namesByInstrument(attendance)
         : namesByGroup(attendance)}
     </div>`;
@@ -380,13 +404,14 @@ export async function pageEvent(id) {
   // d'escriure un moment. No cal cap botó de desar (i ningú se n'oblida).
   const state = qs('#rsvp-state');
   // Les preguntes obligatòries s'han de respondre per dir que vens (el servidor no ho desa sense).
-  const missing = () => (status === 'si' ? fields.filter((f) => f.required && f.kind !== 'bool' && !String(readExtra(form, fields)[f.id] ?? '').trim()) : []);
+  const missing = () => (status === 'si' ? [...fields.filter((f) => f.required && f.kind !== 'bool' && !String(readExtra(form, fields)[f.id] ?? '').trim()).map((f) => f.label),
+    ...(event.ask_companions && readCompanions(form).some((n) => !n) ? [t("el nom dels acompanyants")] : [])] : []);
   const showState = (kind) => {
     const need = missing();
     state.className = `small save-state ${kind === 'error' || need.length ? 'warn-text' : ''}`;
     state.innerHTML = kind === 'saving' ? t('Desant…')
       : kind === 'error' ? t("No s'ha pogut desar. Torna-ho a provar.")
-        : need.length ? t('Respon «{what}» perquè quedi desat que vens.', { what: esc(need.map((f) => f.label).join('», «')) })
+        : need.length ? t('Respon «{what}» perquè quedi desat que vens.', { what: esc(need.join('», «')) })
           : !status && escoleta === null ? t('Tria si vens: es desa sol, no cal cap botó.')
             : `${icon.check}${t('Desat')}`;
   };
@@ -469,6 +494,7 @@ export async function pageEvent(id) {
   }
 
   bindPayCard(event);
+  qs('#names-all')?.addEventListener('click', namesModal);
   if (!admin) return;
   bindAnswersCard(event, attendance);
   qs('#add-guest')?.addEventListener('click', () => guestModal(event.id, null, () => render({ keepScroll: true })));
@@ -541,19 +567,51 @@ function bindSessionEditing(event, reload, castells) {
   }));
 }
 
+const NAMES_PREVIEW = 24;
+
+// Filtres de la taula d'assistència: abans de la sessió, per resposta; el dia i després, per qui ha vingut.
+const attKeys = (a) => ['all', a.status || 'none', a.present ? 'present' : 'absent'];
+function attFilters(passList, attendance) {
+  const n = (k) => attendance.filter((a) => attKeys(a).includes(k)).length;
+  const list = passList
+    ? [['all', t('Tothom')], ['present', t('Han vingut')], ['absent', t('No han vingut')]]
+    : [['all', t('Tothom')], ['si', t('Vénen')], ['no', t('No vénen')], ['none', t('Sense resposta')]];
+  return list.map(([k, l]) => [k, l, n(k)]).filter(([k, , c]) => k === 'all' || c);
+}
+
+// Les llistes llargues es mostren a trossos. El filtre i quants se'n veuen es recorden mentre
+// no es canvia de sessió, perquè cada canvi torna a pintar la pàgina.
+const ATT_PAGE = 30;
+let attView = { id: null, f: 'all', limit: ATT_PAGE };
+
 function bindAttendanceTable(event, attendance, fields, reload) {
-  qs('#att-search').oninput = (e) => {
-    const q = norm(e.target.value.trim());
-    let header = null, shown = 0;
+  if (attView.id !== event.id) attView = { id: event.id, f: 'all', limit: ATT_PAGE };
+  const search = qs('#att-search'), more = qs('#att-more');
+  const chips = qsa('#att-filter .chip');
+  if (!chips.some((c) => c.dataset.f === attView.f)) attView.f = 'all';
+  const apply = () => {
+    const q = norm(search.value.trim());
+    chips.forEach((c) => c.classList.toggle('on', c.dataset.f === attView.f));
+    let header = null, shown = 0, total = 0;
     const closeGroup = () => header?.classList.toggle('hidden', !shown);
     qsa('#att-table tbody tr').forEach((tr) => {
       if (tr.classList.contains('group-row')) { closeGroup(); header = tr; shown = 0; return; }
-      const hide = q && !tr.dataset.name.includes(q);
-      tr.classList.toggle('hidden', hide);
-      if (!hide) shown++;
+      const match = (!q || tr.dataset.name.includes(q)) && tr.dataset.f.split(' ').includes(attView.f);
+      // Quan es cerca, surten tots els que coincideixen; si no, només el primer tros.
+      const show = match && (q || total < attView.limit);
+      if (match) total++;
+      tr.classList.toggle('hidden', !show);
+      if (show) shown++;
     });
     closeGroup();
+    const left = q ? 0 : total - attView.limit;
+    more.classList.toggle('hidden', left <= 0);
+    more.textContent = left > ATT_PAGE ? t("Mostra'n {n} més · en queden {left}", { n: ATT_PAGE, left }) : t("Mostra'n {n} més", { n: left });
   };
+  chips.forEach((c) => (c.onclick = () => { attView.f = c.dataset.f; attView.limit = ATT_PAGE; apply(); }));
+  more.onclick = () => { attView.limit += ATT_PAGE; apply(); };
+  search.oninput = apply;
+  apply();
   qsa('#att-table tbody tr[data-id]').forEach((tr) => {
     const pid = tr.dataset.id;
     const a = attendance.find((x) => String(x.id) === pid);
