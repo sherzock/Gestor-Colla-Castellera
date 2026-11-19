@@ -1024,3 +1024,8 @@ h1.castell-title { margin: 0; line-height: 1.1; }
 .news-event { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .news-event svg { width: 16px; height: 16px; }
 .warn-text { color: var(--warn); font-weight: 600; }
+.pay-pick { width: 18px; height: 18px; vertical-align: middle; margin: 0 4px 0 0; }
+.pay-bulk { position: sticky; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px;
+  margin-bottom: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 14px rgb(0 0 0 / .12); }
+.pay-bulk[hidden] { display: none; }
+.pay-bulk #pay-bulk-n { font-weight: 600; margin-right: auto; }

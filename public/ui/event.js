@@ -9,7 +9,7 @@ import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, c
   render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
 import { eventAmount } from '../forms.js';
 import { nextPlanTime } from '../planning.js';
-import { bindPayCard, bindPaymentAdmin, fieldPriceModal, money, payCard, payCell, paymentAdminCard, priceHint, priceSummary } from './pay.js';
+import { bindPayCard, bindPaymentAdmin, fieldPriceModal, money, payBulkBar, payCard, payCell, paymentAdminCard, priceHint, priceSummary } from './pay.js';
 import { eventModal } from './sessions.js';
 import { bindTimeline, timelineCard } from './timeline.js';
 import { STATUS_ORDER, assignedName } from './viewer.js';
@@ -217,6 +217,7 @@ export async function pageEvent(id) {
       </div>
       ${passList ? `<p class="small muted" style="margin:0 0 8px">${t('Qui havia dit «Vinc» compta com a present. Toca «Ha vingut» per marcar qui no ha vingut, o afegeix qui ha vingut sense apuntar-se.')}</p>` : ''}
       <input type="search" id="att-search" placeholder="${t('Cerca persona…')}" aria-label="${t('Cerca persona…')}" style="margin-bottom:6px">
+      ${payment ? payBulkBar() : ''}
       <div class="table-wrap"><table class="responsive" id="att-table">
         <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}${payment ? `<th>${t('Pagament')}</th>` : ''}<th>${t('Comentari')}</th></tr></thead>
         <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">

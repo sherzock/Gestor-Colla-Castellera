@@ -134,7 +134,8 @@ const PERSON_EXPORT = { name: 'nom', alias: 'malnom', email: 'correu', phone: 't
 // id; i usuari, contrasenya i rol de quan els administradors eren persones (ara sempre buits: veure db.js).
 const PERSON_NOT_DATA = ['id', 'username', 'password_hash', 'role'];
 const ATTENDANCE_EXPORT = { status: 'resposta', came: 'ha_vingut', escoleta: 'escoleta', extra: 'camps', comment: 'comentari', updated_at: 'actualitzat',
-  paid_at: 'diu_que_ha_pagat', received_at: 'pagament_rebut' };
+  paid_at: 'diu_que_ha_pagat', received_at: 'pagament_rebut',
+  received_cash: 'pagat_en_efectiu', pay_reminded_at: 'recordatori_de_pagament' };
 // «present» és d'una versió antiga (ara es calcula, veure CAME_SQL).
 const ATTENDANCE_NOT_DATA = ['event_id', 'person_id', 'present'];
 // Cada taula que guarda alguna cosa d'una persona i on surt a la descàrrega.

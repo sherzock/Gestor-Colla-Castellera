@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { db, DB_PATH, hashPassword, hashToken, verifyPassword, transaction } from './db.js';
 import { buildStructure, castellName, configFromName, levelNames, levelRange, positionOf, structureOf, setTemplates, templateOf, templateRings,
   LAYER_PREFIX, TEMPLATE_KINDS, levelGaps, weightInversions, SHOULDER_GAP_CM } from './public/castell.js';
-import { eventAmount, ibanValid, normalizeIban, normalizePhone, phoneValid } from './public/forms.js';
+import { euros, eventAmount, ibanValid, normalizeIban, normalizePhone, phoneValid } from './public/forms.js';
 import { translate } from './public/i18n.js';
 import { overlappingPairs } from './public/planning.js';
 import { sendPush, validEndpoint, vapidKeys } from './push.js';
@@ -932,7 +932,7 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
     WHERE a.person_id = ?`).all(p.id).map((f) => [String(f.id), f.label]));
   const yesNo = (v) => (v === null || v === undefined ? null : !!v);
   const attendance = db.prepare(`SELECT e.date, e.title, e.type, a.event_id, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
-      a.paid_at, a.received_at
+      a.paid_at, a.received_at, a.received_cash, a.pay_reminded_at
     FROM attendance a JOIN events e ON e.id = a.event_id WHERE a.person_id = ? ORDER BY e.date, e.start_time`).all(p.id)
     .map((r) => {
       // Si la sessió es pagava: quant, si va dir que havia pagat i si la junta ho va rebre.
@@ -940,7 +940,8 @@ route('GET', '/api/people/:id/export', ({ params, res }) => {
       return { data: r.date, sessio: r.title, tipus: r.type, resposta: r.status, ha_vingut: yesNo(r.came), escoleta: yesNo(r.escoleta),
         camps: Object.fromEntries(Object.entries(parseJSON(r.extra, {})).map(([k, v]) => [labels.get(k) || k, v])), comentari: r.comment,
         actualitzat: r.updated_at,
-        import_euros: payment ? amountOf(r.event_id, p.id, payment) / 100 : null, diu_que_ha_pagat: r.paid_at, pagament_rebut: r.received_at };
+        import_euros: payment ? amountOf(r.event_id, p.id, payment) / 100 : null, diu_que_ha_pagat: r.paid_at, pagament_rebut: r.received_at,
+        pagat_en_efectiu: yesNo(r.received_cash), recordatori_de_pagament: r.pay_reminded_at };
     });
   const positions = db.prepare(`SELECT c.*, cp.pos_key, e.date, e.title FROM castell_positions cp JOIN castells c ON c.id = cp.castell_id
     JOIN events e ON e.id = c.event_id WHERE cp.person_id = ? ORDER BY e.date, c.position`).all(p.id)
@@ -1148,7 +1149,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
   const castells = db.prepare(`SELECT c.* FROM castells c WHERE c.event_id = ?${isAdmin ? '' : ' AND c.hidden = 0'} ORDER BY c.position, c.id`).all(event.id)
     .map((c) => ({ ...c, assigned_count: keysOf.all(c.id).filter((r) => positionOf(c, r.pos_key)).length, ...(isAdmin ? {} : ADMIN_ONLY_CASTELL), ...(can(user, 'castells') ? {} : { tech_notes: undefined }) }));
   const rows = db.prepare(`SELECT p.id, p.name, p.alias, p.instrument, p.section, a.status, a.came, a.escoleta, a.extra, a.comment, a.updated_at,
-      a.paid_at, a.received_at, ${CAME_SQL} AS present
+      a.paid_at, a.received_at, a.received_cash, ${CAME_SQL} AS present
     FROM people p LEFT JOIN attendance a ON a.person_id = p.id AND a.event_id = ?
     WHERE p.active = 1 OR a.status IS NOT NULL OR a.came IS NOT NULL ORDER BY p.name COLLATE NOCASE`).all(event.id);
   const flag = (v) => (v === null || v === undefined ? null : !!v);
@@ -1175,6 +1176,7 @@ route('GET', '/api/events/:id', ({ params, user }) => {
     received: rows.filter((r) => r.received_at).reduce((s, r) => s + amounts.get(r.id), 0),
     to_check: rows.filter((r) => amounts.get(r.id) && r.paid_at && !r.received_at).length,
     unpaid: rows.filter((r) => amounts.get(r.id) && !r.paid_at && !r.received_at).length,
+    late: rows.filter((r) => paymentLate(payment, amounts.get(r.id), r)).length,
   } : undefined;
   return {
     payment: payment && { ...payment, event_id: undefined, concept: payment.concept || event.title }, payments,
@@ -1182,7 +1184,8 @@ route('GET', '/api/events/:id', ({ params, user }) => {
     guests: can(user, 'castells') ? guestsOf(event.id) : undefined,
     mine: mine ? { ...mine, came: flag(mine.came), escoleta: flag(mine.escoleta), extra: parseJSON(mine.extra, {}),
       companions: event.ask_companions ? companionsOf(event.id, user.id) : [], amount: amountOf(event.id, user.id, payment, fields) } : null,
-    attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [], amount: amounts.get(a.id) || 0 }))
+    attendance: isAdmin ? attendance.map((a) => ({ ...a, companions: companionsBy.get(a.id) || [], amount: amounts.get(a.id) || 0,
+      late: paymentLate(payment, amounts.get(a.id), a) }))
       : attendance.filter((a) => a.present),
     forecast: isAdmin ? attendanceForecast(event, castells) : undefined,
     plan_clashes: isAdmin ? planClashes(event.id) : undefined,
@@ -1331,10 +1334,13 @@ function checkPayment(eventId, personId, before, { member }) {
   if (row.paid_at) db.prepare('UPDATE attendance SET paid_at = NULL WHERE event_id = ? AND person_id = ?').run(eventId, personId);
 }
 const paymentState = (amount, r) => (!amount ? null : r.received_at ? 'received' : r.paid_at ? 'paid' : 'unpaid');
+// Encara no ha pagat (ni ho ha dit) i la data límit ja ha passat.
+const paymentLate = (payment, amount, r) => !!(payment?.due_date && amount && !r.paid_at && !r.received_at && payment.due_date < nowLocal().slice(0, 10));
 
 function paymentInput(body) {
   const out = { price: priceIn(body.price), companion_price: priceIn(body.companion_price), holder: str(body.holder, 80),
-    iban: str(body.iban, 60), bizum: str(body.bizum, 20), concept: str(body.concept, 40) };
+    iban: str(body.iban, 60), bizum: str(body.bizum, 20), concept: str(body.concept, 40), due_date: str(body.due_date, 10) };
+  if (out.due_date && (!/^\d{4}-\d{2}-\d{2}$/.test(out.due_date) || Number.isNaN(Date.parse(out.due_date)))) fail(400, 'La data límit no és correcta');
   if (out.iban) { if (!ibanValid(out.iban)) fail(400, "L'IBAN no és correcte"); out.iban = normalizeIban(out.iban); }
   if (out.bizum) { if (!phoneValid(out.bizum)) fail(400, 'El número de Bizum no és correcte'); out.bizum = normalizePhone(out.bizum); }
   if (!out.iban && !out.bizum) fail(400, 'Per cobrar, posa un IBAN o un número de Bizum');
@@ -1344,10 +1350,13 @@ function paymentInput(body) {
 route('PUT', '/api/events/:id/payment', ({ params, body }) => {
   const event = getEvent(params.id);
   const p = paymentInput(body);
-  db.prepare(`INSERT INTO event_payments (event_id, price, companion_price, holder, iban, bizum, concept) VALUES (?, ?, ?, ?, ?, ?, ?)
+  const old = paymentOf(event.id);
+  db.prepare(`INSERT INTO event_payments (event_id, price, companion_price, holder, iban, bizum, concept, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (event_id) DO UPDATE SET price = excluded.price, companion_price = excluded.companion_price, holder = excluded.holder,
-      iban = excluded.iban, bizum = excluded.bizum, concept = excluded.concept`)
-    .run(event.id, p.price, p.companion_price, p.holder, p.iban, p.bizum, p.concept);
+      iban = excluded.iban, bizum = excluded.bizum, concept = excluded.concept, due_date = excluded.due_date`)
+    .run(event.id, p.price, p.companion_price, p.holder, p.iban, p.bizum, p.concept, p.due_date);
+  // Si canvia la data límit, el recordatori es pot tornar a enviar.
+  if ((old?.due_date || null) !== p.due_date) db.prepare('UPDATE attendance SET pay_reminded_at = NULL WHERE event_id = ?').run(event.id);
   // Les dades de la colla es recorden per a la propera sessió.
   db.prepare("INSERT INTO settings (key, value) VALUES ('pay_defaults', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value")
     .run(JSON.stringify({ holder: p.holder, iban: p.iban, bizum: p.bizum }));
@@ -1358,7 +1367,7 @@ route('DELETE', '/api/events/:id/payment', ({ params }) => {
   const event = getEvent(params.id);
   transaction(() => {
     db.prepare('DELETE FROM event_payments WHERE event_id = ?').run(event.id);
-    db.prepare('UPDATE attendance SET paid_at = NULL, received_at = NULL WHERE event_id = ?').run(event.id);
+    db.prepare('UPDATE attendance SET paid_at = NULL, received_at = NULL, received_cash = NULL, pay_reminded_at = NULL WHERE event_id = ?').run(event.id);
   });
   return { ok: true };
 }, 'sessions');
@@ -1376,13 +1385,27 @@ route('PUT', '/api/events/:id/paid', ({ params, body, user }) => {
   return { ok: true };
 });
 
-// La junta ho ha vist al banc (o ho desfà).
-route('PUT', '/api/events/:id/payments/:personId', ({ params, body }) => {
-  const event = getEvent(params.id);
-  const personId = Number(params.personId);
-  if (!amountOf(event.id, personId)) fail(400, 'Aquesta persona no ha de pagar res');
-  db.prepare('UPDATE attendance SET received_at = ? WHERE event_id = ? AND person_id = ?').run(bool(body.received) ? nowUtc() : null, event.id, personId);
+// La junta ho ha vist al banc o li han pagat en mà (o ho desfà): d'una persona o de diverses alhora.
+function markReceived(eventId, ids, body) {
+  const received = bool(body.received), cash = received && bool(body.cash) ? 1 : null;
+  const payment = paymentOf(eventId), fields = loadFields(eventId);
+  const set = db.prepare('UPDATE attendance SET received_at = ?, received_cash = ? WHERE event_id = ? AND person_id = ?');
+  transaction(() => {
+    for (const id of ids) {
+      if (!amountOf(eventId, id, payment, fields)) fail(400, 'Aquesta persona no ha de pagar res');
+      set.run(received ? nowUtc() : null, cash, eventId, id);
+    }
+  });
   return { ok: true };
+}
+
+route('PUT', '/api/events/:id/payments/:personId', ({ params, body }) => markReceived(getEvent(params.id).id, [Number(params.personId)], body), 'sessions');
+
+route('PUT', '/api/events/:id/payments', ({ params, body }) => {
+  const event = getEvent(params.id);
+  const ids = Array.isArray(body.person_ids) ? [...new Set(body.person_ids.map(Number))] : [];
+  if (!ids.length || ids.length > 1000 || ids.some((id) => !Number.isInteger(id))) fail(400, 'Tria a qui');
+  return markReceived(event.id, ids, body);
 }, 'sessions');
 
 // ---------- Acompanyants ----------
@@ -1453,7 +1476,7 @@ route('PUT', '/api/events/:id/attendance/:personId', ({ params, body }) => {
 // Taula d'assistència d'una sessió (la mateixa per al CSV i per a l'Excel que es fa a l'app): capçalera i files de text.
 function attendanceTable(event) {
   const fields = loadFields(event.id);
-  const rows = db.prepare(`SELECT p.id, p.name, p.alias, a.status, a.escoleta, a.extra, a.comment, a.paid_at, a.received_at, ${CAME_SQL} AS present
+  const rows = db.prepare(`SELECT p.id, p.name, p.alias, a.status, a.escoleta, a.extra, a.comment, a.paid_at, a.received_at, a.received_cash, ${CAME_SQL} AS present
     FROM attendance a JOIN people p ON p.id = a.person_id WHERE a.event_id = ? ORDER BY p.name COLLATE NOCASE`).all(event.id);
   const yesNo = (v) => (v ? 'sí' : v === 0 ? 'no' : '');
   const companionsBy = new Map();
@@ -1469,7 +1492,9 @@ function attendanceTable(event) {
   const pay = (r, extra) => {
     if (!payment) return [];
     const amount = eventAmount(payment, fields, { status: r.status, extra, companions: (companionsBy.get(r.id) || []).length });
-    return [amount ? (amount / 100).toFixed(2) : '', STATE[paymentState(amount, r)] || ''];
+    const state = paymentState(amount, r);
+    return [amount ? (amount / 100).toFixed(2) : '', state === 'received' && r.received_cash ? 'rebut en efectiu'
+      : paymentLate(payment, amount, r) ? 'sense pagar (fora de termini)' : STATE[state] || ''];
   };
   return {
     columns,
@@ -1940,7 +1965,31 @@ function sendReminders() {
     }));
   }
 }
-setInterval(sendReminders, Number(process.env.PUSH_REMINDER_MS) || 15 * 60 * 1000).unref();
+
+// Recordatori de pagar: un sol cop, 3 dies abans de la data límit del pagament (o de la sessió, si no n'hi ha), a qui
+// ha dit que ve, ha de pagar i encara no ha dit que ho ha fet.
+function sendPayReminders() {
+  const today = nowLocal().slice(0, 10);
+  const rows = db.prepare(`SELECT e.id AS event_id, e.title, e.date, pay.due_date, a.person_id, a.paid_at, a.received_at
+    FROM event_payments pay JOIN events e ON e.id = pay.event_id
+    JOIN attendance a ON a.event_id = e.id AND a.status = 'si' AND a.paid_at IS NULL AND a.received_at IS NULL AND a.pay_reminded_at IS NULL
+    WHERE e.hidden = 0 AND COALESCE(pay.due_date, e.date) >= ? AND COALESCE(pay.due_date, e.date) <= date(?, '+3 days')
+      AND a.person_id IN (SELECT person_id FROM push_subscriptions WHERE person_id IS NOT NULL)`).all(today, today);
+  const subsOf = db.prepare('SELECT * FROM push_subscriptions WHERE person_id = ?');
+  const done = db.prepare('UPDATE attendance SET pay_reminded_at = ? WHERE event_id = ? AND person_id = ?');
+  for (const r of rows) {
+    const amount = amountOf(r.event_id, r.person_id);
+    if (!amount) continue;
+    done.run(nowUtc(), r.event_id, r.person_id);
+    notify(subsOf.all(r.person_id), (lang) => ({
+      title: translate(lang, 'Recorda pagar: {title}', { title: r.title }),
+      body: translate(lang, r.due_date ? '{amount} abans del {date}. Toca aquí per veure on pagar.' : '{amount} abans de la sessió ({date}). Toca aquí per veure on pagar.', {
+        amount: euros(amount, lang), date: longDate(r.due_date || r.date, lang) }),
+      url: `#/sessio/${r.event_id}`,
+    }));
+  }
+}
+setInterval(() => { sendReminders(); sendPayReminders(); }, Number(process.env.PUSH_REMINDER_MS) || 15 * 60 * 1000).unref();
 
 // ---------- Plantilles de pinya ----------
 // Cada colla dibuixa la pinya de cada tipus de castell a la seva manera. Les plantilles valen per a tots els castells
@@ -2064,7 +2113,7 @@ const historyKey = () => `${historyVersion}|${today()}`;
 const NO_DATA_CHANGE = new Set(['/api/client-errors', '/api/me/2fa/setup', '/api/me/2fa/enable', '/api/me/2fa/disable', '/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me',
   '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox']);
 // Peticions que només toquen l'assistència, els camps extra, l'altaveu o els comptes d'administració.
-const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/(attendance(\/\d+)?|paid|payment|payments\/\d+)$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,
+const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/(attendance(\/\d+)?|paid|payment|payments(\/\d+)?)$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,
   /^\/api\/fields\/\d+$/, /^\/api\/announcements(\/\d+|\/images)?$/, /^\/api\/admins(\/\d+)?$/];
 const POSITIONS_ROUTE = /^\/api\/castells\/(\d+)\/positions(\/[^/]+)?$/;
 function dataChanged(pathname) {

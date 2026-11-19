@@ -423,6 +423,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS event_payments (
 )`);
 addColumn('attendance', 'paid_at', 'TEXT');
 addColumn('attendance', 'received_at', 'TEXT');
+// Data límit per pagar, si es rebut en efectiu (i no pel banc) i quan s'ha enviat el recordatori de pagar.
+addColumn('event_payments', 'due_date', 'TEXT');
+addColumn('attendance', 'received_cash', 'INTEGER');
+addColumn('attendance', 'pay_reminded_at', 'TEXT');
 // Un missatge de l'altaveu pot portar a una sessió (per apuntar-s'hi i, si cal, pagar).
 addColumn('announcements', 'event_id', 'INTEGER REFERENCES events(id) ON DELETE SET NULL');
 // Les preguntes pròpies de l'altaveu de la 1.3.0 provisional ja no hi són: ara es fan a la sessió.

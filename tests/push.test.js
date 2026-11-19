@@ -115,6 +115,25 @@ test('en mostrar una sessió oculta es pot avisar: un sol cop i només si estava
   assert.deepEqual(await inbox('m1'), [], 'ja estava visible');
 });
 
+test('recordatori de pagar: 3 dies abans de la data límit, un sol cop i només a qui encara no ha pagat', async () => {
+  const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  const make = async (title, due, paid) => {
+    const ev = (await s.admin('POST', '/events', { hidden: false, type: 'esdeveniment', title, date: day(20) })).d;
+    await s.admin('PUT', `/events/${ev.id}/payment`, { price: 1000, iban: 'ES91 2100 0418 4502 0005 1332', due_date: due });
+    await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si' });
+    if (paid) await s.member('PUT', `/events/${ev.id}/paid`, { paid: true });
+    return ev;
+  };
+  await inbox('m1');
+  const evs = [await make('Sopar aviat', day(2)), await make('Sopar pagat', day(2), true), await make('Sopar lluny', day(10))];
+  let titles = [];
+  for (let i = 0; i < 30 && !titles.length; i++) { await wait(100); titles.push(...(await inbox('m1')).map((m) => m.title)); }
+  await wait(400);
+  titles.push(...(await inbox('m1')).map((m) => m.title));
+  assert.deepEqual(titles, ['Recorda pagar: Sopar aviat']);
+  for (const e of evs) await s.admin('DELETE', `/events/${e.id}`);
+});
+
 test('qui surt o es dona de baixa deixa de rebre avisos', async () => {
   await s.member('POST', '/push/unsubscribe', { endpoint: endpoint('m1') });
   hits = [];

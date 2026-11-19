@@ -313,6 +313,9 @@ transaction(() => {
   pay.run(events.sopar, 2500, 2500, 'Sopar');
   pay.run(events.diada, null, null, 'Dinar diada');
   db.prepare('UPDATE event_fields SET price = 1500 WHERE id IN (?, ?)').run(fDinar, fAcomp);
+  // El sopar es paga fins a una setmana abans; el dinar de la diada, fins ahir (per veure qui va fora de termini).
+  db.prepare("UPDATE event_payments SET due_date = date((SELECT date FROM events WHERE id = ?), '-7 days') WHERE event_id = ?").run(events.sopar, events.sopar);
+  db.prepare("UPDATE event_payments SET due_date = date('now', 'localtime', '-1 day') WHERE event_id = ?").run(events.diada);
   insNews.run('Sopar de final de temporada', "Ja us podeu apuntar al sopar! 25 € per persona, també per als acompanyants. Apunta't i fes el pagament amb el concepte que et surt a la sessió.", 1, '-3 hours');
   db.prepare("UPDATE announcements SET event_id = ? WHERE title = 'Sopar de final de temporada'").run(events.sopar);
   let s2 = 11;
@@ -322,8 +325,8 @@ transaction(() => {
     for (const a of db.prepare("SELECT person_id FROM attendance WHERE event_id = ? AND status = 'si'").all(ev)) {
       const x = r2();
       if (x < 0.35) continue;
-      db.prepare('UPDATE attendance SET paid_at = ?, received_at = ? WHERE event_id = ? AND person_id = ?')
-        .run(stamp(2 + Math.floor(x * 40)), x > 0.6 ? stamp(1) : null, ev, a.person_id);
+      db.prepare('UPDATE attendance SET paid_at = ?, received_at = ?, received_cash = ? WHERE event_id = ? AND person_id = ?')
+        .run(stamp(2 + Math.floor(x * 40)), x > 0.6 ? stamp(1) : null, x > 0.88 ? 1 : null, ev, a.person_id);
     }
   }
   castell(events.a1, '3d8', { label: 'Prova de tronc', position: 1, ratio: 0.6, present: present.a1, partial: { from_level: 2, to_level: 6 } });

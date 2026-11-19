@@ -6,14 +6,17 @@ export const CHANGELOG = [
     ca: [
       "Pagaments a les sessions: preu per persona, per acompanyant i a les respostes; qui ve veu quant ha de pagar, l'IBAN o el Bizum i el concepte, avisa quan ha pagat i la junta ho marca com a rebut.",
       "Els missatges de l'altaveu poden portar un botó cap a una sessió, per apuntar-s'hi i, si cal, pagar.",
+      "Data límit per pagar amb recordatori al mòbil, qui va fora de termini, rebuts en efectiu i marcar-ne diversos alhora.",
     ],
     es: [
       'Pagos en las sesiones: precio por persona, por acompañante y en las respuestas; quien viene ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, avisa cuando ha pagado y la junta lo marca como recibido.',
       'Los mensajes del altavoz pueden llevar un botón hacia una sesión, para apuntarse y, si hace falta, pagar.',
+      'Fecha límite para pagar con recordatorio en el móvil, quién va fuera de plazo, recibos en efectivo y marcar varios a la vez.',
     ],
     en: [
       'Payments in sessions: price per person, per companion and per answer; whoever goes sees how much to pay, the IBAN or Bizum and the reference, says when they have paid and the board marks it as received.',
       'Announcements can carry a button to a session, to sign up and, if needed, pay.',
+      'Payment deadline with a phone reminder, who is overdue, cash payments and marking several as received at once.',
     ],
   },
   {

@@ -135,3 +135,43 @@ test("un missatge de l'altaveu porta a una sessió (si el membre la pot veure)",
   await s.admin('DELETE', `/events/${shown.id}`);
   assert.equal((await s.admin('GET', '/announcements')).d.find((a) => a.id === a1.id).event, null);
 });
+
+test('data límit, qui va tard, i marcar rebuts de diverses persones alhora (pel banc o en efectiu)', async () => {
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const { ev } = await tripEvent('Termini');
+  assert.equal((await s.admin('PUT', `/events/${ev.id}/payment`, { price: 1000, iban: IBAN, due_date: 'demà' })).s, 400);
+  assert.equal((await s.admin('PUT', `/events/${ev.id}/payment`, { price: 1000, iban: IBAN, due_date: yesterday })).s, 200);
+  const people = (await s.admin('GET', '/people')).d.people.filter((p) => p.active && p.id !== s.personId).slice(0, 2);
+  await s.member('PUT', `/events/${ev.id}/attendance`, { status: 'si' });
+  for (const p of people) await s.admin('PUT', `/events/${ev.id}/attendance/${p.id}`, { status: 'si' });
+  let d = (await s.admin('GET', `/events/${ev.id}`)).d;
+  assert.equal(d.payment.due_date, yesterday);
+  assert.equal(d.payments.late, 3);
+  assert.ok(d.attendance.find((a) => a.id === s.personId).late);
+  // Dir «Ja he pagat» treu de la llista dels que van tard.
+  await s.member('PUT', `/events/${ev.id}/paid`, { paid: true });
+  assert.equal((await s.admin('GET', `/events/${ev.id}`)).d.payments.late, 2);
+
+  const put = (body) => s.admin('PUT', `/events/${ev.id}/payments`, body);
+  assert.equal((await put({ person_ids: [], received: true })).s, 400);
+  assert.equal((await s.member('PUT', `/events/${ev.id}/payments`, { person_ids: [s.personId], received: true })).s, 403);
+  // Si algú de la tria no ha de pagar, no es marca ningú.
+  const nobody = (await s.admin('GET', '/people')).d.people.find((p) => p.active && ![s.personId, ...people.map((x) => x.id)].includes(p.id));
+  assert.equal((await put({ person_ids: [people[0].id, nobody.id], received: true })).s, 400);
+  assert.equal((await s.admin('GET', `/events/${ev.id}`)).d.payments.received, 0);
+
+  assert.equal((await put({ person_ids: people.map((p) => p.id), received: true, cash: true })).s, 200);
+  assert.equal((await put({ person_ids: [s.personId], received: true })).s, 200);
+  d = (await s.admin('GET', `/events/${ev.id}`)).d;
+  assert.equal(d.payments.received, 3000);
+  assert.equal(d.payments.late, 0);
+  assert.ok(d.attendance.find((a) => a.id === people[0].id).received_cash);
+  assert.ok(!d.attendance.find((a) => a.id === s.personId).received_cash);
+  const mine = (await s.member('GET', `/events/${ev.id}`)).d.mine;
+  assert.ok(mine.received_at && !mine.received_cash);
+  const table = (await s.admin('GET', `/events/${ev.id}/attendance`)).d;
+  assert.ok(table.rows.some((r) => r.includes('rebut en efectiu')));
+  // Desfer-ho també treu l'«en efectiu».
+  await s.admin('PUT', `/events/${ev.id}/payments/${people[0].id}`, { received: false });
+  assert.equal((await s.admin('GET', `/events/${ev.id}`)).d.attendance.find((a) => a.id === people[0].id).received_cash, null);
+});
