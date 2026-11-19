@@ -3,7 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import os from 'node:os';
 import { DB_PATH, db } from '../db.js';
-import { encryptBackup, offsiteConfig, uploadOffsite } from '../backup.js';
+import { decryptBackup, encryptBackup, offsiteConfig, uploadOffsite } from '../backup.js';
+import { checkBackup } from '../restore.js';
 import { DEMO } from './config.js';
 import { nowLocal, nowUtc } from './util.js';
 import { route } from './router.js';
@@ -36,9 +37,29 @@ export function dailyBackup() {
     writeBackup(tmp);
     fs.renameSync(tmp, path.join(BACKUP_DIR, name));
     for (const old of backupList().slice(0, -BACKUP_KEEP)) fs.rmSync(path.join(BACKUP_DIR, old));
+    verifyBackup(name);
   } catch (err) {
     console.error('No s\'ha pogut fer la còpia de seguretat:', err.message);
     logError('server', `Còpia de seguretat: ${err.message}`);
+  }
+}
+
+// Restauració de prova de cada còpia nova: es restaura en una carpeta temporal, es comprova que està sencera i que
+// hi ha les mateixes persones i sessions que a la base de dades. Si no, error i avís (ALERT_WEBHOOK).
+export const backupCheck = () => JSON.parse(db.prepare("SELECT value FROM settings WHERE key = 'backup_check'").get()?.value || '{}');
+const setBackupCheck = (v) => db.prepare("INSERT INTO settings (key, value) VALUES ('backup_check', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+  .run(JSON.stringify(v));
+export function verifyBackup(name) {
+  try {
+    const counts = checkBackup(path.join(BACKUP_DIR, name));
+    for (const table of ['people', 'events']) {
+      const live = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
+      if (counts[table] !== live) throw new Error(`a la còpia hi ha ${counts[table]} files de ${table} i a l'app ${live}`);
+    }
+    setBackupCheck({ file: name, at: nowUtc(), ok: true });
+  } catch (err) {
+    setBackupCheck({ file: name, at: nowUtc(), ok: false, error: err.message });
+    logError('server', `Comprovació de la còpia: ${err.message}`);
   }
 }
 
@@ -55,7 +76,11 @@ export function offsiteBackup() {
   offsiteRunning = (async () => {
     try {
       if (!OFFSITE.passphrase || OFFSITE.passphrase.length < 12) throw new Error('Falta BACKUP_KEY (almenys 12 caràcters) per xifrar-la');
-      await uploadOffsite(OFFSITE, `${latest}.enc`, encryptBackup(fs.readFileSync(path.join(BACKUP_DIR, latest)), OFFSITE.passphrase));
+      const plain = fs.readFileSync(path.join(BACKUP_DIR, latest));
+      const sealed = encryptBackup(plain, OFFSITE.passphrase);
+      // Abans d'enviar-la, es comprova que amb la clau es torna a obrir igual: una còpia que no es pot desxifrar no serveix.
+      if (!decryptBackup(sealed, OFFSITE.passphrase).equals(plain)) throw new Error('La còpia xifrada no es torna a obrir igual');
+      await uploadOffsite(OFFSITE, `${latest}.enc`, sealed);
       setOffsiteState({ file: latest, at: nowUtc() });
     } catch (err) {
       setOffsiteState({ ...offsiteState(), error: err.message, error_at: nowUtc() });
@@ -74,7 +99,8 @@ route('GET', '/api/backup/status', () => {
   const list = backupList();
   const off = offsiteState();
   return { auto: BACKUP_AUTO, keep: BACKUP_KEEP, count: list.length, last: list.at(-1)?.slice(6, 16) ?? null,
-    offsite: OFFSITE ? { last: off.file?.slice(6, 16) ?? null, error: off.error_at > (off.at || '') ? off.error : null } : null };
+    offsite: OFFSITE ? { last: off.file?.slice(6, 16) ?? null, error: off.error_at > (off.at || '') ? off.error : null } : null,
+    check: BACKUP_AUTO && backupCheck().at ? { date: backupCheck().file?.slice(6, 16) ?? null, ok: !!backupCheck().ok, error: backupCheck().error || null } : null };
 }, 'admin');
 
 route('GET', '/api/backup', ({ res }) => {

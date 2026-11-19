@@ -6,7 +6,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { decryptBackup, encryptBackup, signV4 } from '../backup.js';
-import { restoreBackup } from '../restore.js';
+import { checkBackup, restoreBackup } from '../restore.js';
 import { client, sessions, startServer } from './helpers.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -61,10 +61,15 @@ test('còpia fora del servidor: xifrada, signada, i es pot restaurar', async () 
   assert.equal(status, 200);
   assert.ok(d.offsite.last);
   assert.equal(d.offsite.error, null);
+  // Cada còpia nova passa una restauració de prova.
+  assert.equal(d.check.ok, true);
+  assert.equal(d.check.error, null);
   // Restaurar-la: amb la clau surt una base de dades sencera; sense, no.
   const file = path.join(backups, 'baixada.db.enc');
   fs.writeFileSync(file, put.body);
   assert.throws(() => restoreBackup(file, path.join(backups, 'x.db'), ''), /BACKUP_KEY/);
+  assert.ok(checkBackup(file, 'la clau de la colla').people > 0);
+  assert.throws(() => checkBackup(file, 'una altra clau'), /clau/);
   const counts = restoreBackup(file, path.join(backups, 'restaurada.db'), 'la clau de la colla');
   assert.ok(counts.people > 10 && counts.events > 0);
   assert.throws(() => restoreBackup(file, path.join(backups, 'restaurada.db'), 'la clau de la colla'), /ja existeix/);

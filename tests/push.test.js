@@ -88,7 +88,7 @@ test('recordatori: a qui no ha respost, un sol cop, i no a qui ja ha dit que sí
   const pad = (n) => String(n).padStart(2, '0');
   const until_ = `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}T${pad(soon.getHours())}:${pad(soon.getMinutes())}`;
   const deadline = (await s.admin('POST', '/events', { hidden: false, type: 'diada', title: 'Diada amb límit', date: later, rsvp_until: until_ })).d;
-  let titles = [];
+  const titles = [];
   for (let i = 0; i < 30 && titles.length < 2; i++) { await wait(100); titles.push(...(await inbox('m1')).map((m) => m.title)); }
   await wait(400);
   titles.push(...(await inbox('m1')).map((m) => m.title));
@@ -126,7 +126,7 @@ test('recordatori de pagar: 3 dies abans de la data límit, un sol cop i només 
   };
   await inbox('m1');
   const evs = [await make('Sopar aviat', day(2)), await make('Sopar pagat', day(2), true), await make('Sopar lluny', day(10))];
-  let titles = [];
+  const titles = [];
   for (let i = 0; i < 30 && !titles.length; i++) { await wait(100); titles.push(...(await inbox('m1')).map((m) => m.title)); }
   await wait(400);
   titles.push(...(await inbox('m1')).map((m) => m.title));

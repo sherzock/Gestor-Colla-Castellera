@@ -10,6 +10,10 @@
     "seed": "node seed.js",
     "demo": "node seed.js && DEMO=1 node server.js",
     "test": "node --test tests/*.test.js",
+    "test:e2e": "node --test e2e/",
+    "lint": "npx --yes eslint@9.39.5 .",
+    "check": "npm run lint && npm test && npm run test:e2e",
+    "check-backup": "node restore.js --check",
     "restore": "node restore.js",
     "reset-password": "node reset-password.js"
   }

@@ -1,7 +1,7 @@
 // Comptes d'administració, còpies de seguretat i protecció de dades.
 import { download } from '../export.js';
 import { bindFeedbackCard, feedbackCard } from './feedback.js';
-import { $app, accountLabel, api, attempt, can, closeModal, config, copyText, day, esc, fmt, formData, icon, initial, isAdmin, lang, me, modalHead,
+import { $app, accountLabel, api, attempt, can, closeModal, config, copyText, esc, fmt, formData, icon, initial, isAdmin, lang, me, modalHead,
   openModal, qs, qsa, render, setMe, t, tn, toast } from './core.js';
 
 const passwordCard = () => `<form class="card stack" id="pw-form">
@@ -178,6 +178,9 @@ export async function pageAccounts() {
             : backup.offsite.last ? t('Fora del servidor (xifrada): l\'última és del {date}.', { date: fmt(backup.offsite.last, { day: 'numeric', month: 'long' }) })
               : t('Fora del servidor (xifrada): encara no se n\'ha enviat cap.')}</p>`
             : backup.auto ? `<p class="small" style="margin:0">${t('Encara no es fa cap còpia fora del servidor.')} <a href="#/ajuda/copies">${t('Com configurar-la')}</a></p>` : ''}
+          ${backup.check ? `<p class="small" style="margin:0">${backup.check.ok
+            ? `${icon.check} ${t('Restauració de prova de la còpia del {date}: s\'obre bé i hi és tot.', { date: fmt(backup.check.date, { day: 'numeric', month: 'long' }) })}`
+            : `<span class="err-msg">${t('La còpia del {date} no ha passat la restauració de prova: {error}', { date: fmt(backup.check.date, { day: 'numeric', month: 'long' }), error: esc(backup.check.error || '') })}</span>`}</p>` : ''}
           <div class="form-actions"><a class="btn" href="/api/backup" download>${t('Descarrega una còpia')}</a></div>
         </div>
         ${feedbackCard(feedback)}

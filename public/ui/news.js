@@ -1,5 +1,5 @@
 // Altaveu: missatges de l'administració per a tota la colla.
-import { $app, LOCALE, api, attempt, closeModal, day, esc, fmt, formData, icon, isAdmin, lang, me, modalHead, openModal,
+import { $app, LOCALE, api, attempt, closeModal, esc, fmt, formData, icon, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, render, store, t, toast } from './core.js';
 import { renderNav } from './shell.js';
 
@@ -104,7 +104,7 @@ function newsModal(a) {
     </form>`, (m) => {
     const form = qs('#news-form', m);
     // Les imatges del missatge, en ordre: les que ja hi eren ({ id }) i les noves ({ data }), que es pugen en publicar.
-    let picks = (a?.images || []).map((id) => ({ id }));
+    const picks = (a?.images || []).map((id) => ({ id }));
     const showPicks = () => {
       qs('#news-picks', m).innerHTML = picks.map((p, i) => `<div class="news-pick"><img src="${p.id ? imageUrl(p.id) : p.data}" alt=""><button type="button" data-unpick="${i}" aria-label="${t('Treu la imatge')}">×</button></div>`).join('');
       qs('#news-add-image', m).classList.toggle('hidden', picks.length >= MAX_IMAGES);

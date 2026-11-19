@@ -1,6 +1,6 @@
 import { db } from '../../db.js';
 import { SHOULDER_GAP_CM, castellName, levelGaps, levelNames, levelRange, structureOf, weightInversions } from '../../public/castell.js';
-import { can, fail, getCastell, publicName } from '../util.js';
+import { can, getCastell, publicName } from '../util.js';
 import { route } from '../router.js';
 import { CAME_SQL } from '../sql.js';
 import { memo } from '../cache.js';

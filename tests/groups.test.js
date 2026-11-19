@@ -1,10 +1,12 @@
+/* global location */
 // Grups de la colla (canalla, tècnica, junta) a «Qui hi va», resposta ràpida des de la llista de sessions i encarregats.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer, sessions } from './helpers.js';
 import { install, written } from './fakedom.js';
 
-let server, s, ui, ids = {}, who = 'member';
+let server, s, ui, who = 'member';
+const ids = {};
 before(async () => {
   server = await startServer();
   s = await sessions(server);

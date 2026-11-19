@@ -6,7 +6,6 @@ import { PRIVACY_CONTACT } from './config.js';
 import { atMost, fail, localStamp, nowLocal, nowUtc, rsvpOpen } from './util.js';
 import { adminSession, cookies, memberSession, route } from './router.js';
 import { amountOf } from './routes/payments.js';
-import { today } from './cache.js';
 
 // ---------- Avisos al mòbil ----------
 // Missatges nous de l'Altaveu (a tothom que els ha activat) i recordatoris de respondre una sessió (a qui encara no

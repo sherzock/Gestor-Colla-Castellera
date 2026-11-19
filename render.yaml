@@ -8,6 +8,8 @@ services:
     buildCommand: npm install
     startCommand: npm run demo
     healthCheckPath: /api/health
+    # Només es publica una versió nova quan la CI de GitHub (lint, proves i proves al navegador) ha passat.
+    autoDeployTrigger: checksPass
     envVars:
       - key: COLLA_NAME
         value: Colla de prova

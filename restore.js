@@ -4,7 +4,10 @@
 //
 //   node restore.js <còpia.db o còpia.db.enc> [fitxer-de-sortida]
 //   BACKUP_KEY='la clau' node restore.js colla-2026-11-18.db.enc data/restaurada.db
+//   BACKUP_KEY='la clau' node restore.js --check colla-2026-11-18.db.enc   (només la comprova: no deixa cap fitxer)
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { decryptBackup, isEncryptedBackup } from './backup.js';
 
@@ -35,13 +38,27 @@ export function restoreBackup(input, output, passphrase = process.env.BACKUP_KEY
   }
 }
 
+// Restauració de prova: la restaura en una carpeta temporal, la comprova i l'esborra. Torna quantes files té.
+export function checkBackup(input, passphrase = process.env.BACKUP_KEY) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'colla-check-'));
+  try { return restoreBackup(input, path.join(dir, 'check.db'), passphrase); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
 if (process.argv[1] && import.meta.filename === fs.realpathSync(process.argv[1])) {
-  const [input, output = `colla-restaurada-${new Date().toISOString().slice(0, 10)}.db`] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const check = args[0] === '--check';
+  const [input, output = `colla-restaurada-${new Date().toISOString().slice(0, 10)}.db`] = check ? args.slice(1) : args;
   if (!input) {
-    console.error('Ús: node restore.js <còpia.db o còpia.db.enc> [fitxer-de-sortida]');
+    console.error('Ús: node restore.js <còpia.db o còpia.db.enc> [fitxer-de-sortida]\n     node restore.js --check <còpia.db o còpia.db.enc>');
     process.exit(1);
   }
   try {
+    if (check) {
+      const counts = checkBackup(input);
+      console.log(`La còpia ${input} s'obre bé i està sencera:`);
+      for (const [table, n] of Object.entries(counts)) console.log(`  ${table}: ${n}`);
+      process.exit(0);
+    }
     const counts = restoreBackup(input, output);
     console.log(`Còpia restaurada a ${output}`);
     for (const [table, n] of Object.entries(counts)) console.log(`  ${table}: ${n}`);

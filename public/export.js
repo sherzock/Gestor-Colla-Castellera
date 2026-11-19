@@ -278,7 +278,7 @@ export async function castellPng({ s, byKey, nameOf, title, subtitle, labels }) 
       if (!a && !item.off) ctx.setLineDash([5, 3]);
       ctx.beginPath(); box(ctx, -bw / 2, -bh / 2, bw, bh); ctx.fill(); ctx.stroke();
       ctx.setLineDash([]);
-      let deg = ((((item.rot * 180) / Math.PI) % 360) + 360) % 360;
+      const deg = ((((item.rot * 180) / Math.PI) % 360) + 360) % 360;
       if (deg > 90 && deg <= 270) ctx.rotate(Math.PI);
       ctx.textAlign = 'center';
       const top = item.shared ? (role || '').split(' · ')[0] : labels.short(item);

@@ -380,8 +380,30 @@ port lliure (no toca `data/colla.db`). Comproven:
 - **Castells i muntador**: claus úniques i noms coherents per a tots els castells possibles, proves parcials, i que el
   muntador posi cadascú un sol cop, la canalla només a dalt i cada músic al seu instrument.
 - Els límits, les funcionalitats principals, que les traduccions tinguin els mateixos buits (`{n}`…) que l'original, i
-  que el servidor no faci servir valors que el SQLite de Node 22 (el de Render) no accepta. A GitHub es passen soles a cada push (`.github/workflows/tests.yml`), amb Node 22.13,
-22 i 24.
+  que el servidor no faci servir valors que el SQLite de Node 22 (el de Render) no accepta.
+
+**Al navegador** (`npm run test:e2e`, carpeta `e2e/`): Chrome sense finestra, a mida de mòbil, fa els recorreguts
+principals com una persona: un membre entra i diu que ve, la junta passa llista i marca un pagament com a rebut, la
+tècnica col·loca algú en un castell, s'envia un suggeriment, i cap pantalla surt pels costats. També fallen si l'app
+llança cap error a la consola. Busquen Chrome sol (o a `CHROME_PATH`); si no n'hi ha, se salten. Si una falla, deixa
+una captura a la carpeta temporal.
+
+**Revisió del codi** (`npm run lint`): ESLint amb regles que busquen errors (variables no definides o que sobren,
+claus repetides…). No és cap dependència de l'app: `npx` en baixa una versió fixa només per revisar.
+
+`npm run check` ho fa tot.
+
+### CI/CD (GitHub)
+
+- `.github/workflows/ci.yml`: a cada push i pull request, el lint, les proves amb Node 22.13, 22 i 24 i les proves al
+  navegador. Si fallen les del navegador, en deixa les captures a la feina.
+- **Publicació**: Render només publica una versió nova quan aquestes comprovacions han passat
+  (`autoDeployTrigger: checksPass` a `render.yaml`; en un servei que ja existia, comproveu a Render → Settings →
+  Auto-Deploy que digui «After CI Checks Pass»).
+- `.github/workflows/health.yml`: cada 15 minuts comprova `/api/health` de les adreces de la variable del repositori
+  `HEALTH_URLS` (GitHub → Settings → Secrets and variables → Actions → Variables) i falla, amb avís per correu, si
+  alguna no respon. Per a avisos al moment, millor també UptimeRobot o Better Stack.
+- `.github/dependabot.yml`: proposa actualitzar les accions de GitHub un cop al mes.
 
 ### Configuració (variables d'entorn)
 
@@ -437,7 +459,9 @@ lloc privat: hi ha les dades personals de la colla (les contrasenyes no hi són 
 4. **Avisos**: `ALERT_WEBHOOK` amb un tema de ntfy, i un servei de monitoratge (UptimeRobot, Better Stack…) que
    comprovi `/api/health` cada pocs minuts.
 5. **Segon factor** a tots els comptes d'administració («El meu compte»).
-6. **Proveu una restauració** abans que faci falta.
+6. **Restauració de prova**: el servidor restaura sol cada còpia nova en una carpeta temporal i comprova que està
+   sencera i que té les mateixes persones i sessions (a «Comptes» surt el resultat; si falla, avisa). Un cop al mes,
+   baixeu l'última còpia xifrada del bucket i comproveu-la també vosaltres: `BACKUP_KEY='…' npm run check-backup -- fitxer.db.enc`.
 7. Reviseu la nota de protecció de dades (millor amb algú que conegui el RGPD) i recolliu el consentiment de les
    famílies dels menors de 14 anys.
 
@@ -466,8 +490,23 @@ npm run reset-password -- admin   # contrasenya nova per a «admin», sense sego
 ## Estructura
 
 ```
-server.js          API REST i servidor de fitxers
+server.js          Entrada del servidor: carrega els mòduls de server/ i serveix per HTTP (capçaleres, fitxers, compressió)
+server/            El servidor per parts:
+  config.js        variables d'entorn i primer compte d'administració
+  util.js          validacions i utilitats comunes
+  router.js        rutes, sessions, galetes, permisos i límits d'intents
+  errors.js        registre d'errors i avisos (ALERT_WEBHOOK)
+  backups.js       còpies de seguretat, restauració de prova i còpia xifrada fora del servidor
+  audit.js         registre de canvis i primers passos
+  attendance.js    respostes i previsió d'assistència
+  notifications.js avisos al mòbil i recordatoris
+  cache.js         memòria dels càlculs (estadístiques, historials)
+  history.js       historial de posicions
+  sql.js           trossos de SQL compartits (qui ha vingut…)
+  routes/          les rutes de l'API, un fitxer per tema (sessions, persones, castells, pagaments, estadístiques…)
 db.js              Esquema SQLite i contrasenyes (scrypt)
+backup.js          Xifratge de les còpies i enviament a S3
+restore.js         Restaurar o comprovar una còpia (npm run restore / npm run check-backup)
 push.js            Avisos al mòbil (Web Push): claus VAPID i enviament, sense dependències
 seed.js            Dades de demostració
 public/index.html  Pàgina única
@@ -480,7 +519,11 @@ public/ui/         Una pantalla per fitxer:
   shell.js         ajustos i barra de navegació
   login.js         entrada (membres i administradors)
   sessions.js      llista de sessions i formulari de sessió
-  event.js         detall d'una sessió: respostes, assistència, temporals, exportació
+  event.js         detall d'una sessió: respostes, castells, temporals, encarregats
+  event-fields.js  preguntes de la sessió i acompanyants
+  event-export.js  Excel de la sessió
+  attendance.js    assistència per a l'administració: filtres, qui falta per contestar, passar llista
+  feedback.js      suggeriments i errors (enviar-los i llista per a l'administració)
   castell-form.js  formulari d'un castell
   viewer.js        visualitzador del castell (tronc, pinya, llista, mides, historial) i assignar posicions
   people.js        persones, importar-ne i perfil del membre
@@ -500,6 +543,8 @@ public/privacy.js  Nota de protecció de dades (català, castellà, anglès)
 public/i18n.js     Traduccions (català, castellà, anglès), també per als errors del servidor
 public/style.css   Estils (clar/fosc, responsive)
 tests/             Proves automàtiques (npm test)
+e2e/               Proves al navegador (npm run test:e2e)
+eslint.config.js   Regles de la revisió del codi (npm run lint)
 ```
 
 La pinya es genera de manera automàtica a partir del tipus de castell i del nombre de cordons; és un model genèric.

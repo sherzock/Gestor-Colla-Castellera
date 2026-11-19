@@ -1,0 +1,33 @@
+# Vigila que l'app respongui: cada 15 minuts demana /api/health a cada adreça de la variable del repositori
+# HEALTH_URLS (separades per espais, p. ex. «https://appinyat.example.org»). Si alguna no respon, la feina falla i
+# GitHub avisa per correu (i a l'app de GitHub) a qui va tocar aquest fitxer per últim cop.
+# GitHub pot endarrerir les feines programades uns minuts: per a avisos al moment, millor UptimeRobot o Better Stack.
+name: L'app respon
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Comprova /api/health
+        env:
+          HEALTH_URLS: ${{ vars.HEALTH_URLS }}
+        run: |
+          if [ -z "$HEALTH_URLS" ]; then echo "::notice::No hi ha cap adreça a HEALTH_URLS: no es comprova res."; exit 0; fi
+          failed=0
+          for url in $HEALTH_URLS; do
+            # Fins a 3 intents: un servidor que s'havia adormit (Render gratuït) pot trigar un minut a despertar.
+            if curl --fail --silent --show-error --max-time 60 --retry 2 --retry-delay 10 --retry-all-errors "${url%/}/api/health" > /dev/null; then
+              echo "✔ $url"
+            else
+              echo "::error::$url no respon"; failed=1
+            fi
+          done
+          exit $failed

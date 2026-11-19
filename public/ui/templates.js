@@ -1,7 +1,7 @@
 // Pinyes de la colla: editor de plantilles.
 import { TEMPLATE_KINDS, buildStructure, configFromName, setTemplates } from '../castell.js';
 import { MAX_BOXES, RING_KINDS, copyLayers, createEditor, layerToTemplate, maxRing, templateSources } from '../editor.js';
-import { $app, api, attempt, can, config, esc, icon, qs, qsa, render, store, t, tn, toast } from './core.js';
+import { $app, api, attempt, can, esc, icon, qs, qsa, render, store, t, tn, toast } from './core.js';
 
 // ---------- Pinyes de la colla (plantilles) ----------
 // Cada colla fa la pinya a la seva manera: aquí es redibuixa la de cada tipus de castell i val per a tots els castells

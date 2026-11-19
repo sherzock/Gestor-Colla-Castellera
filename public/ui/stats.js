@@ -1,6 +1,6 @@
 // Estadístiques: temporada, tècnica, castells i persones.
 import { RESULTS } from '../castell.js';
-import { $app, TYPES, api, day, esc, failCauseLabel, fmt, fullName, icon, isAdmin, me, modalHead, norm, openModal, qs, qsa,
+import { $app, TYPES, api, esc, failCauseLabel, fmt, fullName, icon, isAdmin, me, modalHead, norm, openModal, qs, qsa,
   render, resultClass, resultPill, searchPaged, store, t, tn, todayIso, typeLabel } from './core.js';
 
 // ---------- Estadístiques ----------

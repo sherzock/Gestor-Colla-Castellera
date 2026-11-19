@@ -5,6 +5,8 @@
 export const LANGS = { ca: 'Català', es: 'Castellano', en: 'English' };
 
 const es = {
+  "Restauració de prova de la còpia del {date}: s'obre bé i hi és tot.": 'Restauración de prueba de la copia del {date}: se abre bien y está todo.',
+  'La còpia del {date} no ha passat la restauració de prova: {error}': 'La copia del {date} no ha pasado la restauración de prueba: {error}',
   "Suggeriments i errors": "Sugerencias y errores",
   "Una idea": "Una idea",
   "Alguna cosa no va": "Algo no funciona",
@@ -723,7 +725,6 @@ const es = {
   'Tria què pot fer aquest compte': 'Elige qué puede hacer esta cuenta',
   'El teu compte no té permís per fer això': 'Tu cuenta no tiene permiso para hacer esto',
   'Junta': 'Junta',
-  'Treu': 'Quitar',
   'Material': 'Material',
   'Farmaciola': 'Botiquín',
   'Aigua': 'Agua',
@@ -892,7 +893,6 @@ const es = {
   "Desant…": "Guardando…",
   "No s'ha pogut desar. Torna-ho a provar.": "No se ha podido guardar. Vuelve a probarlo.",
   "Tria si vens: es desa sol, no cal cap botó.": "Elige si vienes: se guarda solo, no hace falta ningún botón.",
-  "Desat": "Guardado",
   "La data límit no és correcta": "La fecha límite no es correcta",
   "Tria a qui": "Elige a quién",
   "Recorda pagar: {title}": "Recuerda pagar: {title}",
@@ -1121,12 +1121,13 @@ const es = {
   'Falten les assignacions': 'Faltan las asignaciones',
   'Només pots veure el teu historial': 'Solo puedes ver tu historial',
   'Ruta no trobada': 'Ruta no encontrada',
-  'Només per a administradors': 'Solo para administradores',
   'Dades no vàlides': 'Datos no válidos',
   'Error intern del servidor': 'Error interno del servidor',
 };
 
 const en = {
+  "Restauració de prova de la còpia del {date}: s'obre bé i hi és tot.": 'Test restore of the {date} backup: it opens fine and everything is there.',
+  'La còpia del {date} no ha passat la restauració de prova: {error}': 'The {date} backup failed the test restore: {error}',
   "Suggeriments i errors": "Suggestions and bugs",
   "Una idea": "An idea",
   "Alguna cosa no va": "Something's wrong",
@@ -1845,7 +1846,6 @@ const en = {
   'Tria què pot fer aquest compte': 'Choose what this account can do',
   'El teu compte no té permís per fer això': "Your account doesn't have permission to do this",
   'Junta': 'Board',
-  'Treu': 'Remove',
   'Material': 'Equipment',
   'Farmaciola': 'First aid kit',
   'Aigua': 'Water',
@@ -2014,7 +2014,6 @@ const en = {
   "Desant…": "Saving…",
   "No s'ha pogut desar. Torna-ho a provar.": "Couldn't save. Please try again.",
   "Tria si vens: es desa sol, no cal cap botó.": "Choose whether you're going: it saves by itself, no button needed.",
-  "Desat": "Saved",
   "La data límit no és correcta": "The deadline is not valid",
   "Tria a qui": "Choose who",
   "Recorda pagar: {title}": "Remember to pay: {title}",
@@ -2243,7 +2242,6 @@ const en = {
   'Falten les assignacions': 'Missing assignments',
   'Només pots veure el teu historial': 'You can only see your own history',
   'Ruta no trobada': 'Route not found',
-  'Només per a administradors': 'Administrators only',
   'Dades no vàlides': 'Invalid data',
   'Error intern del servidor': 'Internal server error',
 };

@@ -4,14 +4,11 @@
 // al seu instrument, qui ja hi és no es mou).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { startServer, client, sessions, routes, serverSource } from './helpers.js';
 import { DICTS } from '../public/i18n.js';
 import { buildStructure, castellName, configFromName, levelNames, WIDTHS } from '../public/castell.js';
 import { proposeLineup } from '../public/muntador.js';
 
-const ROOT = path.join(import.meta.dirname, '..');
 const SERVER_SRC = serverSource();
 
 let server, s;

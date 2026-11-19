@@ -1,5 +1,5 @@
 // Assistència d'una sessió (administració): filtres de la taula, qui falta per contestar i qui ha vingut sense apuntar-se.
-import { api, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, fullName, icon, me, modalHead, norm, openModal, pagedList, qs, qsa, render, shortName, statusPill, t, tn, toast, todayIso } from './core.js';
+import { api, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, fullName, icon, modalHead, norm, openModal, pagedList, qs, qsa, render, shortName, statusPill, t, tn, toast, todayIso } from './core.js';
 import { bindCompanions, companionsInput, fieldInput, readCompanions, readExtra } from './event-fields.js';
 
 export const NAMES_PREVIEW = 20;

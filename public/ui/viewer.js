@@ -5,7 +5,7 @@ import { boxShort } from '../editor.js';
 import { proposeLineup } from '../muntador.js';
 import { openZoom } from '../zoom.js';
 import { castellModal } from './castell-form.js';
-import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, day, esc, failCauseLabel, fmt, formData,
+import { $app, FAIL_CAUSES, INSTRUMENTS, age, api, attempt, closeModal, esc, failCauseLabel, fmt, formData,
   can, fullName, hiddenBadge, hiddenToggle, icon, me, modalHead, norm, openModal, partialLabel, qs, qsa, render,
   resultClass, resultLabel, resultPill, shortName, statusPill, store, t, tn, toast, todayIso } from './core.js';
 import { guestModal } from './event.js';

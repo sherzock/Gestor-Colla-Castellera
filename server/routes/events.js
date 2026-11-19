@@ -1,4 +1,3 @@
-import net from 'node:net';
 import { db } from '../../db.js';
 import { overlappingPairs } from '../../public/planning.js';
 import { positionOf } from '../../public/castell.js';
@@ -11,7 +10,7 @@ import { attendanceForecast } from '../attendance.js';
 import { amountOf, paymentLate, paymentOf } from './payments.js';
 import { companionsOf } from './attendance.js';
 import { guestsOf } from './guests.js';
-import { announceEvent, notify } from '../notifications.js';
+import { announceEvent } from '../notifications.js';
 
 // ---------- Rutes: sessions (assajos, diades, esdeveniments) ----------
 route('GET', '/api/events', ({ user, query }) => {

@@ -1,0 +1,7 @@
+# Manté al dia les accions de GitHub de la CI (l'app no té dependències de npm).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

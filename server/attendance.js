@@ -2,7 +2,6 @@ import { db } from '../db.js';
 import { structureOf } from '../public/castell.js';
 import { STATUSES, bool, cleanExtra, fail, loadFields, localStamp, nowLocal, str } from './util.js';
 import { CAME_SQL } from './sql.js';
-import { today } from './cache.js';
 
 // Previsió d'assistència d'una sessió que encara no s'ha fet. Per a cada persona: com de sovint ha vingut l'últim any
 // a sessions del mateix tipus quan havia dit que sí, que no o quan no havia respost. Amb poca història, la seva xifra

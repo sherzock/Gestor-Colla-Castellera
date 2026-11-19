@@ -1,5 +1,5 @@
 // Calendari mensual i subscripció al calendari del mòbil.
-import { $app, LOCALE, TYPES, api, can, config, copyText, day, esc, fmt, icon, isAdmin, lang, me, modalHead, openModal,
+import { $app, LOCALE, TYPES, api, can, config, copyText, esc, fmt, icon, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, statusPill, store, t, todayIso, typeBadge } from './core.js';
 import { eventModal } from './sessions.js';
 

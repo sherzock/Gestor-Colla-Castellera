@@ -9,7 +9,8 @@ import { install, written, select, remember } from './fakedom.js';
 // Tanca cometes dobles i simples i obre una etiqueta: si arriba tal qual, dins o fora d'un atribut, es veu «<img src=x data-xss».
 const X = `"'><img src=x data-xss>`;
 const LEAK = /<img src=x data-xss/;
-let server, s, who = 'admin', ui, ids = {};
+let server, s, who = 'admin', ui;
+const ids = {};
 const jar = () => Object.entries((who === 'admin' ? s.admin : s.member).jar).map(([k, v]) => `${k}=${v}`).join('; ');
 
 before(async () => {

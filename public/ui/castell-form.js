@@ -1,6 +1,6 @@
 // Formulari per crear o editar un castell.
 import { RESULTS, WIDTHS, buildStructure, castellName, levelNames, levelRange, templateOf, templateRings } from '../castell.js';
-import { api, attempt, closeModal, day, esc, fmt, formData, icon, modalHead, openModal, qs, render, resultLabel, t } from './core.js';
+import { api, attempt, closeModal, esc, fmt, formData, icon, modalHead, openModal, qs, render, resultLabel, t } from './core.js';
 
 // ---------- Formulari de castell ----------
 // «plan»: a l'assaig, l'hora de l'horari ({ time }). Es pot deixar buida.

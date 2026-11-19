@@ -1,4 +1,3 @@
-import net from 'node:net';
 import { db } from '../../db.js';
 import { castellName, levelRange } from '../../public/castell.js';
 import { fail, publicPerson, seesHidden } from '../util.js';

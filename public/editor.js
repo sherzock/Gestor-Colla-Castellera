@@ -114,7 +114,8 @@ export function nextRing(list, newKey) {
 // Guarda estats sencers: una pinya són poques dades i així no cal saber desfer cada mena de canvi.
 // «tag»: canvis seguits del mateix tipus (escriure un nom, moure amb les fletxes) es desfan d'un sol cop.
 export function createHistory(initial, { limit = 100, mergeMs = 800, now = Date.now } = {}) {
-  let current = initial, undone = [], done = [], lastTag = null, lastAt = 0;
+  let current = initial, undone = [], lastTag = null, lastAt = 0;
+  const done = [];
   return {
     get current() { return current; },
     get canUndo() { return done.length > 0; },

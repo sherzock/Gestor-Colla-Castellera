@@ -1,6 +1,5 @@
 // Detall d'una sessió: respostes, assistència, persones temporals, acompanyants i exportació.
 import { buildStructure, castellName } from '../castell.js';
-import { download, xlsx } from '../export.js';
 import { calendarCode } from './calendar.js';
 import { castellModal } from './castell-form.js';
 import { $app, api, attempt, can, closeModal, esc, fmtDeadline, fmtLong, formData, fullName, hiddenBadge, hiddenToggle, icon, INSTRUMENTS, isAdmin, me, MEASURES, modalHead, norm, openModal, qs, qsa, render, resultPill, sectionLabel, SECTIONS, shortName, statusLabel, t, time, tn, toast, todayIso, typeBadge } from './core.js';

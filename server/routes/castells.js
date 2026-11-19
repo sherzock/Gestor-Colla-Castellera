@@ -1,4 +1,3 @@
-import net from 'node:net';
 import { castellName, configFromName, positionOf, structureOf } from '../../public/castell.js';
 import { db, transaction } from '../../db.js';
 import { ADMIN_ONLY_CASTELL, LIMITS, atMost, bool, can, castellInput, fail, getCastell, getEvent, insertRow, publicName, updateRow, visibleCastell } from '../util.js';

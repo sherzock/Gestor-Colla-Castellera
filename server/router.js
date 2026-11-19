@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import { db, hashPassword, hashToken, verifyPassword } from '../db.js';
 import { DEVICE_TTL_MS, MEMBER_TTL_MS, TRUST_PROXY } from './config.js';
-import { can, capsOf, editableFields, fail, insertRow, publicPerson } from './util.js';
+import { capsOf, editableFields, fail, insertRow, publicPerson } from './util.js';
 
 // ---------- Router ----------
 export const routes = [];

@@ -1,0 +1,63 @@
+# Integració contínua: a cada push i a cada pull request es revisa el codi (lint), es passen les proves del servidor
+# amb les versions de Node que fem servir i les proves al navegador (Chrome sense finestra). Render només publica
+# una versió nova quan tot això ha passat (render.yaml: autoDeployTrigger: checksPass).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run lint
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.13', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Els servidors de GitHub ja porten Chrome. E2E_REQUIRED fa que les proves fallin si no el troben (en lloc de saltar-se).
+      - run: npm run test:e2e
+        env:
+          E2E_REQUIRED: '1'
+          CHROME_PATH: google-chrome
+      - name: Captures de les proves que han fallat
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-captures
+          path: /tmp/e2e-*.png
+          if-no-files-found: ignore
+          retention-days: 7
