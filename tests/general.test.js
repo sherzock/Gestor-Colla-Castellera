@@ -4,7 +4,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { startServer, sessions } from './helpers.js';
+import { startServer, sessions, serverSource } from './helpers.js';
 import { DICTS } from '../public/i18n.js';
 
 let server, s;
@@ -51,7 +51,7 @@ test('tots els textos tenen traducció al castellà i a l\'anglès', () => {
     for (const m of src.matchAll(new RegExp(String.raw`\bt\(\s*${STR}`, 'g'))) keys.add(unq(m[1]));
     for (const m of src.matchAll(new RegExp(String.raw`\btn\(\s*[^,]+,\s*${STR}\s*,\s*${STR}`, 'g'))) { keys.add(unq(m[1])); keys.add(unq(m[2])); }
   }
-  const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  const server = serverSource();
   for (const m of server.matchAll(new RegExp(String.raw`(?:fail|new HttpError)\(\s*\d+\s*,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
   for (const m of server.matchAll(new RegExp(String.raw`atMost\([^,]+,\s*${STR}`, 'g'))) keys.add(unq(m[1]));
   const missing = [...keys].filter((k) => !(k in DICTS.es) || !(k in DICTS.en));
@@ -103,4 +103,18 @@ test('app instal·lable: manifest amb el nom de la colla (i d\'Appinya\'t), icon
 
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
+});
+
+test("cap ruta en tapa una altra: l'ordre en què es carreguen els mòduls de server/ no importa", async () => {
+  const { routes } = await import('./helpers.js');
+  const list = routes();
+  const clash = [];
+  for (const [i, a] of list.entries()) {
+    for (const b of list.slice(i + 1)) {
+      const A = a.path.split('/'), B = b.path.split('/');
+      if (a.method === b.method && A.length === B.length && A.every((x, k) => x === B[k] || x.startsWith(':') || B[k].startsWith(':'))) clash.push(`${a.method} ${a.path} · ${b.path}`);
+    }
+  }
+  assert.ok(list.length > 80);
+  assert.deepEqual(clash, []);
 });

@@ -80,9 +80,16 @@ export async function sessions(server) {
   return { api, admin, member, personId, pastEvent, pastCastell };
 }
 
-// Totes les rutes de server.js amb el seu nivell de permís: una ruta nova no pot quedar fora de les proves.
+// El codi del servidor sencer: server.js i tots els mòduls de server/.
+export function serverSource() {
+  const files = ['server.js', ...fs.readdirSync(path.join(ROOT, 'server'), { recursive: true })
+    .filter((f) => f.endsWith('.js')).sort().map((f) => path.join('server', f))];
+  return files.map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
+}
+
+// Totes les rutes del servidor amb el seu nivell de permís: una ruta nova no pot quedar fora de les proves.
 export function routes() {
-  const src = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  const src = serverSource();
   const starts = [...src.matchAll(/^route\('(\w+)', '([^']+)'/gm)];
   return starts.map((m, i) => {
     const chunk = src.slice(m.index, starts[i + 1]?.index ?? src.length);
