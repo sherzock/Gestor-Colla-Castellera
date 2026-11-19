@@ -21,6 +21,7 @@ import './server/history.js';
 import './server/routes/stats.js';
 import './server/routes/tecnica.js';
 import './server/routes/calendar.js';
+import './server/routes/feedback.js';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import fs from 'node:fs';

@@ -3,6 +3,7 @@ import { LANGS } from '../i18n.js';
 import { accountLabel, api, applyTheme, attempt, can, closeModal, config, esc, icon, initial, isAdmin, lang, me, modalHead, openModal,
   qs, qsa, render, setLang, setMe, setTheme, shortName, store, t, theme, toast } from './core.js';
 import { newsUnread } from './news.js';
+import { feedbackModal } from './feedback.js';
 import { pushControls } from './notifications.js';
 
 // ---------- Ajustos: persona, idioma i tema ----------
@@ -70,8 +71,10 @@ function settingsModal() {
     </div>
     ${settingsControls()}
     <div class="set-group"><h2>${t('Avisos al mòbil')}</h2><div id="push-box"></div></div>
+    <button type="button" class="btn block" id="feedback-open" style="margin-top:14px">${icon.chat}${t('Suggeriments i errors')}</button>
     <a href="#/privadesa" class="small muted" style="display:block;text-align:center;margin-top:14px">${t('Protecció de dades')}</a>`, (m) => {
     qs('#switch-person', m)?.addEventListener('click', switchPerson);
+    qs('#feedback-open', m).onclick = () => { closeModal(); feedbackModal(); };
     qs('#admin-logout', m)?.addEventListener('click', adminLogout);
     qsa('[data-mode]', m).forEach((b) => (b.onclick = () => switchMode(b.dataset.mode)));
     bindSettings(m, () => { closeModal(); render({ keepScroll: true }); settingsModal(); });

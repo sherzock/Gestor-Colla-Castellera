@@ -5,6 +5,22 @@
 export const LANGS = { ca: 'Català', es: 'Castellano', en: 'English' };
 
 const es = {
+  "Suggeriments i errors": "Sugerencias y errores",
+  "Una idea": "Una idea",
+  "Alguna cosa no va": "Algo no funciona",
+  "Què milloraries o què t'agradaria que fes l'app?": "¿Qué mejorarías o qué te gustaría que hiciera la app?",
+  "Què no va? Explica què feies i què ha passat.": "¿Qué no funciona? Explica qué hacías y qué ha pasado.",
+  "És anònim: no es guarda qui l'envia. Si vols resposta, posa-hi el teu nom o digues-ho a la junta. No hi escriguis dades d'altres persones.": "Es anónimo: no se guarda quién lo envía. Si quieres respuesta, pon tu nombre o díselo a la junta. No escribas datos de otras personas.",
+  "Envia": "Enviar",
+  "Gràcies! Ho llegirà l'administració.": "¡Gracias! Lo leerá la administración.",
+  "El que la gent envia des de l'app («Ajustos» → «Suggeriments i errors»). És anònim.": "Lo que la gente envía desde la app («Ajustes» → «Sugerencias y errores»). Es anónimo.",
+  "Error": "Error",
+  "Idea": "Idea",
+  "Torna a obrir": "Reabrir",
+  "Encara no ha arribat res.": "Todavía no ha llegado nada.",
+  "Esborrar aquest missatge?": "¿Borrar este mensaje?",
+  "Escriu què vols dir": "Escribe qué quieres decir",
+  "No trobat": "No encontrado",
   // Navegació i ajustos
   'Cal iniciar sessió': 'Tienes que iniciar sesión',
   'Assaig': 'Ensayo',
@@ -1111,6 +1127,22 @@ const es = {
 };
 
 const en = {
+  "Suggeriments i errors": "Suggestions and bugs",
+  "Una idea": "An idea",
+  "Alguna cosa no va": "Something's wrong",
+  "Què milloraries o què t'agradaria que fes l'app?": "What would you improve, or what would you like the app to do?",
+  "Què no va? Explica què feies i què ha passat.": "What's wrong? Tell us what you were doing and what happened.",
+  "És anònim: no es guarda qui l'envia. Si vols resposta, posa-hi el teu nom o digues-ho a la junta. No hi escriguis dades d'altres persones.": "It's anonymous: who sends it isn't stored. If you want an answer, add your name or tell the board. Don't write other people's data.",
+  "Envia": "Send",
+  "Gràcies! Ho llegirà l'administració.": "Thanks! The admins will read it.",
+  "El que la gent envia des de l'app («Ajustos» → «Suggeriments i errors»). És anònim.": "What people send from the app (“Settings” → “Suggestions and bugs”). It's anonymous.",
+  "Error": "Bug",
+  "Idea": "Idea",
+  "Torna a obrir": "Reopen",
+  "Encara no ha arribat res.": "Nothing yet.",
+  "Esborrar aquest missatge?": "Delete this message?",
+  "Escriu què vols dir": "Write what you want to say",
+  "No trobat": "Not found",
   // Navegació i ajustos
   'Cal iniciar sessió': 'You need to sign in',
   'Assaig': 'Rehearsal',

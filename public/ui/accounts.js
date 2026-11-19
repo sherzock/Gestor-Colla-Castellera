@@ -1,5 +1,6 @@
 // Comptes d'administració, còpies de seguretat i protecció de dades.
 import { download } from '../export.js';
+import { bindFeedbackCard, feedbackCard } from './feedback.js';
 import { $app, accountLabel, api, attempt, can, closeModal, config, copyText, day, esc, fmt, formData, icon, initial, isAdmin, lang, me, modalHead,
   openModal, qs, qsa, render, setMe, t, tn, toast } from './core.js';
 
@@ -148,7 +149,8 @@ const errorsCard = (errors) => `<div class="card stack">
 export async function pageAccounts() {
   if (!isAdmin()) { location.hash = '#/perfil'; return; }
   if (!can('admin')) { pageMyAccount(); return; }
-  const [admins, backup, errors, setup] = await Promise.all([api('GET', '/admins'), api('GET', '/backup/status'), api('GET', '/errors'), api('GET', '/setup-status')]);
+  const [admins, backup, errors, setup, feedback] = await Promise.all([api('GET', '/admins'), api('GET', '/backup/status'), api('GET', '/errors'),
+    api('GET', '/setup-status'), api('GET', '/feedback')]);
   $app.innerHTML = `
     <div class="page-head"><h1>${t("Comptes d'administració")}</h1>
       <div class="actions"><button class="btn primary" id="new-admin">${icon.plus}${t('Nou compte')}</button></div></div>
@@ -178,6 +180,7 @@ export async function pageAccounts() {
             : backup.auto ? `<p class="small" style="margin:0">${t('Encara no es fa cap còpia fora del servidor.')} <a href="#/ajuda/copies">${t('Com configurar-la')}</a></p>` : ''}
           <div class="form-actions"><a class="btn" href="/api/backup" download>${t('Descarrega una còpia')}</a></div>
         </div>
+        ${feedbackCard(feedback)}
         ${errorsCard(errors)}
         <div class="card stack">
           <h2>${t('Registre de canvis')}</h2>
@@ -199,6 +202,7 @@ export async function pageAccounts() {
     </div>`;
   qs('#new-admin').onclick = () => adminModal();
   qsa('[data-edit]').forEach((b) => (b.onclick = () => adminModal(admins.find((a) => String(a.id) === b.dataset.edit))));
+  bindFeedbackCard();
   qs('#errors-clear')?.addEventListener('click', async () => { if (await attempt(() => api('DELETE', '/errors'))) render({ keepScroll: true }); });
   bindPassword();
   bindTwoFactor();

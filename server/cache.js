@@ -16,7 +16,7 @@ export const versionKey = () => `${dataVersion}|${today()}`;
 export const castellKey = () => `${castellVersion}|${today()}`;
 export const historyKey = () => `${historyVersion}|${today()}`;
 // Peticions que no són GET però no toquen cap dada de sessions, castells ni persones.
-export const NO_DATA_CHANGE = new Set(['/api/client-errors', '/api/me/2fa/setup', '/api/me/2fa/enable', '/api/me/2fa/disable', '/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me',
+export const NO_DATA_CHANGE = new Set(['/api/client-errors', '/api/feedback', '/api/me/2fa/setup', '/api/me/2fa/enable', '/api/me/2fa/disable', '/api/directory', '/api/identify', '/api/login', '/api/logout', '/api/mode', '/api/me',
   '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox']);
 // Peticions que només toquen l'assistència, els camps extra, l'altaveu o els comptes d'administració.
 export const ATTENDANCE_ONLY = [/^\/api\/events\/\d+\/(attendance(\/\d+)?|paid|payment|payments(\/\d+)?)$/, /^\/api\/events\/\d+\/rsvp$/, /^\/api\/events\/\d+\/fields$/,

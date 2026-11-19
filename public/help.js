@@ -43,6 +43,7 @@ const ca = [
     <p><strong>Restaurar-ne una</strong>: <code>BACKUP_KEY='…' node restore.js colla-2026-11-18.db.enc restaurada.db</code> comprova la còpia i la deixa en un fitxer nou; després s'arrenca el servidor amb <code>DB_PATH</code> apuntant-hi. Proveu-ho un cop, abans que faci falta.</p>`],
   ['errors', 'admin', "Quan l'app falla", `
     <p>Els errors del servidor i dels mòbils es guarden (sense dir de qui eren) i surten a <em>Comptes → Errors de l'app</em>.</p>
+    <p>La gent també pot enviar idees o dir que alguna cosa no va des d'<em>Ajustos → Suggeriments i errors</em>. És anònim i surt a <em>Comptes → Suggeriments i errors</em>; amb <code>ALERT_WEBHOOK</code> us arriba un avís (sense el text).</p>
     <p><strong>Avís al mòbil quan surt un error nou</strong>: instal·leu l'app ntfy, subscriviu-vos a un tema amb un nom difícil d'endevinar i poseu <code>ALERT_WEBHOOK=https://ntfy.sh/el-vostre-tema</code>.</p>
     <p><strong>Saber si l'app ha caigut</strong>: un servei com UptimeRobot o Better Stack (tenen pla gratuït) pot comprovar cada pocs minuts <code>/api/health</code> i avisar-vos si no respon.</p>`],
 ];
@@ -88,6 +89,7 @@ const es = [
     <p><strong>Restaurar una</strong>: <code>BACKUP_KEY='…' node restore.js colla-2026-11-18.db.enc restaurada.db</code> comprueba la copia y la deja en un archivo nuevo; después se arranca el servidor con <code>DB_PATH</code> apuntando a ella. Probadlo una vez, antes de que haga falta.</p>`],
   ['errors', 'admin', 'Cuando la app falla', `
     <p>Los errores del servidor y de los móviles se guardan (sin decir de quién eran) y salen en <em>Cuentas → Errores de la app</em>.</p>
+    <p>La gente también puede enviar ideas o decir que algo no funciona desde <em>Ajustes → Sugerencias y errores</em>. Es anónimo y sale en <em>Cuentas → Sugerencias y errores</em>; con <code>ALERT_WEBHOOK</code> os llega un aviso (sin el texto).</p>
     <p><strong>Aviso al móvil cuando sale un error nuevo</strong>: instalad la app ntfy, suscribíos a un tema con un nombre difícil de adivinar y poned <code>ALERT_WEBHOOK=https://ntfy.sh/vuestro-tema</code>.</p>
     <p><strong>Saber si la app se ha caído</strong>: un servicio como UptimeRobot o Better Stack (tienen plan gratuito) puede comprobar cada pocos minutos <code>/api/health</code> y avisaros si no responde.</p>`],
 ];
@@ -133,6 +135,7 @@ const en = [
     <p><strong>Restoring one</strong>: <code>BACKUP_KEY='…' node restore.js colla-2026-11-18.db.enc restored.db</code> checks the backup and writes it to a new file; then start the server with <code>DB_PATH</code> pointing at it. Try it once, before you need it.</p>`],
   ['errors', 'admin', 'When the app fails', `
     <p>Server and phone errors are recorded (without saying whose they were) and appear in <em>Accounts → App errors</em>.</p>
+    <p>People can also send ideas or report that something is wrong from <em>Settings → Suggestions and bugs</em>. It is anonymous and appears in <em>Accounts → Suggestions and bugs</em>; with <code>ALERT_WEBHOOK</code> you get a notification (without the text).</p>
     <p><strong>A phone notification when a new error appears</strong>: install the ntfy app, subscribe to a topic with a hard-to-guess name and set <code>ALERT_WEBHOOK=https://ntfy.sh/your-topic</code>.</p>
     <p><strong>Knowing if the app is down</strong>: a service like UptimeRobot or Better Stack (both have free plans) can check <code>/api/health</code> every few minutes and alert you if it doesn't respond.</p>`],
 ];

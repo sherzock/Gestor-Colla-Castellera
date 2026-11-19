@@ -386,6 +386,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS error_log (
   UNIQUE (kind, message, place)
 )`);
 
+// Suggeriments i errors que envia la gent des de l'app. Són anònims: no es guarda qui els envia.
+db.exec(`CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('idea', 'error')),
+  message TEXT NOT NULL,
+  place TEXT NOT NULL DEFAULT '',
+  version TEXT NOT NULL DEFAULT '',
+  done INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+)`);
+
 // Registre de canvis: què ha fet cada compte d'administració (no els membres quan responen).
 db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY,

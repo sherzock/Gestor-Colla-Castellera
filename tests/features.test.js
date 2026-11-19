@@ -264,3 +264,21 @@ test('el lloc es pot mostrar amb un nom i obrir una altra adreça al mapa, que e
   assert.equal((await s.member('GET', `/events/${first.id}`)).d.event.address, 'Carrer Major, 12, Vilafranca');
   assert.match((await A('GET', '/calendar.ics')).text, /LOCATION:Local de proves\\, Carrer Major\\, 12\\, Vilafranca/);
 });
+
+// ---------- Suggeriments i errors ----------
+test("suggeriments: qualsevol persona n'envia, són anònims i només els veu l'administració", async () => {
+  assert.equal((await s.member('POST', '/feedback', { kind: 'idea', message: '  Posar el calendari de la colla  ', place: '#/sessio/12' })).s, 200);
+  assert.equal((await s.member('POST', '/feedback', { kind: 'altre', message: 'x' })).s, 400);
+  assert.equal((await s.member('POST', '/feedback', { kind: 'error', message: '   ' })).s, 400);
+  assert.equal((await s.member('POST', '/feedback', { kind: 'error', message: { a: 1 } })).s, 400);
+  assert.equal((await s.member('GET', '/feedback')).s, 403);
+  const list = (await s.admin('GET', '/feedback')).d;
+  const f = list.find((x) => x.message === 'Posar el calendari de la colla');
+  assert.ok(f);
+  assert.equal(f.place, '#/sessio/:id');
+  assert.deepEqual(Object.keys(f).sort(), ['created_at', 'done', 'id', 'kind', 'message', 'place', 'version']);
+  assert.equal((await s.admin('PUT', `/feedback/${f.id}`, { done: true })).s, 200);
+  assert.equal((await s.admin('GET', '/feedback')).d.find((x) => x.id === f.id).done, 1);
+  assert.equal((await s.admin('DELETE', `/feedback/${f.id}`)).s, 200);
+  assert.ok(!(await s.admin('GET', '/feedback')).d.some((x) => x.id === f.id));
+});

@@ -974,6 +974,11 @@ form.closed .rsvp button, form.closed input, form.closed select { opacity: .55; 
 .setup-list li > svg { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--ok); }
 .setup-list li.done strong { font-weight: 500; color: var(--ink-2); }
 .todo-dot { flex: none; width: 12px; height: 12px; margin: 5px 3px 0; border-radius: 50%; border: 2px solid var(--c-warn); }
+.feedback-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.feedback-list li { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.feedback-list li.done { opacity: .6; }
+.feedback-list .actions { display: flex; gap: 6px; }
+.feedback-msg { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .error-list, .audit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .error-list li { display: grid; gap: 2px; }
 .err-msg { color: var(--bad); overflow-wrap: anywhere; }
