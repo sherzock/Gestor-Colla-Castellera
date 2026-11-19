@@ -2,7 +2,7 @@
 import { download } from '../export.js';
 import { IMPORT_FIELDS, guessField, readSpreadsheet, rowsToPeople } from '../import.js';
 import { $app, INSTRUMENTS, MEASURES, SECTIONS, sectionLabel, age, api, attempt, can, canField, closeModal, esc, formData, fullName, icon, isAdmin, me,
-  modalHead, norm, openModal, qs, qsa, render, setMe, shortName, store, t, tn, toast, todayIso } from './core.js';
+  modalHead, norm, openModal, qs, qsa, render, searchPaged, setMe, shortName, store, t, tn, toast, todayIso } from './core.js';
 import { switchPerson } from './shell.js';
 import { personHistoryHtml } from './viewer.js';
 
@@ -86,10 +86,7 @@ export async function pagePeople() {
   sort.value = peopleSort;
   if (!sort.value) sort.value = 'name';
   sort.onchange = () => { peopleSort = sort.value; store.set('peopleSort', peopleSort); render(); };
-  qs('#people-q').oninput = (e) => {
-    const q = norm(e.target.value.trim());
-    qsa('#people-table tbody tr').forEach((tr) => tr.classList.toggle('hidden', q && !tr.dataset.name.includes(q)));
-  };
+  searchPaged(qs('#people-q'), qs('#people-table tbody'));
   qs('#new-person').onclick = () => personModal();
   qs('#import-people')?.addEventListener('click', () => importModal());
   qsa('#people-table tbody tr').forEach((tr) => (tr.onclick = () => personModal(people.find((p) => String(p.id) === tr.dataset.id))));

@@ -5,7 +5,7 @@ import { castellPng, download, fileSafe, xlsx } from '../export.js';
 import { calendarCode } from './calendar.js';
 import { castellModal } from './castell-form.js';
 import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
-  fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, partialLabel, qs, qsa,
+  fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, pagedList, partialLabel, qs, qsa,
   render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
 import { eventAmount } from '../forms.js';
 import { nextPlanTime } from '../planning.js';
@@ -253,7 +253,6 @@ export async function pageEvent(id) {
           <td data-l="${t('Comentari')}" class="small">${esc(a.comment)}</td>
         </tr>`)}</tbody>
       </table></div>
-      <button type="button" class="btn sm more-btn hidden" id="att-more"></button>
       <p class="small muted">${t("Toca el nom d'una persona per editar els seus camps extra.")}</p>
     </div>` : `
     <div class="card">
@@ -273,7 +272,7 @@ export async function pageEvent(id) {
       <div class="card-head"><h2>${t('Persones temporals')}</h2>
         <div class="actions"><button class="btn sm" id="add-guest">${icon.plus}${t('Afegeix')}</button></div></div>
       <p class="small muted" style="margin-top:-6px">${t("Gent que no és de la colla (d'una altra colla, de prova…). Es poden col·locar a qualsevol castell d'aquesta sessió i no compten a l'historial ni a les estadístiques.")}</p>
-      <div class="field-list">${guests.map((g) => `<div class="field-row"><div>
+      <div class="field-list" data-more="guests">${guests.map((g) => `<div class="field-row"><div>
           <div>${esc(g.name)}${g.colla ? ` <span class="muted small">· ${esc(g.colla)}</span>` : ''}${g.companion_of && !/^Acompanyant d(e |')/.test(g.name) ? ` <span class="muted small">· ${t('acompanya {name}', { name: esc(g.companion_of_name) })}</span>` : ''}${g.companion_dropped ? ` <span class="status no">${t('Ja no ve')}</span>` : ''}</div>
           <div class="k">${[g.shoulder_height_cm ? `${t('esp.')} ${g.shoulder_height_cm} cm` : null, g.weight_kg ? `${g.weight_kg} kg` : null,
             g.placed ? tn(g.placed, 'A {n} castell', 'A {n} castells') : t('Encara sense posició')].filter(Boolean).join(' · ')}</div></div>
@@ -289,7 +288,7 @@ export async function pageEvent(id) {
     <div class="card">
       <div class="card-head"><h2>${t('Encarregats')}</h2></div>
       <p class="small muted" style="margin-top:-6px">${t("Qui s'encarrega de què en aquesta sessió (material, farmaciola…). Ho veu tothom.")}</p>
-      <div class="field-list">${roles.map((r) => `<div class="field-row"><div><div>${esc(r.label)}</div><div class="k">${esc(fullName(r))}</div></div>
+      <div class="field-list" data-more="roles">${roles.map((r) => `<div class="field-row"><div><div>${esc(r.label)}</div><div class="k">${esc(fullName(r))}</div></div>
         <button class="btn ghost sm danger" style="margin-left:auto" data-del-role="${r.id}">${t('Treu')}</button></div>`).join('')
         || `<div class="muted small">${t('Cap encarregat.')}</div>`}</div>
       <form id="role-form" class="form-grid">
@@ -567,7 +566,7 @@ function bindSessionEditing(event, reload, castells) {
   }));
 }
 
-const NAMES_PREVIEW = 24;
+const NAMES_PREVIEW = 20;
 
 // Filtres de la taula d'assistència: abans de la sessió, per resposta; el dia i després, per qui ha vingut.
 const attKeys = (a) => ['all', a.status || 'none', a.present ? 'present' : 'absent'];
@@ -579,37 +578,21 @@ function attFilters(passList, attendance) {
   return list.map(([k, l]) => [k, l, n(k)]).filter(([k, , c]) => k === 'all' || c);
 }
 
-// Les llistes llargues es mostren a trossos. El filtre i quants se'n veuen es recorden mentre
-// no es canvia de sessió, perquè cada canvi torna a pintar la pàgina.
-const ATT_PAGE = 30;
-let attView = { id: null, f: 'all', limit: ATT_PAGE };
+// El filtre es recorda mentre no es canvia de sessió, perquè cada canvi torna a pintar la pàgina.
+let attView = { id: null, f: 'all' };
 
 function bindAttendanceTable(event, attendance, fields, reload) {
-  if (attView.id !== event.id) attView = { id: event.id, f: 'all', limit: ATT_PAGE };
-  const search = qs('#att-search'), more = qs('#att-more');
+  if (attView.id !== event.id) attView = { id: event.id, f: 'all' };
+  const search = qs('#att-search');
   const chips = qsa('#att-filter .chip');
   if (!chips.some((c) => c.dataset.f === attView.f)) attView.f = 'all';
+  const list = pagedList(qs('#att-table tbody'), 'att');
   const apply = () => {
     const q = norm(search.value.trim());
     chips.forEach((c) => c.classList.toggle('on', c.dataset.f === attView.f));
-    let header = null, shown = 0, total = 0;
-    const closeGroup = () => header?.classList.toggle('hidden', !shown);
-    qsa('#att-table tbody tr').forEach((tr) => {
-      if (tr.classList.contains('group-row')) { closeGroup(); header = tr; shown = 0; return; }
-      const match = (!q || tr.dataset.name.includes(q)) && tr.dataset.f.split(' ').includes(attView.f);
-      // Quan es cerca, surten tots els que coincideixen; si no, només el primer tros.
-      const show = match && (q || total < attView.limit);
-      if (match) total++;
-      tr.classList.toggle('hidden', !show);
-      if (show) shown++;
-    });
-    closeGroup();
-    const left = q ? 0 : total - attView.limit;
-    more.classList.toggle('hidden', left <= 0);
-    more.textContent = left > ATT_PAGE ? t("Mostra'n {n} més · en queden {left}", { n: ATT_PAGE, left }) : t("Mostra'n {n} més", { n: left });
+    list.apply((tr) => (!q || tr.dataset.name.includes(q)) && tr.dataset.f.split(' ').includes(attView.f), !!q);
   };
-  chips.forEach((c) => (c.onclick = () => { attView.f = c.dataset.f; attView.limit = ATT_PAGE; apply(); }));
-  more.onclick = () => { attView.limit += ATT_PAGE; apply(); };
+  chips.forEach((c) => (c.onclick = () => { attView.f = c.dataset.f; list.reset(); apply(); }));
   search.oninput = apply;
   apply();
   qsa('#att-table tbody tr[data-id]').forEach((tr) => {
@@ -685,7 +668,7 @@ function answersCard(event, attendance) {
       <div class="actions"><button class="btn sm" id="toggle-rsvp">${event.rsvp_open ? `${icon.lock}${t('Tanca-les ara')}` : t('Torna-les a obrir')}</button></div></div>
     <div class="counts" style="margin-bottom:12px">${state}</div>
     ${pending.length ? `<h3 class="instr-h">${tn(pending.length, 'Falta {n} persona per contestar', 'Falten {n} persones per contestar')}</h3>
-      <div class="names">${pending.map((a) => `<span>${esc(shortName(a))}</span>`).join('')}</div>
+      <div class="names" data-more="pending">${pending.map((a) => `<span>${esc(shortName(a))}</span>`).join('')}</div>
       ${event.hidden ? `<p class="small muted" style="margin:8px 0 0">${t('Quan la mostris als membres, podràs enviar el recordatori per WhatsApp.')}</p>` : `<div class="share-row">
         <a class="btn sm primary" id="wa-send" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(reminderText(event))}">${icon.share}${t('Envia per WhatsApp')}</a>
         <button class="btn sm" id="copy-reminder">${icon.copy}${t('Copia el missatge')}</button>

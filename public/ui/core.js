@@ -249,3 +249,53 @@ export const setMe = (value) => { me = value; };
 export const setConfig = (value) => { config = value; };
 export const setLang = (value) => { lang = value; };
 export const setTheme = (value) => { theme = value; };
+
+// ---------- Llistes llargues ----------
+// Se'n mostren les 20 primeres i un botó en mostra 20 més. Quan es cerca, surten totes les que coincideixen.
+// Les files amb la classe «group-row» són capçaleres de grup: s'amaguen si el seu grup no en té cap a la vista.
+// Quantes se'n veuen es recorda per pàgina mentre no se'n canvia (cada canvi torna a pintar la pàgina).
+export const PAGE_SIZE = 20;
+const pagesShown = new Map();
+export function pagedList(box, key = box?.id || box?.dataset.more || 'list') {
+  if (!box) return { apply() {}, reset() {} };
+  box.dataset.paged = '1';
+  const id = `${location.hash}|${key}`;
+  const anchor = box.tagName === 'TBODY' ? box.closest('.table-wrap') || box.closest('table') : box;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn sm more-btn hidden';
+  anchor.after(btn);
+  let match = () => true, searching = false;
+  const apply = (m = match, all = searching) => {
+    match = m; searching = all;
+    const limit = pagesShown.get(id) || PAGE_SIZE;
+    let header = null, shown = 0, total = 0;
+    const closeGroup = () => header?.classList.toggle('hidden', !shown);
+    for (const el of box.children) {
+      if (el.classList.contains('group-row')) { closeGroup(); header = el; shown = 0; continue; }
+      const ok = match(el);
+      const show = ok && (all || total < limit);
+      if (ok) total++;
+      el.classList.toggle('hidden', !show);
+      if (show) shown++;
+    }
+    closeGroup();
+    const left = all ? 0 : total - limit;
+    btn.classList.toggle('hidden', left <= 0);
+    btn.textContent = left > PAGE_SIZE ? t("Mostra'n {n} més · en queden {left}", { n: PAGE_SIZE, left }) : t("Mostra'n {n} més", { n: left });
+  };
+  btn.onclick = () => { pagesShown.set(id, (pagesShown.get(id) || PAGE_SIZE) + PAGE_SIZE); apply(); };
+  apply();
+  return { apply, reset() { pagesShown.delete(id); } };
+}
+// Les llistes marcades amb data-more i sense cercador es tallen soles en acabar de pintar la pàgina.
+export const pageLongLists = (root) => root.querySelectorAll('[data-more]:not([data-paged])').forEach((box) => pagedList(box));
+// Un cercador que filtra una llista tallada per data-name.
+export function searchPaged(input, box) {
+  const list = pagedList(box);
+  input.oninput = () => {
+    const q = norm(input.value.trim());
+    list.apply((el) => !q || el.dataset.name?.includes(q), !!q);
+  };
+  return list;
+}

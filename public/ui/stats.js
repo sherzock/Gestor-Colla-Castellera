@@ -1,7 +1,7 @@
 // Estadístiques: temporada, tècnica, castells i persones.
 import { RESULTS } from '../castell.js';
 import { $app, TYPES, api, day, esc, failCauseLabel, fmt, fullName, icon, isAdmin, me, modalHead, norm, openModal, qs, qsa,
-  render, resultClass, resultPill, store, t, tn, todayIso, typeLabel } from './core.js';
+  render, resultClass, resultPill, searchPaged, store, t, tn, todayIso, typeLabel } from './core.js';
 
 // ---------- Estadístiques ----------
 // Per temporades (cada any natural) o de tota la història, i de totes les sessions, només diades o només assajos.
@@ -85,7 +85,7 @@ function personStatsHtml(st) {
     </div>
     <div class="card">
       <h2 style="margin-bottom:12px">${t('Últims castells')}</h2>
-      <ul class="recent">${st.recent.map((r) => `<li><a href="#/castell/${r.castell_id}"><span class="castell-tag ${resultClass(r.result)}">${esc(r.castell)}</span> ${esc(r.role)}</a>
+      <ul class="recent" data-more="recent">${st.recent.map((r) => `<li><a href="#/castell/${r.castell_id}"><span class="castell-tag ${resultClass(r.result)}">${esc(r.castell)}</span> ${esc(r.role)}</a>
         <span class="small muted">${fmt(r.date, { day: 'numeric', month: 'short', year: 'numeric' })} · ${esc(r.title)}${r.result !== 'previst' ? ` · ${esc(resultName(r.result))}` : ''}${r.partial ? ` · ${t('parcial')}` : ''}</span></li>`).join('')}</ul>
     </div>`;
 }
@@ -114,10 +114,7 @@ export async function pageStats() {
   bindStatsTabs();
 
   if (people) {
-    qs('#st-q').oninput = (e) => {
-      const q = norm(e.target.value.trim());
-      qsa('#st-people tbody tr').forEach((tr) => tr.classList.toggle('hidden', q && !tr.dataset.name.includes(q)));
-    };
+    searchPaged(qs('#st-q'), qs('#st-people tbody'));
     qsa('#st-people tbody tr').forEach((tr) => (tr.onclick = () => { location.hash = `#/estadistiques/persona/${tr.dataset.id}`; }));
   } else {
     qsa('#st-castells tbody tr').forEach((tr) => (tr.onclick = () => attemptsModal(data.castells[Number(tr.dataset.i)])));
@@ -323,7 +320,7 @@ async function pageSeason(tabs) {
         </div>
         <div class="card">
           <h2 style="margin-bottom:12px">${t('Diades')}</h2>
-          ${st.diades.length ? `<ul class="diada-list">${st.diades.map((d) => `<li>
+          ${st.diades.length ? `<ul class="diada-list" data-more="diades">${st.diades.map((d) => `<li>
             <a href="#/sessio/${d.id}"><strong>${esc(d.title)}</strong></a><span class="small muted">${fmt(d.date, { day: 'numeric', month: 'long' })}</span>
             <div class="event-castells">${d.castells.map((c) => `<a href="#/castell/${c.id}" class="castell-tag ${resultClass(c.result)}" title="${esc(resultName(c.result))}">${esc(c.castell)}${c.partial ? '*' : ''}</a>`).join('')}</div>
           </li>`).join('')}</ul>` : `<p class="muted small">${t('Cap diada amb castells aquesta temporada.')}</p>`}

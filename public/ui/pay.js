@@ -117,10 +117,10 @@ export function paymentAdminCard(event, payment, payments, attendance, fields) {
       payment.due_date ? t('Data límit: {date}', { date: esc(dueText(payment.due_date)) }) : ''].filter(Boolean).join(' · ')}</p>
     ${check.length ? `<div class="card-head" style="margin-top:12px"><h3 class="instr-h" style="margin:0">${t('Diuen que han pagat: comprova-ho al banc')}</h3>
       ${check.length > 1 ? `<div class="actions"><button type="button" class="btn sm" data-received-all="${check.map((a) => a.id).join(',')}">${t('Marca-ho tot rebut')}</button></div>` : ''}</div>
-      <div class="field-list">${check.map((a) => `<div class="field-row"><div><div>${esc(fullName(a))}</div><div class="k">${money(a.amount)}</div></div>
+      <div class="field-list" data-more="pay-check">${check.map((a) => `<div class="field-row"><div><div>${esc(fullName(a))}</div><div class="k">${money(a.amount)}</div></div>
         <button type="button" class="btn sm" style="margin-left:auto" data-received="${a.id}" data-v="1">${t('Marca rebut')}</button></div>`).join('')}</div>` : ''}
-    ${late.length ? `<h3 class="instr-h">${t("Fora de termini: encara no han pagat")}</h3>
-      <p class="small muted" style="margin:0 0 6px">${late.map((a) => `${esc(fullName(a))} (${money(a.amount)})`).join(' · ')}</p>` : ''}
+    ${late.length ? `<h3 class="instr-h">${t("Fora de termini: encara no han pagat")} · ${late.length}</h3>
+      <div class="names" data-more="pay-late">${late.map((a) => `<span>${esc(fullName(a))} · ${money(a.amount)}</span>`).join('')}</div>` : ''}
   </div>`;
 }
 

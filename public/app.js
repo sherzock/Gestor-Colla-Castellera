@@ -3,7 +3,7 @@ import { pageAccounts } from './ui/accounts.js';
 import { pageAudit } from './ui/audit.js';
 import { pageCalendar } from './ui/calendar.js';
 import { setTemplates } from './castell.js';
-import { $app, api, closeModal, config, esc, me, render, setConfig, setMe, setRenderer, t } from './ui/core.js';
+import { $app, api, closeModal, config, esc, me, pageLongLists, render, setConfig, setMe, setRenderer, t } from './ui/core.js';
 import { pageEvent } from './ui/event.js';
 import { pageAdminLogin, pageIdentify, pagePrivacy } from './ui/login.js';
 import { pageChangelog, pageHelp } from './ui/help.js';
@@ -63,6 +63,7 @@ async function renderPage({ keepScroll = false } = {}) {
   const args = hash.match(re)?.slice(1) || [];
   try {
     await page(...args);
+    pageLongLists($app);
     // Cada pàgina té el seu títol (el que es llegeix en canviar de pàgina i surt a la pestanya i a l'historial).
     const h1 = $app.querySelector('h1')?.textContent.trim();
     document.title = h1 && h1 !== config.collaName ? `${h1} · ${config.collaName}` : `${config.collaName} · Appinya't`;

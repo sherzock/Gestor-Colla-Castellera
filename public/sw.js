@@ -2,7 +2,7 @@
 // alineacions). Sempre es prova primer la xarxa: amb connexió no es veu mai res antic.
 // En sortir o canviar de persona, l'app esborra les dades desades (OFFLINE_DATA) d'aquest dispositiu.
 // També rep els avisos al mòbil: l'avís arriba buit i el text es demana a l'app (veure push.js).
-const VERSION = 15;
+const VERSION = 16;
 const SHELL = `colla-app-${VERSION}`;
 const DATA = 'colla-dades';
 
