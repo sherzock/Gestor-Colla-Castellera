@@ -1,115 +1,20 @@
 // Detall d'una sessió: respostes, assistència, persones temporals, acompanyants i exportació.
 import { buildStructure, castellName } from '../castell.js';
-import { boxShort } from '../editor.js';
-import { castellPng, download, fileSafe, xlsx } from '../export.js';
+import { download, xlsx } from '../export.js';
 import { calendarCode } from './calendar.js';
 import { castellModal } from './castell-form.js';
-import { $app, INSTRUMENTS, MEASURES, SECTIONS, api, can, attempt, closeModal, copyText, esc, fmtDeadline, fmtLong, formData,
-  fullName, hiddenBadge, hiddenToggle, icon, isAdmin, lang, me, modalHead, norm, openModal, pagedList, partialLabel, qs, qsa,
-  render, resultLabel, resultPill, sectionLabel, shortName, statusLabel, statusPill, t, time, tn, toast, todayIso, typeBadge } from './core.js';
+import { $app, api, attempt, can, closeModal, esc, fmtDeadline, fmtLong, formData, fullName, hiddenBadge, hiddenToggle, icon, INSTRUMENTS, isAdmin, me, MEASURES, modalHead, norm, openModal, qs, qsa, render, resultPill, sectionLabel, SECTIONS, shortName, statusLabel, t, time, tn, toast, todayIso, typeBadge } from './core.js';
 import { eventAmount } from '../forms.js';
 import { nextPlanTime } from '../planning.js';
-import { bindPayCard, bindPaymentAdmin, fieldPriceModal, money, payBulkBar, payCard, payCell, paymentAdminCard, priceHint, priceSummary } from './pay.js';
+import { bindPayCard, bindPaymentAdmin, fieldPriceModal, money, payBulkBar, payCard, payCell, paymentAdminCard, priceSummary } from './pay.js';
 import { eventModal } from './sessions.js';
 import { bindTimeline, timelineCard } from './timeline.js';
-import { STATUS_ORDER, assignedName } from './viewer.js';
+import { STATUS_ORDER } from './viewer.js';
+import { answersCard, attFilters, attKeys, bindAnswersCard, bindAttendanceTable, mapsUrl, NAMES_PREVIEW, walkinModal } from './attendance.js';
+import { bindCompanions, companionsInput, extraValue, fieldInput, ownCompanionNames, readCompanions, readExtra } from './event-fields.js';
+import { exportSession } from './event-export.js';
 
 // ---------- Detall de sessió ----------
-function fieldInput(f, value, prefix = 'x') {
-  const name = `${prefix}${f.id}`;
-  const req = f.required ? ' *' : '';
-  if (f.kind === 'bool') return `<label class="check"><input type="checkbox" name="${name}" ${value ? 'checked' : ''}> ${esc(f.label)}${req}${priceHint.bool(f)}</label>`;
-  if (f.kind === 'select') {
-    return `<label class="field">${esc(f.label)}${req}<select name="${name}"><option value="">—</option>${f.options.map((o, i) => `<option value="${esc(o)}" ${value === o ? 'selected' : ''}>${esc(o)}${priceHint.option(f, i)}</option>`).join('')}</select></label>`;
-  }
-  const type = f.kind === 'number' ? 'number" min="0" max="100000" step="1" inputmode="numeric' : 'text" maxlength="300';
-  return `<label class="field"><span>${esc(f.label)}${req}${f.kind === 'number' ? priceHint.number(f) : ''}</span><input type="${type}" name="${name}" value="${esc(value)}"></label>`;
-}
-function readExtra(form, fields, prefix = 'x') {
-  const out = {};
-  for (const f of fields) {
-    const el = form.elements[`${prefix}${f.id}`];
-    out[f.id] = f.kind === 'bool' ? el.checked : el.value;
-  }
-  return out;
-}
-// Acompanyants: quants i el nom de cadascun (a la pinya s'han de poder reconèixer). El màxim és el del servidor.
-const MAX_COMPANIONS = 6;
-function companionsInput(list = []) {
-  return `<div class="companions" data-companions>
-    <label class="field">${t('Acompanyants')}<input type="number" name="companions_n" min="0" max="${MAX_COMPANIONS}" step="1" inputmode="numeric" value="${list.length}"></label>
-    <div class="comp-names">${list.map((name, i) => companionName(name, i)).join('')}</div>
-    <p class="small muted" style="margin:0">${t('Posa el nom de cadascun: la tècnica els podrà col·locar als castells.')}</p>
-  </div>`;
-}
-const companionName = (name, i) => `<input name="comp${i}" maxlength="60" required value="${esc(name)}" placeholder="${t('Nom de l\'acompanyant {n}', { n: i + 1 })}" aria-label="${t('Nom de l\'acompanyant {n}', { n: i + 1 })}">`;
-function bindCompanions(root) {
-  const box = qs('[data-companions]', root);
-  if (!box) return;
-  const n = box.querySelector('[name=companions_n]');
-  n.oninput = () => {
-    const want = Math.max(0, Math.min(MAX_COMPANIONS, Math.floor(Number(n.value) || 0)));
-    const names = qs('.comp-names', box);
-    const now = [...names.children];
-    for (let i = now.length; i < want; i++) names.insertAdjacentHTML('beforeend', companionName('', i));
-    now.slice(want).forEach((el) => el.remove());
-  };
-}
-const readCompanions = (form) => [...form.querySelectorAll('.comp-names input')].map((el) => el.value.trim());
-// Els noms automàtics d'abans («Acompanyant de …») no es mostren a la casella: cal posar-hi el nom de debò.
-const ownCompanionNames = (list) => list.filter((g) => !g.dropped).map((g) => (/^Acompanyant d(e |')/.test(g.name) ? '' : g.name));
-
-function extraValue(f, v) {
-  if (v === null || v === undefined || v === '') return '';
-  if (f.kind === 'bool') return v ? t('Sí') : t('No');
-  return esc(v);
-}
-
-// Excel de la sessió: una pestanya amb l'assistència (les mateixes columnes que el CSV) i una per castell, amb qui hi
-// ha a cada posició i la imatge del castell (tronc, pom de dalt i pinya).
-async function exportSession(event, castells, button) {
-  button.disabled = true;
-  const label = button.textContent;
-  button.textContent = t('Preparant…');
-  try {
-    // L'assistència i les alineacions es demanen alhora; les imatges es dibuixen després, una rere l'altra.
-    const [table, details] = await Promise.all([
-      api('GET', `/events/${event.id}/attendance`),
-      Promise.all(castells.map((c) => api('GET', `/castells/${c.id}`))),
-    ]);
-    const sheets = [{ name: t('Assistència'), rows: [table.columns, ...table.rows], header: true }];
-    for (const [i, { castell, positions }] of details.entries()) {
-      const s = buildStructure(castell);
-      const byKey = new Map(positions.filter((p) => s.positions.has(p.pos_key)).map((p) => [p.pos_key, p]));
-      const extra = [castell.label, partialLabel(castell), resultLabel(castell.result)].filter(Boolean).join(' · ');
-      const title = `${s.name}${castell.label ? ` · ${castell.label}` : ''}`;
-      const subtitle = `${event.title} · ${fmtLong(event.date)}${extra ? ` · ${extra}` : ''} · ${t('{a}/{b} posicions cobertes', { a: byKey.size, b: s.positions.size })}`;
-      const image = await castellPng({ s, byKey, nameOf: assignedName, title, subtitle,
-        labels: { tronc: t('Tronc i pom de dalt'), musica: t('Música'), short: boxShort } });
-      // Qui hi ha a cada posició, de baix a dalt i després la música i la pinya (per buscar-hi o imprimir-ho).
-      const who = (key) => (byKey.has(key) ? assignedName(byKey.get(key), false) : '');
-      const list = [
-        ...s.levels.flatMap((l) => l.cells), ...s.agulla, ...s.musica,
-      ].map((p) => [p.role, who(p.key)]);
-      for (const layer of s.layers) {
-        for (const item of layer.items.filter((x) => !x.shared && !x.off)) list.push([`${layer.label} · ${item.role}`, who(item.key)]);
-      }
-      sheets.push({
-        name: `${i + 1} ${s.name}${castell.label ? ` ${castell.label}` : ''}`,
-        rows: [[title], [subtitle], [], [t('Posició'), t('Persona')], ...list],
-        bold: [0, 3], widths: [30, 28, 3],
-        image: { data: image, col: 3, row: 0, maxWidth: 1000 },
-      });
-    }
-    download(xlsx(sheets), `sessio-${event.date}-${fileSafe(event.title)}.xlsx`);
-  } catch (err) {
-    toast(err.message, true);
-  } finally {
-    button.disabled = false;
-    button.textContent = label;
-  }
-}
-
 export async function pageEvent(id) {
   const { event, fields, castells, mine, attendance, counts, guests = [], forecast, roles = [], roleLabels = [], plan_clashes: clashes = [], payment, payments } = await api('GET', `/events/${id}`);
   const admin = isAdmin();
@@ -510,7 +415,7 @@ export async function pageEvent(id) {
 }
 
 // Els castells es creen ocults: en mostrar la sessió, millor preguntar-ho que deixar-la buida sense voler.
-function revealModal(event, castells, reload) {
+export function revealModal(event, castells, reload) {
   const pending = can('castells') ? castells.filter((c) => c.hidden).length : 0;
   openModal(`${modalHead(t('Mostra la sessió als membres'))}
     <form id="reveal-form">
@@ -531,7 +436,7 @@ function revealModal(event, castells, reload) {
 }
 
 // Editar la sessió és de la junta (i de l'administració): sense permís, aquests botons i formularis no hi són.
-function bindSessionEditing(event, reload, castells) {
+export function bindSessionEditing(event, reload, castells) {
   if (!can('sessions')) return;
   qs('#edit-event').onclick = () => eventModal(event);
   qs('#hide-event').onclick = async () => {
@@ -566,129 +471,6 @@ function bindSessionEditing(event, reload, castells) {
   }));
 }
 
-const NAMES_PREVIEW = 20;
-
-// Filtres de la taula d'assistència: abans de la sessió, per resposta; el dia i després, per qui ha vingut.
-const attKeys = (a) => ['all', a.status || 'none', a.present ? 'present' : 'absent'];
-function attFilters(passList, attendance) {
-  const n = (k) => attendance.filter((a) => attKeys(a).includes(k)).length;
-  const list = passList
-    ? [['all', t('Tothom')], ['present', t('Han vingut')], ['absent', t('No han vingut')]]
-    : [['all', t('Tothom')], ['si', t('Vénen')], ['no', t('No vénen')], ['none', t('Sense resposta')]];
-  return list.map(([k, l]) => [k, l, n(k)]).filter(([k, , c]) => k === 'all' || c);
-}
-
-// El filtre es recorda mentre no es canvia de sessió, perquè cada canvi torna a pintar la pàgina.
-let attView = { id: null, f: 'all' };
-
-function bindAttendanceTable(event, attendance, fields, reload) {
-  if (attView.id !== event.id) attView = { id: event.id, f: 'all' };
-  const search = qs('#att-search');
-  const chips = qsa('#att-filter .chip');
-  if (!chips.some((c) => c.dataset.f === attView.f)) attView.f = 'all';
-  const list = pagedList(qs('#att-table tbody'), 'att');
-  const apply = () => {
-    const q = norm(search.value.trim());
-    chips.forEach((c) => c.classList.toggle('on', c.dataset.f === attView.f));
-    list.apply((tr) => (!q || tr.dataset.name.includes(q)) && tr.dataset.f.split(' ').includes(attView.f), !!q);
-  };
-  chips.forEach((c) => (c.onclick = () => { attView.f = c.dataset.f; list.reset(); apply(); }));
-  search.oninput = apply;
-  apply();
-  qsa('#att-table tbody tr[data-id]').forEach((tr) => {
-    const pid = tr.dataset.id;
-    const a = attendance.find((x) => String(x.id) === pid);
-    qs('[data-act=status]', tr).onchange = async (e) => {
-      if (await attempt(() => api('PUT', `/events/${event.id}/attendance/${pid}`, { status: e.target.value || null }))) reload();
-    };
-    qs('[data-act=came]', tr)?.addEventListener('click', async () => {
-      // Només es guarda l'excepció: si coincideix amb la confirmació, es torna a deixar per defecte.
-      const next = !a.present;
-      const came = next === (a.status === 'si') ? null : next;
-      if (await attempt(() => api('PUT', `/events/${event.id}/attendance/${pid}`, { came }))) {
-        toast(next ? t('{name}: ha vingut', { name: shortName(a) }) : t('{name}: no ha vingut', { name: shortName(a) }));
-        reload();
-      }
-    });
-    qs('.lead', tr).style.cursor = 'pointer';
-    qs('.lead', tr).onclick = () => {
-      openModal(`${modalHead(esc(fullName(a)))}
-        <form id="att-edit" class="stack">
-          ${event.ask_companions && a.status === 'si' ? companionsInput(a.companions.map((n) => (/^Acompanyant d(e |')/.test(n) ? '' : n))) : ''}
-          ${fields.map((f) => fieldInput(f, a.extra?.[f.id])).join('') || (event.ask_companions && a.status === 'si' ? '' : `<p class="muted">${t('Aquesta sessió no té camps extra.')}</p>`)}
-          ${event.escoleta ? `<label class="field">${t('Escoleta')}<select name="escoleta"><option value="">—</option>
-            <option value="1" ${a.escoleta === true ? 'selected' : ''}>${t('Hi vindrà')}</option><option value="0" ${a.escoleta === false ? 'selected' : ''}>${t('No hi vindrà')}</option></select></label>` : ''}
-          <label class="field">${t('Comentari')}<input name="comment" maxlength="300" value="${esc(a.comment)}"></label>
-          <div class="form-actions"><button type="button" class="btn" data-close>${t('Cancel·la')}</button><button class="btn primary">${t('Desa')}</button></div>
-        </form>`, (m) => {
-        bindCompanions(m);
-        qs('#att-edit', m).onsubmit = async (e) => {
-          e.preventDefault();
-          const body = { extra: readExtra(e.target, fields), comment: e.target.elements.comment.value };
-          if (qs('[data-companions]', m)) body.companions = readCompanions(e.target);
-          if (event.escoleta) body.escoleta = e.target.elements.escoleta.value === '' ? null : e.target.elements.escoleta.value === '1';
-          if (await attempt(() => api('PUT', `/events/${event.id}/attendance/${pid}`, body))) { closeModal(); reload(); }
-        };
-      });
-    };
-  });
-}
-
-// ---------- Respostes: data límit i qui falta per contestar (administració) ----------
-function pendingPeople(event, attendance) {
-  return attendance.filter((a) => !a.status && (event.type !== 'musics' || a.instrument))
-    .sort((a, b) => shortName(a).localeCompare(shortName(b)));
-}
-
-// El lloc de la sessió obre Google Maps (al mòbil, l'app de mapes si la té) buscant el text tal com està escrit.
-const mapsUrl = (place) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
-
-// Missatge per enganxar al grup de WhatsApp: un recordatori general, sense dir qui falta (ningú queda assenyalat
-// davant de tot el grup; la llista de qui falta només la veu l'administració).
-function reminderText(event) {
-  const when = `${fmtLong(event.date)}${event.start_time ? ` · ${event.start_time}` : ''}`;
-  return [
-    `📣 ${event.title} · ${when}`,
-    event.location ? `📍 ${event.location}` : null,
-    t("Si encara no heu dit si veniu, digueu-ho a l'app:"),
-    `${location.origin}/#/sessio/${event.id}`,
-    event.rsvp_until ? t('Podeu respondre fins al {when}.', { when: fmtDeadline(event.rsvp_until) }) : null,
-    t('Gràcies!'),
-  ].filter(Boolean).join('\n');
-}
-
-function answersCard(event, attendance) {
-  if (event.date < todayIso()) return '';
-  const pending = pendingPeople(event, attendance);
-  const state = !event.rsvp_open ? `<span class="status no">${icon.lock}${t('Tancades')}</span>`
-    : event.rsvp_until ? `<span class="status si">${t('Obertes fins al {when}', { when: fmtDeadline(event.rsvp_until) })}</span>`
-      : `<span class="status si">${t('Obertes fins al dia de la sessió')}</span>`;
-  return `<div class="card answers-card">
-    <div class="card-head"><h2>${t('Respostes')}</h2>
-      <div class="actions"><button class="btn sm" id="toggle-rsvp">${event.rsvp_open ? `${icon.lock}${t('Tanca-les ara')}` : t('Torna-les a obrir')}</button></div></div>
-    <div class="counts" style="margin-bottom:12px">${state}</div>
-    ${pending.length ? `<h3 class="instr-h">${tn(pending.length, 'Falta {n} persona per contestar', 'Falten {n} persones per contestar')}</h3>
-      <div class="names" data-more="pending">${pending.map((a) => `<span>${esc(shortName(a))}</span>`).join('')}</div>
-      ${event.hidden ? `<p class="small muted" style="margin:8px 0 0">${t('Quan la mostris als membres, podràs enviar el recordatori per WhatsApp.')}</p>` : `<div class="share-row">
-        <a class="btn sm primary" id="wa-send" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(reminderText(event))}">${icon.share}${t('Envia per WhatsApp')}</a>
-        <button class="btn sm" id="copy-reminder">${icon.copy}${t('Copia el missatge')}</button>
-      </div>
-      <p class="small muted" style="margin:8px 0 0">${t('El missatge és un recordatori general per al grup, sense noms, amb l\'enllaç a la sessió.')}</p>`}`
-    : `<div class="all-answered" style="margin:0">${icon.check}${t('Tothom ha contestat.')}</div>`}
-  </div>`;
-}
-
-function bindAnswersCard(event, attendance) {
-  qs('#copy-reminder')?.addEventListener('click', () => copyText(reminderText(event)));
-  qs('#toggle-rsvp')?.addEventListener('click', async () => {
-    if (event.rsvp_open && !confirm(t('Tancar les respostes? Els membres ja no podran canviar si vénen o no.'))) return;
-    if (await attempt(() => api('POST', `/events/${event.id}/rsvp`, { open: !event.rsvp_open }))) {
-      toast(event.rsvp_open ? t('Respostes tancades') : t('Respostes obertes'));
-      render({ keepScroll: true });
-    }
-  });
-}
-
 // Persona temporal d'una sessió: només el nom és obligatori; les mides ajuden a revisar l'alineació.
 export function guestModal(eventId, guest, onSaved) {
   const n = (name, label, unit, step = '1') => `<label class="field">${label} (${unit})<input name="${name}" type="number" min="${MEASURES[name][0]}" max="${MEASURES[name][1]}" step="${step}" inputmode="decimal" value="${guest?.[name] ?? ''}"></label>`;
@@ -714,48 +496,3 @@ export function guestModal(eventId, guest, onSaved) {
 }
 
 // Afegir a la llista algú que ha vingut sense apuntar-se (o que encara no és a l'app).
-function walkinModal(event, attendance, reload) {
-  const absent = attendance.filter((a) => !a.present).sort((a, b) => shortName(a).localeCompare(shortName(b)));
-  const mark = async (personId, name) => {
-    if (await attempt(() => api('PUT', `/events/${event.id}/attendance/${personId}`, { came: true }))) {
-      toast(t('{name}: ha vingut', { name }));
-      return true;
-    }
-    return false;
-  };
-  openModal(`${modalHead(t('Afegeix qui ha vingut'))}
-    <p class="muted" style="margin:-6px 0 10px">${t("Toca les persones que han vingut tot i no estar apuntades. Es poden col·locar als castells d'aquesta sessió.")}</p>
-    <input type="search" id="walk-q" placeholder="${t('Cerca per nom o malnom…')}" aria-label="${t('Cerca per nom o malnom…')}" autocomplete="off">
-    <div class="people-pick" id="walk-list">${absent.map((a) => `<button data-pid="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}">
-      <span class="nm">${esc(fullName(a))}</span>${statusPill(a.status)}</button>`).join('') || `<p class="muted">${t('Tothom ja consta com a present.')}</p>`}</div>
-    <form id="walk-new" class="pick-bar">
-      <input name="name" maxlength="60" placeholder="${t("No és a l'app? Escriu nom i cognoms")}" aria-label="${t("No és a l'app? Escriu nom i cognoms")}" autocomplete="off">
-      <button class="btn">${t('Crea i afegeix')}</button>
-    </form>
-    <div class="form-actions"><button class="btn primary" data-close>${t('Fet')}</button></div>`, (m) => {
-    const q = qs('#walk-q', m);
-    q.oninput = () => {
-      const v = norm(q.value.trim());
-      qsa('#walk-list button', m).forEach((b) => b.classList.toggle('hidden', v && !b.dataset.name.includes(v)));
-      qs('#walk-new', m).elements.name.value = q.value;
-    };
-    qs('#walk-list', m).onclick = async (e) => {
-      const b = e.target.closest('[data-pid]');
-      if (!b || b.disabled) return;
-      const a = absent.find((x) => String(x.id) === b.dataset.pid);
-      if (await mark(a.id, shortName(a))) {
-        reload();
-        b.disabled = true;
-        b.classList.add('done');
-        b.querySelector('.status').outerHTML = `<span class="status si">✓ ${t('Ha vingut')}</span>`;
-      }
-    };
-    qs('#walk-new', m).onsubmit = async (e) => {
-      e.preventDefault();
-      const name = e.target.elements.name.value.trim();
-      if (!name) return;
-      const person = await attempt(() => api('POST', '/people', { name }));
-      if (person && await mark(person.id, shortName(person))) { closeModal(); reload(); }
-    };
-  });
-}
