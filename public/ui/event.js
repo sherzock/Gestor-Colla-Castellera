@@ -222,7 +222,7 @@ export async function pageEvent(id) {
         <thead><tr><th>${t('Nom')}</th><th>${t('Estat')}</th>${passList ? `<th>${t('Ha vingut')}</th>` : ''}${event.escoleta ? `<th>${t('Escoleta')}</th>` : ''}${event.ask_companions ? `<th>${t('Acompanyants')}</th>` : ''}${fields.map((f) => `<th>${esc(f.label)}</th>`).join('')}${payment ? `<th>${t('Pagament')}</th>` : ''}<th>${t('Comentari')}</th></tr></thead>
         <tbody>${tableGroups(sortedAttendance, (a) => `<tr data-id="${a.id}" data-name="${esc(norm(a.name + ' ' + (a.alias || '')))}" class="${passList && !a.present ? 'not-present' : ''}">
           <td class="lead">${esc(fullName(a))}${a.instrument ? ` <span class="badge musics">${INSTRUMENTS[a.instrument]}</span>` : ''}</td>
-          <td><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
+          <td class="st"><select data-act="status" aria-label="${t('Estat')}">${['', 'si', 'no'].map((s) => `<option value="${s}" ${(a.status || '') === s ? 'selected' : ''}>${s ? statusLabel(s) : '—'}</option>`).join('')}</select></td>
           ${cameCell(a)}
           ${event.escoleta ? `<td data-l="${t('Escoleta')}">${escValue(a.escoleta)}</td>` : ''}
           ${event.ask_companions ? `<td data-l="${t('Acompanyants')}" class="small">${a.companions.length ? `<strong>${a.companions.length}</strong> · ${esc(a.companions.join(', '))}` : ''}</td>` : ''}

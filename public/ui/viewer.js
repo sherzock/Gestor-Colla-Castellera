@@ -49,10 +49,8 @@ function posCell(p, byKey, ctx) {
   const a = byKey.get(p.key);
   const mine = a && a.person_id === me.id;
   let meta = '';
+  // Les mides de cadascú ja surten a la pestanya «Mides»: aquí només el nom (i la proposta, si n'hi ha).
   if (a?.proposed) meta = proposalMeta(a, p);
-  else if (ctx.admin && a && !a.guest_name && (a.shoulder_height_cm || a.height_cm)) {
-    meta = `<span class="meta">${a.shoulder_height_cm ? `esp. ${a.shoulder_height_cm}` : ''}${a.shoulder_height_cm && a.height_cm ? ' · ' : ''}${a.height_cm ? `${a.height_cm} cm` : ''}</span>`;
-  }
   return `<button class="pos g-${p.group} ${p.kind ? `k-${p.kind}` : ''} ${a ? '' : 'empty'} ${a?.proposed ? 'proposed' : ''} ${ctx.admin ? 'editable' : ''} ${mine ? 'mine' : ''}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(a)}">
     <span class="role">${roleHtml(p.role)}</span><span class="who">${a ? esc(assignedName(a)) : ctx.admin ? t('+ Afegeix') : t('Buit')}</span>${meta}</button>`;
 }
@@ -61,7 +59,7 @@ function posCell(p, byKey, ctx) {
 function histCell(p, ctx) {
   const list = ctx.hist.byPos.get(p.key) || [];
   return `<button class="pos hist g-${p.group}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(...list)}">
-    <span class="role">${esc(p.role)}</span>
+    <span class="role">${roleHtml(p.role)}</span>
     ${list.length ? list.slice(0, 3).map((h) => `<span class="h"><b>${esc(shortName(h))}</b><span>×${h.n}</span></span>`).join('') : '<span class="who">—</span>'}
     ${list.length > 3 ? `<span class="meta">${t('+{n} més', { n: list.length - 3 })}</span>` : ''}
   </button>`;
@@ -173,10 +171,10 @@ function measuresView(s, byKey) {
     const l = load.get(p.key);
     const w = a?.weight_kg;
     return `<button class="pos hist g-${p.group}" style="--c:${colorOf(p)}" data-key="${p.key}" data-names="${namesAttr(a)}">
-      <span class="role">${esc(p.role)}</span>
+      <span class="role">${roleHtml(p.role)}</span>
       <span class="who">${a ? esc(assignedName(a)) : '—'}</span>
-      ${a ? `<span class="h" title="${t('Espatlles')} · ${t('Pes')}"><span>${a.shoulder_height_cm ? `${a.shoulder_height_cm} cm` : '? cm'} · <span class="${heavy.has(p.key) ? 'over' : ''}">${w ? `${w} kg` : '? kg'}</span></span></span>` : ''}
-      ${l && (l.kg || l.partial) ? `<span class="h"><span>${t('porta {n} kg', { n: `${l.partial ? '≥ ' : ''}${l.kg}` })}${w && l.kg ? ` ×${(l.kg / w).toFixed(1)}` : ''}</span></span>` : ''}
+      ${a ? `<span class="h m" title="${t('Espatlles')} · ${t('Pes')}"><span>${a.shoulder_height_cm ? `${a.shoulder_height_cm} cm` : '? cm'}</span><span class="${heavy.has(p.key) ? 'over' : ''}">${w ? `${w} kg` : '? kg'}</span></span>` : ''}
+      ${l && (l.kg || l.partial) ? `<span class="h m load"><span>${t('porta {n} kg', { n: `${l.partial ? '≥ ' : ''}${l.kg}` })}</span>${w && l.kg ? `<span>×${(l.kg / w).toFixed(1)}</span>` : ''}</span>` : ''}
     </button>`;
   };
   const note = (row) => (gaps.has(row.level)

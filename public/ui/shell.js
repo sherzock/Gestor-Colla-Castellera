@@ -89,15 +89,18 @@ export function renderNav() {
   document.getElementById('brand-name').textContent = config.collaName;
   if (!me) return;
   const path = location.hash || '#/';
-  const link = (href, ic, label, match, dot = false) => `<a href="${href}" class="${match ? 'active' : ''}"${match ? ' aria-current="page"' : ''}>${icon[ic]}<span>${label}</span>${dot ? `<i class="nav-dot" aria-hidden="true"></i><span class="sr-only">${t('Hi ha missatges nous')}</span>` : ''}</a>`;
+  // «short»: el text que es veu al menú de sota en un mòbil estret (el lector de pantalla diu el sencer); amb «tight»,
+  // només als més estrets de tots.
+  const link = (href, ic, label, match, dot = false, short = null, tight = false) => `<a href="${href}" class="${match ? 'active' : ''}${tight ? ' tight' : ''}"${match ? ' aria-current="page"' : ''}${short ? ` aria-label="${esc(label)}"` : ''}>${icon[ic]}${short
+    ? `<span class="long">${label}</span><span class="short" aria-hidden="true">${short}</span>` : `<span>${label}</span>`}${dot ? `<i class="nav-dot" aria-hidden="true"></i><span class="sr-only">${t('Hi ha missatges nous')}</span>` : ''}</a>`;
   document.getElementById('nav').innerHTML = [
     link('#/', 'calendar', t('Sessions'), path === '#/' || path.startsWith('#/sessio') || path.startsWith('#/castell')),
     link('#/altaveu', 'megaphone', t('Altaveu'), path.startsWith('#/altaveu'), !isAdmin() && newsUnread()),
-    link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari')),
-    isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones')) : '',
+    link('#/calendari', 'month', t('Calendari'), path.startsWith('#/calendari'), false, t('Agenda'), true),
+    isAdmin() ? link('#/persones', 'users', t('Persones'), path.startsWith('#/persones'), false, t('Gent'), true) : '',
     can('castells') ? link('#/plantilles', 'pinya', t('Pinyes'), path.startsWith('#/plantill')) : '',
-    link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques')),
-    isAdmin() ? link('#/comptes', 'lock', can('admin') ? t('Comptes') : t('El meu compte'), path.startsWith('#/comptes')) : link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
+    link('#/estadistiques', 'chart', t('Estadístiques'), path.startsWith('#/estadistiques'), false, t('Xifres')),
+    isAdmin() ? link('#/comptes', 'lock', can('admin') ? t('Comptes') : t('El meu compte'), path.startsWith('#/comptes'), false, can('admin') ? null : t('Compte')) : link('#/perfil', 'user', t('Perfil'), path.startsWith('#/perfil')),
   ].join('');
   document.getElementById('nav').classList.toggle('many', document.querySelectorAll('#nav a').length > 6);
   document.body.classList.toggle('admin-mode', isAdmin());
