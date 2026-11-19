@@ -48,6 +48,13 @@ const ACTIONS = {
   'PUT /api/templates/:name': () => t('Ha desat una pinya de la colla'),
   'DELETE /api/templates/:name': () => t("Ha tornat una pinya a l'estàndard"),
   'DELETE /api/errors': () => t("Ha buidat la llista d'errors"),
+  'GET /api/backup': () => t('Ha baixat una còpia de seguretat'),
+  'GET /api/people/:id/export': () => t("Ha baixat les dades d'una persona"),
+  'GET /api/events/:id/attendance.csv': () => t("Ha baixat l'assistència d'una sessió"),
+  'GET /api/events/:id/attendance': () => t("Ha baixat l'assistència d'una sessió"),
+  'PUT /api/events/:id/payments': () => t("Ha marcat si s'han rebut uns quants pagaments"),
+  'PUT /api/feedback/:id': () => t('Ha marcat un suggeriment'),
+  'DELETE /api/feedback/:id': () => t('Ha esborrat un suggeriment'),
 };
 export const actionLabel = (action) => ACTIONS[action]?.() ?? action;
 

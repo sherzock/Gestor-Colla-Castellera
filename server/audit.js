@@ -12,6 +12,9 @@ import { minorsWithoutConsent } from './sql.js';
 // calcula abans del canvi: així també es veu què s'ha esborrat. Es guarda un any.
 export const AUDIT_SKIP = new Set(['/api/logout', '/api/mode', '/api/push/subscribe', '/api/push/unsubscribe', '/api/push/inbox', '/api/client-errors',
   '/api/announcements/images', '/api/directory', '/api/identify', '/api/login', '/api/me/2fa/setup']);
+// Lectures que treuen dades personals de l'app (còpia sencera, dades d'una persona, llistes d'assistència): també
+// s'apunten, perquè es pugui saber qui se les ha emportat.
+export const AUDIT_READS = new Set(['/api/backup', '/api/people/:id/export', '/api/events/:id/attendance.csv', '/api/events/:id/attendance']);
 export const AUDIT_DAYS = 365;
 export function audit(account, action, target = null) {
   try {

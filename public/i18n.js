@@ -5,6 +5,12 @@
 export const LANGS = { ca: 'Català', es: 'Castellano', en: 'English' };
 
 const es = {
+  "Ha baixat una còpia de seguretat": "Ha descargado una copia de seguridad",
+  "Ha baixat les dades d'una persona": "Ha descargado los datos de una persona",
+  "Ha baixat l'assistència d'una sessió": "Ha descargado la asistencia de una sesión",
+  "Ha marcat si s'han rebut uns quants pagaments": "Ha marcado si se han recibido varios pagos",
+  "Ha marcat un suggeriment": "Ha marcado una sugerencia",
+  "Ha esborrat un suggeriment": "Ha borrado una sugerencia",
   "Restauració de prova de la còpia del {date}: s'obre bé i hi és tot.": 'Restauración de prueba de la copia del {date}: se abre bien y está todo.',
   'La còpia del {date} no ha passat la restauració de prova: {error}': 'La copia del {date} no ha pasado la restauración de prueba: {error}',
   "Suggeriments i errors": "Sugerencias y errores",
@@ -1126,6 +1132,12 @@ const es = {
 };
 
 const en = {
+  "Ha baixat una còpia de seguretat": "Downloaded a backup",
+  "Ha baixat les dades d'una persona": "Downloaded a person's data",
+  "Ha baixat l'assistència d'una sessió": "Downloaded a session's attendance",
+  "Ha marcat si s'han rebut uns quants pagaments": "Marked several payments as received or not",
+  "Ha marcat un suggeriment": "Marked a suggestion",
+  "Ha esborrat un suggeriment": "Deleted a suggestion",
   "Restauració de prova de la còpia del {date}: s'obre bé i hi és tot.": 'Test restore of the {date} backup: it opens fine and everything is there.',
   'La còpia del {date} no ha passat la restauració de prova: {error}': 'The {date} backup failed the test restore: {error}',
   "Suggeriments i errors": "Suggestions and bugs",

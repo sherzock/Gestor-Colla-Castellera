@@ -230,3 +230,20 @@ test('esborrar una persona no deixa res que la identifiqui, però els castells i
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });
+
+test("baixar dades personals (còpia, dades d'una persona, assistència) queda apuntat al registre", async () => {
+  const before = (await s.admin('GET', '/audit')).d;
+  const count = (list, action) => (Array.isArray(list) ? list : list.entries || list.rows || []).filter((e) => e.action === action).length;
+  const ev = (await s.admin('GET', '/events')).d[0];
+  const p = (await s.admin('GET', '/people')).d.people[0];
+  assert.equal((await s.admin('GET', '/backup')).s, 200);
+  assert.equal((await s.admin('GET', `/people/${p.id}/export`)).s, 200);
+  assert.equal((await s.admin('GET', `/events/${ev.id}/attendance.csv`)).s, 200);
+  const after = (await s.admin('GET', '/audit')).d;
+  for (const action of ['GET /api/backup', 'GET /api/people/:id/export', 'GET /api/events/:id/attendance.csv']) {
+    assert.equal(count(after, action), count(before, action) + 1, action);
+  }
+  // Mirar pantalles normals no s'apunta.
+  await s.admin('GET', `/events/${ev.id}`);
+  assert.equal(count((await s.admin('GET', '/audit')).d, 'GET /api/events/:id'), 0);
+});

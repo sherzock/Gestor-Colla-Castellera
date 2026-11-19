@@ -31,7 +31,7 @@ import { COLLA_NAME, PORT, PUBLIC_DIR } from './server/config.js';
 import { HttpError, NEWS_IMAGE_BODY, can, fail } from './server/util.js';
 import { currentUser, routes } from './server/router.js';
 import { logError } from './server/errors.js';
-import { AUDIT_SKIP, PEOPLE_ROUTE, audit, auditTarget } from './server/audit.js';
+import { AUDIT_READS, AUDIT_SKIP, PEOPLE_ROUTE, audit, auditTarget } from './server/audit.js';
 import { NO_DATA_CHANGE, dataChanged, encodedMemo, warmCaches } from './server/cache.js';
 
 // ---------- Servidor HTTP ----------
@@ -160,7 +160,7 @@ const server = http.createServer({ headersTimeout: 15_000, requestTimeout: 30_00
     // Només les imatges de l'altaveu passen d'aquí, i la ruta ja ha comprovat qui les envia.
     const body = req.method === 'GET' ? {} : await readBody(req, url.pathname === '/api/announcements/images' ? NEWS_IMAGE_BODY : BODY_MAX);
     // Abans del canvi: si s'esborra, després ja no se'n sabria el nom.
-    const audited = user?.mode === 'admin' && req.method !== 'GET' && !AUDIT_SKIP.has(match.pattern);
+    const audited = user?.mode === 'admin' && (req.method === 'GET' ? AUDIT_READS.has(match.pattern) : !AUDIT_SKIP.has(match.pattern));
     const target = audited ? auditTarget(match.pattern, params) : null;
     let result;
     try { result = await match.handler({ req, res, params, body, user, query: url.searchParams }); }

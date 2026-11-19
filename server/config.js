@@ -33,3 +33,7 @@ export const purgeTokens = () => {
 };
 purgeTokens();
 setInterval(purgeTokens, 6 * 3600 * 1000).unref();
+
+// Sense codi de la colla, qualsevol que tingui l'adreça veu la llista de noms i pot entrar com a membre.
+if (!DEMO && !COLLA_CODE) console.warn("\n  ATENCIÓ: no hi ha COLLA_CODE. Qualsevol amb l'adreça pot veure la llista de noms i entrar com a membre.\n");
+else if (!DEMO && COLLA_CODE.length < 6) console.warn('\n  ATENCIÓ: el COLLA_CODE és molt curt (menys de 6 caràcters): és fàcil d\'endevinar.\n');

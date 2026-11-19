@@ -37,6 +37,7 @@ before(async () => {
   await A('PUT', `/castells/${s.pastCastell.id}/positions/t1-1`, { person_id: ids.person });
   await A('PUT', `/castells/${s.pastCastell.id}`, { tech_notes: X, result: 'intent', fail_level: 3, fail_cause: 'obert' });
   await A('POST', '/announcements', { title: X, body: `Mira http://example.com/${X} i ${X}`, notify: false });
+  await s.member('POST', '/feedback', { kind: 'error', message: `Suggeriment ${X}`, place: `#/x${X}` });
   await A('PUT', '/me', { name: `Junta ${X}`.slice(0, 60) });
   // Una plantilla de pinya pròpia amb un nom de posició amb codi (els castells 3d7 la faran servir).
   const tpl = await A('PUT', '/templates/3d7', { layers: { pinya: [{ key: 'pxss', role: X, kind: 'altre', x: 0, y: 240, w: 60, h: 30, rot: 0 }] } });

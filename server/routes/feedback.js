@@ -24,6 +24,11 @@ route('POST', '/api/feedback', ({ body, req }) => {
   return { ok: true };
 });
 
+// Els suggeriments de fa més d'un any s'esborren sols (poden portar algun nom, i ja no serveixen).
+export function pruneFeedback() { db.prepare("DELETE FROM feedback WHERE created_at < datetime('now', '-365 days')").run(); }
+pruneFeedback();
+setInterval(pruneFeedback, 24 * 60 * 60 * 1000).unref();
+
 route('GET', '/api/feedback', () => db.prepare('SELECT * FROM feedback ORDER BY done, id DESC').all(), 'admin');
 
 route('PUT', '/api/feedback/:id', ({ params, body }) => {

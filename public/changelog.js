@@ -12,6 +12,7 @@ export const CHANGELOG = [
       "Llistes d'assistència llargues més manejables: filtres (vénen, no, sense resposta, han vingut…) i les llistes llargues (assistència, pagaments, persones, estadístiques…) en mostren 20 i un botó per veure'n més; els membres veuen un tros de qui hi va i la resta en una finestra amb cercador.",
       "Cada acompanyant ha de portar el seu nom, perquè a la pinya se'l pugui reconèixer.",
       "Suggeriments i errors: des d'«Ajustos» qualsevol persona pot enviar una idea o dir que alguna cosa no va, de manera anònima, i l'administració ho veu a «Comptes».",
+      "Cada còpia de seguretat passa sola una restauració de prova, i el registre de canvis també apunta qui baixa còpies, dades d'una persona o llistes d'assistència.",
     ],
     es: [
       'Pagos en las sesiones: precio por persona, por acompañante y en las respuestas; quien viene ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, avisa cuando ha pagado y la junta lo marca como recibido.',
@@ -22,6 +23,7 @@ export const CHANGELOG = [
       'Listas de asistencia largas más manejables: filtros (vienen, no, sin respuesta, han venido…) y las listas largas (asistencia, pagos, personas, estadísticas…) muestran 20 y un botón para ver más; los miembros ven una parte de quién va y el resto en una ventana con buscador.',
       'Cada acompañante tiene que llevar su nombre, para que en la pinya se le pueda reconocer.',
       'Sugerencias y errores: desde «Ajustes» cualquier persona puede enviar una idea o decir que algo no funciona, de forma anónima, y la administración lo ve en «Cuentas».',
+      'Cada copia de seguridad pasa sola una restauración de prueba, y el registro de cambios también apunta quién descarga copias, datos de una persona o listas de asistencia.',
     ],
     en: [
       'Payments in sessions: price per person, per companion and per answer; whoever goes sees how much to pay, the IBAN or Bizum and the reference, says when they have paid and the board marks it as received.',
@@ -32,6 +34,7 @@ export const CHANGELOG = [
       'Long attendance lists are easier to handle: filters (coming, not coming, no answer, came…) and long lists (attendance, payments, people, statistics…) show 20 with a button to see more; members see part of who is going and the rest in a window with a search box.',
       'Each companion needs a name, so they can be recognised in the pinya.',
       'Suggestions and bugs: from “Settings” anyone can send an idea or report that something is wrong, anonymously, and the admins see it in “Accounts”.',
+      'Every backup goes through a test restore by itself, and the activity log also records who downloads backups, a person\'s data or attendance lists.',
     ],
   },
   {
