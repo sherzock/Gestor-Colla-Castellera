@@ -341,9 +341,9 @@ export async function pageEvent(id) {
             ${payment ? `<p class="small rsvp-total" id="rsvp-total" aria-live="polite"></p>` : ''}
           </div>
           <label class="field" style="margin-top:14px">${t('Comentari (opcional)')}<input name="comment" maxlength="300" value="${esc(mine?.comment)}" placeholder="${t('Arribaré tard, porto la canalla…')}"></label>
-          ${event.rsvp_open ? `<div class="form-actions"><button class="btn primary" ${status || escoleta !== null ? '' : 'disabled'} id="rsvp-save">${t('Desa')}</button></div>` : ''}
+          ${event.rsvp_open ? `<p class="small save-state" id="rsvp-state" aria-live="polite"></p>` : ''}
         </form>`}
-        ${admin ? '' : payCard(event, mine, payment)}
+        ${admin ? '' : `<div id="pay-slot" style="display:contents">${payCard(event, mine, payment)}</div>`}
         ${admin ? '' : rolesCard}
         ${isMusics ? '' : `<div class="card">
           <div class="card-head"><h2>${t('Castells')}</h2>
@@ -376,28 +376,96 @@ export async function pageEvent(id) {
   showTotal();
   form.addEventListener('input', showTotal);
   form.addEventListener('change', showTotal);
+  // Les respostes es desen soles: «Vinc», «No» i l'escoleta en tocar-los; la resta en canviar-la o quan es deixa
+  // d'escriure un moment. No cal cap botó de desar (i ningú se n'oblida).
+  const state = qs('#rsvp-state');
+  // Les preguntes obligatòries s'han de respondre per dir que vens (el servidor no ho desa sense).
+  const missing = () => (status === 'si' ? fields.filter((f) => f.required && f.kind !== 'bool' && !String(readExtra(form, fields)[f.id] ?? '').trim()) : []);
+  const showState = (kind) => {
+    const need = missing();
+    state.className = `small save-state ${kind === 'error' || need.length ? 'warn-text' : ''}`;
+    state.innerHTML = kind === 'saving' ? t('Desant…')
+      : kind === 'error' ? t("No s'ha pogut desar. Torna-ho a provar.")
+        : need.length ? t('Respon «{what}» perquè quedi desat que vens.', { what: esc(need.map((f) => f.label).join('», «')) })
+          : !status && escoleta === null ? t('Tria si vens: es desa sol, no cal cap botó.')
+            : `${icon.check}${t('Desat')}`;
+  };
+  showState();
+  let saving = null, again = false, timer = null;
+  const body = () => {
+    const b = { comment: form.elements.comment.value };
+    if (status) { b.status = status; b.extra = status === 'no' ? {} : readExtra(form, fields); }
+    if (event.ask_companions && status === 'si') b.companions = readCompanions(form);
+    if (event.escoleta) b.escoleta = escoleta;
+    return b;
+  };
+  // Un sol desat alhora; si mentrestant hi ha canvis, es torna a desar en acabar.
+  const save = async () => {
+    clearTimeout(timer);
+    if (!status && escoleta === null) return true;
+    if (missing().length) { showState(); return 'missing'; }
+    if (saving) { again = true; return saving; }
+    showState('saving');
+    saving = (async () => {
+      let ok;
+      do {
+        again = false;
+        try { await api('PUT', `/events/${event.id}/attendance`, body()); ok = true; } catch (err) {
+          ok = false;
+          toast(err.message, true);
+          // El servidor no ho accepta (p. ex. un pagament ja rebut): es torna a ensenyar el que hi ha desat. Si és
+          // que no hi ha connexió, el que hi ha escrit es queda a la pantalla per tornar-ho a provar.
+          if (err.status) render({ keepScroll: true });
+        }
+      } while (ok && again);
+      saving = null;
+      return ok;
+    })();
+    const ok = await saving;
+    if (!ok) { showState('error'); return false; }
+    showState();
+    return true;
+  };
+  // Després de canviar una resposta, només s'actualitza el pagament (perquè no es perdi on s'estava escrivint).
+  const refreshPay = async () => {
+    const slot = qs('#pay-slot');
+    if (!slot || !payment) return;
+    const d = await api('GET', `/events/${event.id}`).catch(() => null);
+    if (!d) return;
+    slot.innerHTML = payCard(d.event, d.mine, d.payment);
+    bindPayCard(event);
+  };
+  // Si no s'ha pogut desar, el que hi ha escrit es queda a la pantalla (i es pot tornar a provar).
+  const saveAndRefresh = async () => { if (await save() === true) refreshPay(); };
+  // En triar «Vinc», «No» o l'escoleta es torna a dibuixar tota la sessió (comptes, pagament…), i si no s'ha pogut
+  // desar, torna a ensenyar el que hi ha desat.
+  const choose = async () => { if (await save() !== 'missing') render({ keepScroll: true }); };
   qsa('#rsvp-main button', form).forEach((b) => (b.onclick = () => {
+    if (status === b.dataset.v) return;
     status = b.dataset.v;
     qsa('#rsvp-main button', form).forEach((x) => x.classList.toggle('on', x === b));
     qs('#extras').classList.toggle('hidden', status === 'no');
-    qs('#rsvp-save').disabled = false;
+    choose();
   }));
   qsa('#rsvp-esc button', form).forEach((b) => (b.onclick = () => {
+    if (escoleta === (b.dataset.v === 'si')) return;
     escoleta = b.dataset.v === 'si';
     qsa('#rsvp-esc button', form).forEach((x) => x.classList.toggle('on', x === b));
-    qs('#rsvp-save').disabled = false;
+    choose();
   }));
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const body = { comment: form.elements.comment.value };
-    if (status) { body.status = status; body.extra = status === 'no' ? {} : readExtra(form, fields); }
-    if (event.ask_companions && status === 'si') body.companions = readCompanions(form);
-    if (event.escoleta) body.escoleta = escoleta;
-    if (await attempt(() => api('PUT', `/events/${event.id}/attendance`, body))) {
-      toast(t('Assistència desada'));
-      render({ keepScroll: true });
-    }
-  };
+  // Caselles i llistes: de seguida. Text i números: quan es deixa d'escriure un moment o se surt de la casella.
+  form.addEventListener('change', () => saveAndRefresh());
+  form.addEventListener('input', (e) => {
+    if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') return;
+    clearTimeout(timer);
+    state.textContent = '';
+    timer = setTimeout(saveAndRefresh, 900);
+  });
+  form.onsubmit = (e) => { e.preventDefault(); saveAndRefresh(); };
+  // Si se'n va de la pàgina amb alguna cosa escrita a mitges, es desa igualment.
+  const flush = () => { if (timer) { clearTimeout(timer); timer = null; save(); } };
+  window.addEventListener('hashchange', flush, { once: true });
+  window.addEventListener('pagehide', flush, { once: true });
   }
 
   bindPayCard(event);

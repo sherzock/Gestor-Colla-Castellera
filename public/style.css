@@ -360,7 +360,7 @@ td select { min-height: 32px; padding: 4px 8px; width: auto; }
 .login .brand-mark { width: 48px; height: 48px; border-radius: 12px; display: block; margin: 0 auto; }
 .login .brand-mark::after { inset: 6px; }
 /* El nom de l'app, discret, a sota de les pantalles d'entrada (el protagonista és el nom de la colla). */
-.made-with { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .8rem; color: var(--muted); }
+.made-with { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .8rem; color: var(--ink-2); }
 .made-with .brand-mark { width: 16px; height: 16px; border-radius: 4px; margin: 0; }
 .made-with .brand-mark::after { inset: 1px; }
 .error { color: var(--bad); font-size: .9rem; min-height: 1.2em; }
@@ -1029,3 +1029,6 @@ h1.castell-title { margin: 0; line-height: 1.1; }
   margin-bottom: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 14px rgb(0 0 0 / .12); }
 .pay-bulk[hidden] { display: none; }
 .pay-bulk #pay-bulk-n { font-weight: 600; margin-right: auto; }
+/* Resposta a una sessió: es desa sola i ho diu aquí. */
+.save-state { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-height: 1.4em; margin: 12px 0 0; color: var(--ink-2); }
+.save-state svg { width: 15px; height: 15px; color: var(--ok); }

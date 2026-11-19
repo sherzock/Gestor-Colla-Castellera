@@ -5,7 +5,7 @@
 const ca = [
   ['respondre', 'all', 'Dir si vens', `
     <p>A l'inici surten les sessions que vénen. Toca <strong>Vinc</strong> o <strong>No vinc</strong> a cada una; ho pots canviar fins a la data límit (si n'hi ha) o fins al mateix dia.</p>
-    <p>Si una sessió té preguntes (per exemple, si vens a sopar), <em>Vinc</em> t'obre la sessió per respondre-les. Els castells on surts es veuen a la sessió i al teu perfil.</p>
+    <p>Si una sessió té preguntes (per exemple, si vens a sopar), <em>Vinc</em> t'obre la sessió per respondre-les. Tot es desa sol mentre respons: no cal tocar cap botó. Els castells on surts es veuen a la sessió i al teu perfil.</p>
     <p>Si la sessió es paga (un viatge, un dinar…), en dir que vens hi veuràs quant et toca, l'IBAN o el Bizum de la colla i el concepte amb el teu nom, amb botons per copiar-ho. Quan hagis pagat, toca <em>Ja he pagat</em>; la junta ho comprovarà.</p>`],
   ['mobil', 'all', "Al mòbil: instal·lar l'app i rebre avisos", `
     <p><strong>Instal·lar-la</strong>: a l'iPhone, obre l'app amb Safari, toca <em>Compartir</em> i <em>Afegeix a la pantalla d'inici</em>. A Android, el menú del navegador ofereix <em>Instal·la l'aplicació</em>. Així s'obre com una app i es pot consultar sense connexió.</p>
@@ -50,7 +50,7 @@ const ca = [
 const es = [
   ['respondre', 'all', 'Decir si vienes', `
     <p>Al inicio salen las próximas sesiones. Toca <strong>Voy</strong> o <strong>No voy</strong> en cada una; puedes cambiarlo hasta la fecha límite (si la hay) o hasta el mismo día.</p>
-    <p>Si una sesión tiene preguntas (por ejemplo, si vienes a cenar), <em>Voy</em> te abre la sesión para responderlas. Los castells en los que sales se ven en la sesión y en tu perfil.</p>
+    <p>Si una sesión tiene preguntas (por ejemplo, si vienes a cenar), <em>Voy</em> te abre la sesión para responderlas. Todo se guarda solo mientras respondes: no hace falta tocar ningún botón. Los castells en los que sales se ven en la sesión y en tu perfil.</p>
     <p>Si la sesión se paga (un viaje, una comida…), al decir que vienes verás cuánto te toca, el IBAN o el Bizum de la colla y el concepto con tu nombre, con botones para copiarlo. Cuando hayas pagado, toca <em>Ya he pagado</em>; la junta lo comprobará.</p>`],
   ['mobil', 'all', 'En el móvil: instalar la app y recibir avisos', `
     <p><strong>Instalarla</strong>: en el iPhone, abre la app con Safari, toca <em>Compartir</em> y <em>Añadir a pantalla de inicio</em>. En Android, el menú del navegador ofrece <em>Instalar aplicación</em>. Así se abre como una app y se puede consultar sin conexión.</p>
@@ -95,7 +95,7 @@ const es = [
 const en = [
   ['respondre', 'all', "Saying whether you're coming", `
     <p>The home page lists upcoming sessions. Tap <strong>Going</strong> or <strong>Not going</strong> on each; you can change it until the deadline (if there is one) or until the day itself.</p>
-    <p>If a session has questions (for example, whether you'll stay for dinner), <em>Going</em> opens the session so you can answer them. The castells you are in show up in the session and on your profile.</p>
+    <p>If a session has questions (for example, whether you'll stay for dinner), <em>Going</em> opens the session so you can answer them. Everything saves by itself as you answer: there is no button to press. The castells you are in show up in the session and on your profile.</p>
     <p>If the session has a cost (a trip, a lunch…), when you say you're going you'll see how much you owe, the colla's IBAN or Bizum and a reference with your name, with buttons to copy them. Once you've paid, tap <em>I've paid</em>; the board will check it.</p>`],
   ['mobil', 'all', 'On your phone: installing the app and notifications', `
     <p><strong>Installing</strong>: on iPhone, open the app in Safari, tap <em>Share</em> and <em>Add to Home Screen</em>. On Android, the browser menu offers <em>Install app</em>. It then opens like an app and works offline.</p>

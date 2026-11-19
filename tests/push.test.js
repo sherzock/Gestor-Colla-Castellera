@@ -152,6 +152,8 @@ test('qui es dona de baixa de la colla deixa de rebre els missatges al mòbil', 
   await m('POST', '/identify', { person_id: id });
   assert.equal((await m('POST', '/push/subscribe', { endpoint: endpoint('baixa') })).s, 200);
   await s.admin('PUT', `/people/${id}`, { active: false });
+  // Mentre era a la colla li pot haver arribat algun recordatori: s'espera que acabi abans de comptar.
+  await wait(400);
   hits = [];
   await s.admin('POST', '/announcements', { title: 'Només per a la colla' });
   await until(() => hits.length >= 1);
