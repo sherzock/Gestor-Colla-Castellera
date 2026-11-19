@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, transaction } from '../../db.js';
 import { translate } from '../../public/i18n.js';
-import { LIMITS, NEWS_IMAGES_PER_MESSAGE, NEWS_IMAGE_BYTES, atMost, bool, fail, getEvent, insertRow, int, nowUtc, seesHidden, str, updateRow } from '../util.js';
+import { LIMITS, NEWS_IMAGES_PER_MESSAGE, NEWS_IMAGE_BYTES, NEWS_THUMB_BYTES, atMost, bool, fail, getEvent, insertRow, int, nowUtc, seesHidden, str, updateRow } from '../util.js';
 import { route } from '../router.js';
 import { notify } from '../notifications.js';
 
@@ -51,20 +51,36 @@ route('POST', '/api/announcements/images', ({ body }) => {
   // Les que es van pujar però mai es van arribar a publicar.
   db.prepare("DELETE FROM announcement_images WHERE announcement_id IS NULL AND created_at < datetime('now', '-1 day')").run();
   atMost(LIMITS.newsImages, "Com a molt {n} imatges: esborra algun missatge antic", 'SELECT COUNT(*) AS n FROM announcement_images');
-  if (typeof body.data !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(body.data)) fail(400, 'Imatge no vàlida');
-  const data = Buffer.from(body.data, 'base64');
-  if (data.length > NEWS_IMAGE_BYTES) fail(413, 'Petició massa gran');
-  const mime = imageMime(data) || fail(400, 'Imatge no vàlida');
+  const decode = (b64, max) => {
+    if (typeof b64 !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) fail(400, 'Imatge no vàlida');
+    const data = Buffer.from(b64, 'base64');
+    if (data.length > max) fail(413, 'Petició massa gran');
+    imageMime(data) || fail(400, 'Imatge no vàlida');
+    return data;
+  };
+  const data = decode(body.data, NEWS_IMAGE_BYTES);
+  // La miniatura la fa el navegador en pujar-la; és opcional (un GIF petit no en porta, perquè no perdi el moviment).
+  const thumb = body.thumb === undefined || body.thumb === null ? null : decode(body.thumb, NEWS_THUMB_BYTES);
   // A l'atzar: el navegador les guarda molt de temps, i una altra imatge mai no pot tornar a tenir la mateixa adreça.
   const id = crypto.randomBytes(12).toString('hex');
-  db.prepare('INSERT INTO announcement_images (id, mime, data) VALUES (?, ?, ?)').run(id, mime, data);
+  db.prepare('INSERT INTO announcement_images (id, mime, data, thumb) VALUES (?, ?, ?, ?)').run(id, imageMime(data), data, thumb);
   return { id };
 }, 'news');
 
+const sendImage = (res, mime, data) => {
+  res.writeHead(200, { 'Content-Type': mime, 'Content-Length': data.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
+  res.end(data);
+};
 route('GET', '/api/announcements/images/:id', ({ params, res }) => {
   const image = db.prepare('SELECT mime, data FROM announcement_images WHERE id = ?').get(params.id) || fail(404, 'Imatge no trobada');
-  res.writeHead(200, { 'Content-Type': image.mime, 'Content-Length': image.data.length, 'Cache-Control': 'private, max-age=31536000, immutable' });
-  res.end(image.data);
+  sendImage(res, image.mime, image.data);
+  return undefined;
+});
+// La miniatura, o la imatge sencera si no en té (les pujades abans que n'hi hagués).
+route('GET', '/api/announcements/images/:id/thumb', ({ params, res }) => {
+  const image = db.prepare('SELECT mime, coalesce(thumb, data) AS data FROM announcement_images WHERE id = ?').get(params.id) || fail(404, 'Imatge no trobada');
+  const b = image.data;
+  sendImage(res, imageMime(Buffer.from(b.buffer, b.byteOffset, b.byteLength)) || image.mime, b);
   return undefined;
 });
 

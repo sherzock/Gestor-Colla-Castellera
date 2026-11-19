@@ -81,8 +81,10 @@ test('recordatori: a qui no ha respost, un sol cop, i no a qui ja ha dit que sí
   const later = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
   const ev = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Assaig de demà', date: tomorrow })).d;
   const far = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Assaig llunyà', date: later })).d;
-  const answered = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Ja respost', date: tomorrow })).d;
+  // Primer lluny (sense recordatori) i, un cop ha respost, per a demà: si no, el recordatori podria arribar entremig.
+  const answered = (await s.admin('POST', '/events', { hidden: false, type: 'assaig', title: 'Ja respost', date: later })).d;
   await s.member('PUT', `/events/${answered.id}/attendance`, { status: 'si' });
+  assert.equal((await s.admin('PUT', `/events/${answered.id}`, { ...answered, date: tomorrow })).s, 200);
   // Amb data límit d'aquí a poc: també toca recordar-ho, encara que la sessió sigui més endavant.
   const soon = new Date(Date.now() + 3 * 3600000);
   const pad = (n) => String(n).padStart(2, '0');

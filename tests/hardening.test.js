@@ -215,3 +215,28 @@ test('el registre del servidor no porta sessions, contrasenyes ni errors interns
 test('el servidor no ha fet servir cap valor que Node 22 no accepti', () => {
   assert.ok(!server.log().includes('NODE22'));
 });
+
+test('fitxers de l\'app: comprimits (Brotli o gzip) i el service worker porta la versió de tots els fitxers', async () => {
+  const http = await import('node:http');
+  const get = (p, enc) => new Promise((resolve, reject) => http.get(server.url + p, { headers: enc ? { 'accept-encoding': enc } : {} }, (res) => {
+    const chunks = [];
+    res.on('data', (c) => chunks.push(c));
+    res.on('end', () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }));
+  }).on('error', reject));
+  const zlib = await import('node:zlib');
+  const plain = await get('/i18n.js');
+  assert.equal(plain.headers['content-encoding'], undefined);
+  const br = await get('/i18n.js', 'gzip, deflate, br');
+  assert.equal(br.headers['content-encoding'], 'br');
+  assert.ok(br.body.length < plain.body.length / 3, 'ocupa molt menys');
+  assert.deepEqual(zlib.brotliDecompressSync(br.body), plain.body);
+  const gz = await get('/i18n.js', 'gzip');
+  assert.equal(gz.headers['content-encoding'], 'gzip');
+  assert.deepEqual(zlib.gunzipSync(gz.body), plain.body);
+  assert.match(br.headers.vary, /Accept-Encoding/);
+
+  const sw = (await get('/sw.js')).body.toString();
+  const version = sw.match(/^const VERSION = '([0-9a-f]{16})';/m)?.[1];
+  assert.ok(version, 'el servidor hi posa la versió');
+  assert.equal((await get('/sw.js')).headers.etag, `"sw-${version}"`);
+});

@@ -12,11 +12,14 @@ const newsDate = (at) => new Date(`${at.replace(' ', 'T')}Z`);
 const richText = (text) => esc(text || '').replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
 
 const imageUrl = (id) => `/api/announcements/images/${encodeURIComponent(id)}`;
-// Els mateixos límits que el servidor.
+const thumbUrl = (id) => `${imageUrl(id)}/thumb`;
 const MAX_MESSAGES = 50;
 const MAX_IMAGES = 4;
 const MAX_SIDE = 1280;
 const MAX_BYTES = 900 * 1024;
+// La miniatura de la llista: prou gran per a una pantalla de mòbil, però unes deu vegades més petita.
+const THUMB_SIDE = 720;
+const THUMB_BYTES = 180 * 1024;
 const EMOJIS = ['😀', '😂', '😉', '😍', '🥳', '🤔', '😢', '🙏', '👏', '🙌', '💪', '👍', '👎', '❤️', '🔥', '🎉', '🏆', '📢', '📅', '⏰', '📍', '⚠️', '❗', '✅', '❌', '🚌', '🍽️', '🍻', '🎂', '📸', '🎶', '🥁', '☀️', '🌧️', '👶', '🏰'];
 
 const readAsDataUrl = (blob) => new Promise((resolve, reject) => {
@@ -25,27 +28,48 @@ const readAsDataUrl = (blob) => new Promise((resolve, reject) => {
   r.onerror = reject;
   r.readAsDataURL(blob);
 });
-// Abans de pujar-la, la foto es redueix i es torna a dibuixar: ocupa molt menys i ja no porta les dades de la càmera
-// (on es va fer, per exemple). Un GIF petit es deixa tal com és, perquè no perdi el moviment.
-async function prepareImage(file) {
-  const original = await readAsDataUrl(file);
-  if (file.type === 'image/gif' && file.size <= MAX_BYTES) return original;
-  const img = new Image();
-  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = original; });
-  const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+// Dibuixa la imatge com a molt de «side» píxels pel costat més llarg i la comprimeix fins que ocupa menys de
+// «maxBytes». WebP si el navegador el sap fer (ocupa un terç menys), si no JPEG. Sense transparència: el que era
+// transparent queda blanc, no negre.
+async function encode(img, side, maxBytes) {
+  const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(img.naturalWidth * scale);
-  canvas.height = Math.round(img.naturalHeight * scale);
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
   const ctx = canvas.getContext('2d');
-  // El JPEG no té transparència: el que era transparent queda blanc, no negre.
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  for (const quality of [0.82, 0.65, 0.45]) {
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-    if (blob && (blob.size <= MAX_BYTES || quality === 0.45)) return readAsDataUrl(blob);
+  const toBlob = (type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+  for (const quality of [0.8, 0.65, 0.5]) {
+    let blob = await toBlob('image/webp', quality);
+    // Els navegadors que no fan WebP tornen un PNG.
+    if (blob?.type !== 'image/webp') blob = await toBlob('image/jpeg', quality);
+    if (blob && (blob.size <= maxBytes || quality === 0.5)) return readAsDataUrl(blob);
   }
   throw new Error('no image');
+}
+// Abans de pujar-la, la foto es redueix i es torna a dibuixar: ocupa molt menys i ja no porta les dades de la càmera
+// (on es va fer, per exemple). També se'n fa la miniatura de la llista. Un GIF petit es deixa tal com és, perquè no
+// perdi el moviment (i llavors la llista mostra el GIF sencer).
+async function prepareImage(file) {
+  const original = await readAsDataUrl(file);
+  if (file.type === 'image/gif' && file.size <= MAX_BYTES) return { data: original };
+  const img = new Image();
+  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = original; });
+  return { data: await encode(img, MAX_SIDE, MAX_BYTES), thumb: await encode(img, THUMB_SIDE, THUMB_BYTES) };
+}
+const base64 = (dataUrl) => dataUrl.slice(dataUrl.indexOf(',') + 1);
+
+// El dispositiu guarda les imatges per no tornar-les a baixar; les dels missatges que ja no hi són, se n'esborren.
+async function forgetOldImages(list) {
+  const keep = new Set(list.flatMap((a) => a.images || []));
+  const cache = await window.caches?.open('colla-dades').catch(() => null);
+  if (!cache) return;
+  for (const req of await cache.keys()) {
+    const id = new URL(req.url).pathname.match(/^\/api\/announcements\/images\/([0-9a-f]+)/)?.[1];
+    if (id && !keep.has(id)) cache.delete(req);
+  }
 }
 
 export async function pageNews() {
@@ -69,11 +93,17 @@ export async function pageNews() {
         ${admin ? `<div class="actions"><button class="btn sm" data-edit-news="${a.id}">${t('Edita')}</button><button class="btn sm danger" data-del-news="${a.id}">${t('Esborra')}</button></div>` : ''}
       </div>
       ${a.body ? `<div class="news-body">${richText(a.body)}</div>` : ''}
-      ${a.images?.length ? `<div class="news-images ${a.images.length === 1 ? 'one' : ''}">${a.images.map((id) => `<button type="button" data-photo="${esc(id)}" aria-label="${t('Amplia la imatge')}"><img src="${imageUrl(id)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+      ${a.images?.length ? `<div class="news-images ${a.images.length === 1 ? 'one' : ''}">${a.images.map((id) => `<button type="button" data-photo="${esc(id)}" aria-label="${t('Amplia la imatge')}"><img src="${thumbUrl(id)}" alt="" loading="lazy" decoding="async"></button>`).join('')}</div>` : ''}
       ${a.event ? `<div class="news-event"><a class="btn primary" href="#/sessio/${a.event.id}">${icon.calendar}${t('Ves a la sessió')}</a>
         <span class="small muted">${esc(a.event.title)} · ${esc(fmt(a.event.date, { weekday: 'short', day: 'numeric', month: 'short' }))}${admin && a.event.hidden ? ` · ${t('oculta als membres')}` : ''}</span></div>` : ''}
     </article>`).join('') || `<div class="empty">${icon.megaphone}<p>${t('Encara no hi ha cap missatge.')}</p></div>`}</div>`;
-  qsa('[data-photo]').forEach((b) => (b.onclick = () => openModal(`${modalHead(t('Imatge'))}<img class="news-photo" src="${imageUrl(b.dataset.photo)}" alt="">`)));
+  forgetOldImages(list).catch(() => {});
+  // En ampliar-la es veu primer la miniatura (que ja hi és) i, quan arriba, la imatge sencera.
+  qsa('[data-photo]').forEach((b) => (b.onclick = () => openModal(`${modalHead(t('Imatge'))}<img class="news-photo" src="${thumbUrl(b.dataset.photo)}" alt="">`, (m) => {
+    const full = new Image();
+    full.src = imageUrl(b.dataset.photo);
+    full.decode().then(() => { const img = qs('.news-photo', m); if (img) img.src = full.src; }).catch(() => {});
+  })));
   if (!admin) return;
   qs('#new-news').onclick = () => newsModal();
   qsa('[data-edit-news]').forEach((b) => (b.onclick = () => newsModal(list.find((a) => String(a.id) === b.dataset.editNews))));
@@ -106,7 +136,7 @@ function newsModal(a) {
     // Les imatges del missatge, en ordre: les que ja hi eren ({ id }) i les noves ({ data }), que es pugen en publicar.
     const picks = (a?.images || []).map((id) => ({ id }));
     const showPicks = () => {
-      qs('#news-picks', m).innerHTML = picks.map((p, i) => `<div class="news-pick"><img src="${p.id ? imageUrl(p.id) : p.data}" alt=""><button type="button" data-unpick="${i}" aria-label="${t('Treu la imatge')}">×</button></div>`).join('');
+      qs('#news-picks', m).innerHTML = picks.map((p, i) => `<div class="news-pick"><img src="${p.id ? thumbUrl(p.id) : p.thumb || p.data}" alt=""><button type="button" data-unpick="${i}" aria-label="${t('Treu la imatge')}">×</button></div>`).join('');
       qs('#news-add-image', m).classList.toggle('hidden', picks.length >= MAX_IMAGES);
       qsa('[data-unpick]', m).forEach((b) => (b.onclick = () => { picks.splice(Number(b.dataset.unpick), 1); showPicks(); }));
     };
@@ -116,7 +146,7 @@ function newsModal(a) {
       e.target.value = '';
       if (picks.length + files.length > MAX_IMAGES) toast(t('Com a molt {n} imatges per missatge', { n: MAX_IMAGES }), true);
       for (const file of files.slice(0, MAX_IMAGES - picks.length)) {
-        try { picks.push({ data: await prepareImage(file) }); } catch { toast(t('Aquesta imatge no es pot llegir'), true); }
+        try { picks.push(await prepareImage(file)); } catch { toast(t('Aquesta imatge no es pot llegir'), true); }
       }
       showPicks();
     };
@@ -146,7 +176,7 @@ function newsModal(a) {
       data.event_id = data.event_id ? Number(data.event_id) : null;
       const saved = await attempt(async () => {
         // Primer les imatges: així, quan arriba l'avís al mòbil, el missatge ja és sencer.
-        for (const p of picks) if (!p.id) p.id = (await api('POST', '/announcements/images', { data: p.data.slice(p.data.indexOf(',') + 1) })).id;
+        for (const p of picks) if (!p.id) p.id = (await api('POST', '/announcements/images', { data: base64(p.data), thumb: p.thumb ? base64(p.thumb) : undefined })).id;
         return api(a ? 'PUT' : 'POST', a ? `/announcements/${a.id}` : '/announcements', { ...data, image_ids: picks.map((p) => p.id) });
       });
       sending = false;

@@ -335,6 +335,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS announcement_images (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
 
+// La miniatura que es mostra a la llista (la imatge sencera només s'obre en ampliar-la). Les d'abans no en tenen.
+addColumn('announcement_images', 'thumb', 'BLOB');
+
 // Configuració que el servidor genera ell mateix i ha de mantenir (p. ex. les claus dels avisos al mòbil).
 db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 
@@ -370,7 +373,10 @@ CREATE INDEX IF NOT EXISTS idx_push_subs_person ON push_subscriptions(person_id)
 db.exec(`CREATE INDEX IF NOT EXISTS idx_positions_guest ON castell_positions(guest_id);
 CREATE INDEX IF NOT EXISTS idx_guests_event ON event_guests(event_id, companion_of);
 CREATE INDEX IF NOT EXISTS idx_fields_event ON event_fields(event_id);
-CREATE INDEX IF NOT EXISTS idx_auth_tokens_person ON auth_tokens(person_id);`);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_person ON auth_tokens(person_id);
+-- Les estadístiques i l'historial d'una persona, i esborrar-ne una, busquen per persona.
+CREATE INDEX IF NOT EXISTS idx_attendance_person ON attendance(person_id);
+CREATE INDEX IF NOT EXISTS idx_positions_person ON castell_positions(person_id);`);
 
 // Errors de l'app (del servidor i dels mòbils), per saber que alguna cosa falla abans que algú es queixi. Sense
 // res de qui ho feia: només el missatge, on ha passat i quants cops.

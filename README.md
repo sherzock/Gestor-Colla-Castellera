@@ -336,7 +336,7 @@ Només **Node.js 22.13 o més nou** (fa servir el SQLite integrat de Node). No c
 
 ```bash
 cd colla-castellera
-node server.js
+npm start   # o: node server.js
 ```
 
 Obre <http://localhost:3000>. La primera vegada es crea el compte d'administració `admin` amb una contrasenya aleatòria

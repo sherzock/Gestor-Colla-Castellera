@@ -106,7 +106,23 @@ window.addEventListener('unhandledrejection', (e) => { if (!e.reason?.fromApi) r
 
 // ---------- Inici ----------
 // Per instal·lar-la al mòbil i veure-la sense connexió.
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+// L'app s'obre del que hi ha al mòbil. Si n'hi ha una versió nova, el service worker la baixa i, en estar a punt,
+// l'app es torna a carregar: tot seguit si s'acaba d'obrir, o en canviar de pàgina (per no perdre res a mig escriure).
+if ('serviceWorker' in navigator) {
+  const hadWorker = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('/sw.js').then((reg) => {
+    // Una app que es queda oberta dies també ha de saber que n'hi ha una de nova.
+    let checked = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - checked > 30 * 60 * 1000) { checked = Date.now(); reg.update().catch(() => {}); }
+    });
+  }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadWorker) return; // la primera vegada: no hi havia res de vell
+    if (performance.now() < 10_000) location.reload();
+    else window.addEventListener('hashchange', () => location.reload(), { once: true });
+  });
+}
 (async () => {
   setConfig(await api('GET', '/config').catch(() => config));
   render();

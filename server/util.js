@@ -70,7 +70,8 @@ export function inRange(value, min, max) {
 // Imatges de l'altaveu: l'app les redueix abans de pujar-les, i en base64 ocupen un terç més.
 export const NEWS_IMAGES_PER_MESSAGE = 4;
 export const NEWS_IMAGE_BYTES = 1024 * 1024;
-export const NEWS_IMAGE_BODY = Math.ceil(NEWS_IMAGE_BYTES * 4 / 3) + 1024;
+export const NEWS_THUMB_BYTES = 200 * 1024;
+export const NEWS_IMAGE_BODY = Math.ceil((NEWS_IMAGE_BYTES + NEWS_THUMB_BYTES) * 4 / 3) + 1024;
 export const LIMITS = {
   people: 2000, events: 5000, admins: 25, announcements: 50, newsImages: 220, castellsPerEvent: 30, fieldsPerEvent: 15, fieldOptions: 20,
   guestsPerEvent: 200, companions: 6, templateBoxes: 200, rolesPerEvent: 20,

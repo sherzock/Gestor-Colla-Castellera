@@ -1,8 +1,11 @@
 // Service worker: l'app s'instal·la al mòbil i, sense connexió, mostra l'últim que s'hi ha vist (sessions, castells i
-// alineacions). Sempre es prova primer la xarxa: amb connexió no es veu mai res antic.
+// alineacions). Les dades sempre es proven primer per la xarxa: amb connexió no es veu mai res antic.
+// Els fitxers de l'app, en canvi, surten directament del mòbil (s'obre a l'instant, també amb poca cobertura). El
+// servidor posa a VERSION un resum de tots els fitxers: quan en canvia algun, el navegador veu un service worker nou,
+// el baixa tot de nou i l'app es torna a carregar sola (veure app.js).
 // En sortir o canviar de persona, l'app esborra les dades desades (OFFLINE_DATA) d'aquest dispositiu.
 // També rep els avisos al mòbil: l'avís arriba buit i el text es demana a l'app (veure push.js).
-const VERSION = 19;
+const VERSION = 'dev'; // el servidor hi posa la versió de debò
 const SHELL = `colla-app-${VERSION}`;
 const DATA = 'colla-dades';
 
@@ -14,7 +17,9 @@ const FILES = ['/', '/index.html', '/style.css', '/theme.js', '/app.js', '/caste
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon.svg', '/icons/mark.svg'];
 
 // Només es desen les respostes que calen per veure sessions i castells; mai còpies de seguretat, calendaris, etc.
-const SAVED_API = /^\/api\/(config|me|events|events\/\d+|castells\/\d+(\/history|\/prep)?|templates|announcements(\/images\/[0-9a-f]+)?)$/;
+const SAVED_API = /^\/api\/(config|me|events|events\/\d+|castells\/\d+(\/history|\/prep)?|templates|announcements)$/;
+// Les imatges de l'altaveu no canvien mai (cada una té la seva adreça): si ja hi són, no es tornen a baixar.
+const IMAGE = /^\/api\/announcements\/images\/[0-9a-f]+(\/thumb)?$/;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
@@ -47,17 +52,32 @@ async function networkFirst(request, cacheName, { stamp = false, fallback = null
   }
 }
 
+// Els fitxers de l'app, del que es va baixar en instal·lar aquesta versió; el que no hi sigui, de la xarxa.
+async function shell(request) {
+  const saved = await caches.match(request.mode === 'navigate' ? '/' : request, { cacheName: SHELL });
+  return saved || networkFirst(request, SHELL, { fallback: request.mode === 'navigate' ? '/' : null });
+}
+
+async function cacheFirst(request, cacheName) {
+  const saved = await caches.match(request, { cacheName });
+  if (saved) return saved;
+  const res = await fetch(request);
+  if (res.ok) (await caches.open(cacheName)).put(request, res.clone());
+  return res;
+}
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) {
-    if (SAVED_API.test(url.pathname)) e.respondWith(networkFirst(req, DATA, { stamp: true }));
+    if (IMAGE.test(url.pathname)) e.respondWith(cacheFirst(req, DATA));
+    else if (SAVED_API.test(url.pathname)) e.respondWith(networkFirst(req, DATA, { stamp: true }));
     return;
   }
   // Les adreces de l'app tornen sempre la pàgina principal.
-  e.respondWith(networkFirst(req, SHELL, { fallback: req.mode === 'navigate' ? '/' : null }));
+  e.respondWith(shell(req));
 });
 
 // Avís al mòbil: es recullen els missatges de la bústia d'aquest mòbil i es mostren. Si no n'hi ha cap (ja s'havien

@@ -6,9 +6,9 @@
   "description": "Appinya't: assistència, sessions i castells per a colles castelleres",
   "engines": { "node": ">=22.13" },
   "scripts": {
-    "start": "node server.js",
+    "start": "node --max-semi-space-size=2 server.js",
     "seed": "node seed.js",
-    "demo": "node seed.js && DEMO=1 node server.js",
+    "demo": "node seed.js && DEMO=1 node --max-semi-space-size=2 server.js",
     "test": "node --test tests/*.test.js",
     "test:e2e": "node --test e2e/*.test.js",
     "lint": "npx --yes eslint@9.39.5 .",

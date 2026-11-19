@@ -13,6 +13,7 @@ export const CHANGELOG = [
       "Cada acompanyant ha de portar el seu nom, perquè a la pinya se'l pugui reconèixer.",
       "Suggeriments i errors: des d'«Ajustos» qualsevol persona pot enviar una idea o dir que alguna cosa no va, de manera anònima, i l'administració ho veu a «Comptes».",
       "Cada còpia de seguretat passa sola una restauració de prova, i el registre de canvis també apunta qui baixa còpies, dades d'una persona o llistes d'assistència.",
+      "Més ràpida: l'app s'obre del mòbil a l'instant i s'actualitza sola quan n'hi ha una versió nova; les fotos de l'altaveu es veuen en petit (unes deu vegades menys de dades) i la sencera només en ampliar-la.",
     ],
     es: [
       'Pagos en las sesiones: precio por persona, por acompañante y en las respuestas; quien viene ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, avisa cuando ha pagado y la junta lo marca como recibido.',
@@ -24,6 +25,7 @@ export const CHANGELOG = [
       'Cada acompañante tiene que llevar su nombre, para que en la pinya se le pueda reconocer.',
       'Sugerencias y errores: desde «Ajustes» cualquier persona puede enviar una idea o decir que algo no funciona, de forma anónima, y la administración lo ve en «Cuentas».',
       'Cada copia de seguridad pasa sola una restauración de prueba, y el registro de cambios también apunta quién descarga copias, datos de una persona o listas de asistencia.',
+      'Más rápida: la app se abre desde el móvil al instante y se actualiza sola cuando hay una versión nueva; las fotos del altavoz se ven en pequeño (unas diez veces menos datos) y la entera solo al ampliarla.',
     ],
     en: [
       'Payments in sessions: price per person, per companion and per answer; whoever goes sees how much to pay, the IBAN or Bizum and the reference, says when they have paid and the board marks it as received.',
@@ -35,6 +37,7 @@ export const CHANGELOG = [
       'Each companion needs a name, so they can be recognised in the pinya.',
       'Suggestions and bugs: from “Settings” anyone can send an idea or report that something is wrong, anonymously, and the admins see it in “Accounts”.',
       'Every backup goes through a test restore by itself, and the activity log also records who downloads backups, a person\'s data or attendance lists.',
+      'Faster: the app opens instantly from the phone and updates itself when there is a new version; announcement photos show as small previews (about ten times less data) and the full one only when you zoom in.',
     ],
   },
   {

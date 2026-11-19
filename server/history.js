@@ -7,16 +7,16 @@ import { historyKey } from './cache.js';
 // ---------- Historial de posicions ----------
 // L'historial surt dels castells de sessions passades (fins avui inclòs). Les files són compartides: no es modifiquen.
 export let pastCache = null;
-// Una fila per persona i posició de cada castell passat, amb les dades del castell i de la sessió, i la categoria,
-// el nom i el grup de la posició ja calculats. Es construeixen a mà (no amb un JOIN) perquè amb anys d'historial
-// són més de cent mil files i llegir-les així és molt més ràpid.
-export function HistoryRow(c, pos_key, person_id, pos, castell) {
-  this.pos_key = pos_key; this.person_id = person_id; this.cat = pos.cat; this.role = pos.role; this.group = pos.group; this.castell = castell;
-  this.castell_id = c.castell_id; this.width = c.width; this.height = c.height; this.agulla = c.agulla; this.folre = c.folre;
-  this.manilles = c.manilles; this.puntals = c.puntals; this.sota = c.sota; this.gralles = c.gralles; this.timbals = c.timbals; this.net = c.net;
-  this.from_level = c.from_level; this.to_level = c.to_level; this.cordons = c.cordons; this.taps = c.taps; this.result = c.result;
-  this.event_id = c.event_id; this.date = c.date; this.title = c.title; this.type = c.type; this.hidden = c.hidden;
+// Una fila per persona i posició de cada castell passat, amb la categoria, el nom i el grup de la posició ja calculats.
+// Es construeixen a mà (no amb un JOIN) perquè amb anys d'historial són més de cent mil files i llegir-les així és molt
+// més ràpid. Les dades del castell i de la sessió no es copien a cada fila: totes les files d'un castell apunten a la
+// mateixa (r.c) i es llegeixen igual (r.width, r.date…). Amb anys d'historial, la memòria queda en una quarta part.
+export function HistoryRow(c, pos_key, person_id, pos) {
+  this.c = c; this.pos_key = pos_key; this.person_id = person_id; this.cat = pos.cat; this.role = pos.role; this.group = pos.group;
 }
+const CASTELL_FIELDS = ['castell', 'castell_id', 'width', 'height', 'agulla', 'folre', 'manilles', 'puntals', 'sota', 'gralles', 'timbals', 'net',
+  'from_level', 'to_level', 'cordons', 'taps', 'result', 'event_id', 'date', 'title', 'type', 'hidden'];
+for (const f of CASTELL_FIELDS) Object.defineProperty(HistoryRow.prototype, f, { get() { return this.c[f]; }, enumerable: true });
 export function pastRows() {
   if (pastCache?.key !== historyKey()) {
     const castells = db.prepare(`SELECT c.id AS castell_id, c.width, c.height, c.agulla, c.folre, c.manilles, c.puntals, c.sota, c.gralles,
@@ -32,12 +32,12 @@ export function pastRows() {
     const byPerson = new Map();
     for (const c of castells) {
       const s = structureOf(c);
-      const name = castellName(c);
+      c.castell = castellName(c);
       for (const p of byCastell.get(c.castell_id) || []) {
         const pos = s.positions.get(p.pos_key);
         // Una posició que la plantilla de la colla ha tret no compta (la fila es conserva per si es torna a posar).
         if (!pos) continue;
-        const row = new HistoryRow(c, p.pos_key, p.person_id, pos, name);
+        const row = new HistoryRow(c, p.pos_key, p.person_id, pos);
         rows.push(row);
         let mine = byPerson.get(p.person_id);
         if (!mine) byPerson.set(p.person_id, (mine = []));
@@ -75,7 +75,7 @@ export function historyIndex() {
   for (const r of historyRows()) {
     if (r.result !== 'previst') {
       if (!byName.has(r.castell)) byName.set(r.castell, []);
-      byName.get(r.castell).push({ castell_id: r.castell_id, pos_key: r.pos_key, person_id: r.person_id, date: r.date, type: r.type, result: r.result });
+      byName.get(r.castell).push(r);
     }
     const { cat } = r;
     (byCat[r.person_id] ??= {})[cat] = (byCat[r.person_id][cat] || 0) + 1;

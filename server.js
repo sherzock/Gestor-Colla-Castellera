@@ -22,12 +22,10 @@ import './server/routes/stats.js';
 import './server/routes/tecnica.js';
 import './server/routes/calendar.js';
 import './server/routes/feedback.js';
-import path from 'node:path';
-import zlib from 'node:zlib';
-import fs from 'node:fs';
 import http from 'node:http';
 import { translate } from './public/i18n.js';
-import { COLLA_NAME, PORT, PUBLIC_DIR } from './server/config.js';
+import { COLLA_NAME, PORT } from './server/config.js';
+import { MIME, sendBody, serveStatic } from './server/static.js';
 import { HttpError, NEWS_IMAGE_BODY, can, fail } from './server/util.js';
 import { currentUser, routes } from './server/router.js';
 import { logError } from './server/errors.js';
@@ -46,23 +44,6 @@ const SECURITY_HEADERS = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
     "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
 };
-const INDEX_FILE = path.join(PUBLIC_DIR, 'index.html');
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
-};
-
-// Comprimeix les respostes de text si el navegador ho accepta (l'historial d'un castell passa de ~200 KB a ~20 KB).
-// No hi ha secrets dins les respostes que puguin barrejar-se amb text d'un atacant (BREACH): les sessions van en cookies.
-// encoded: on es guarda la versió comprimida d'una resposta que es reaprofita.
-function sendBody(req, res, status, headers, body, encoded = null) {
-  const data = Buffer.isBuffer(body) ? body : Buffer.from(body);
-  if (data.length > 1024 && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
-    const gzip = encoded ? (encoded.gzip ??= zlib.gzipSync(data)) : zlib.gzipSync(data);
-    res.writeHead(status, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }).end(gzip);
-  } else res.writeHead(status, headers).end(data);
-}
-
 // Per instal·lar l'app al mòbil: porta el nom de la colla, per això no és un fitxer.
 function sendManifest(req, res) {
   const icon = (src, size, purpose = 'any') => ({ src, sizes: `${size}x${size}`, type: 'image/png', purpose });
@@ -71,28 +52,6 @@ function sendManifest(req, res) {
     background_color: '#f6f5f3', theme_color: '#9b1c2c',
     icons: [icon('/icons/icon-192.png', 192), icon('/icons/icon-512.png', 512), icon('/icons/icon-maskable-512.png', 512, 'maskable')],
   }));
-}
-
-function serveStatic(req, res, pathname) {
-  let decoded;
-  // Una adreça mal codificada (p. ex. «/%E0%A4%A») no pot tombar el servidor.
-  try { decoded = decodeURIComponent(pathname); } catch { res.writeHead(400).end(); return; }
-  const file = path.normalize(path.join(PUBLIC_DIR, decoded === '/' ? 'index.html' : decoded));
-  // Ha de quedar dins de public/ (amb la barra: «public-altra/» no hi compta) i no es serveixen fitxers ocults.
-  if (!file.startsWith(PUBLIC_DIR + path.sep) || file.includes(`${path.sep}.`)) { res.writeHead(403).end(); return; }
-  const send = (f) => fs.stat(f, (err, st) => {
-    if (err || !st.isFile()) {
-      // Les adreces de l'app (#/…) i les que no existeixen tornen la pàgina principal.
-      if (f !== INDEX_FILE) send(INDEX_FILE); else res.writeHead(404).end('No trobat');
-      return;
-    }
-    // «no-cache» vol dir que el navegador el guarda però pregunta si ha canviat: si no, respon 304 sense tornar-lo a enviar.
-    const etag = `"${st.size.toString(36)}-${st.mtimeMs.toString(36)}"`;
-    const headers = { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag };
-    if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers).end(); return; }
-    fs.readFile(f, (e2, data) => (e2 ? res.writeHead(404).end('No trobat') : sendBody(req, res, 200, headers, data)));
-  });
-  send(file);
 }
 
 // Una petició massa gran es llegeix fins al final sense guardar-la i es respon 413: si es tallés la connexió, l'app

@@ -91,3 +91,34 @@ test('com a molt 50 missatges: en arribar-hi no se\'n publiquen més, fins que s
   await A('DELETE', `/announcements/${made[0]}`);
   assert.equal((await A('POST', '/announcements', { title: 'Ara sí', notify: false })).s, 200);
 });
+
+test('miniatures: la llista baixa la petita; sense miniatura, la sencera', async () => {
+  const A = s.admin;
+  const thumb = Buffer.concat([PNG, Buffer.from('miniatura')]);
+  // Una prova d'abans omple el màxim de missatges: se n'esborra un per fer lloc.
+  const old = (await A('GET', '/announcements')).d.at(-1);
+  if (old) await A('DELETE', `/announcements/${old.id}`);
+  const withThumb = (await A('POST', '/announcements/images', { data: b64(PNG), thumb: b64(thumb) })).d.id;
+  const plain = await upload();
+  const a = (await A('POST', '/announcements', { title: 'Miniatures', image_ids: [withThumb, plain], notify: false })).d;
+  assert.ok(a.id, JSON.stringify(a));
+  const cookie = Object.entries(s.member.jar).map(([k, v]) => `${k}=${v}`).join('; ');
+  const get = async (p) => {
+    const r = await fetch(`${server.url}/api/announcements/images/${p}`, { headers: { cookie } });
+    return { status: r.status, type: r.headers.get('content-type'), cache: r.headers.get('cache-control'), body: Buffer.from(await r.arrayBuffer()) };
+  };
+  const small = await get(`${withThumb}/thumb`);
+  assert.equal(small.status, 200);
+  assert.equal(small.type, 'image/png');
+  assert.match(small.cache, /immutable/);
+  assert.deepEqual(small.body, thumb);
+  assert.deepEqual((await get(withThumb)).body, PNG, 'la sencera continua sent la sencera');
+  assert.deepEqual((await get(`${plain}/thumb`)).body, PNG, 'les d\'abans, sense miniatura, mostren la sencera');
+  assert.equal((await get('noexisteix/thumb')).status, 404);
+  // La miniatura també ha de ser una imatge de debò i petita.
+  assert.equal((await A('POST', '/announcements/images', { data: b64(PNG), thumb: b64(Buffer.from('<svg/>')) })).s, 400);
+  assert.equal((await A('POST', '/announcements/images', { data: b64(PNG), thumb: b64(Buffer.concat([PNG, Buffer.alloc(300 * 1024)])) })).s, 413);
+  const del = await A('DELETE', `/announcements/${a.id}`);
+  assert.equal(del.s, 200, JSON.stringify(del.d));
+  assert.equal((await get(`${withThumb}/thumb`)).status, 404);
+});
