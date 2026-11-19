@@ -8,18 +8,21 @@ export const CHANGELOG = [
       "Els missatges de l'altaveu poden portar un botó cap a una sessió, per apuntar-s'hi i, si cal, pagar.",
       "Data límit per pagar amb recordatori al mòbil, qui va fora de termini, rebuts en efectiu i marcar-ne diversos alhora.",
       "La resposta a una sessió es desa sola mentre respons: ja no hi ha botó de desar.",
+      "Esborrar una persona en treu tot el que la identifica, però als castells i a les sessions passades hi posa «Persona esborrada»: les alineacions, l'assistència i els pagaments queden sencers.",
     ],
     es: [
       'Pagos en las sesiones: precio por persona, por acompañante y en las respuestas; quien viene ve cuánto tiene que pagar, el IBAN o el Bizum y el concepto, avisa cuando ha pagado y la junta lo marca como recibido.',
       'Los mensajes del altavoz pueden llevar un botón hacia una sesión, para apuntarse y, si hace falta, pagar.',
       'Fecha límite para pagar con recordatorio en el móvil, quién va fuera de plazo, recibos en efectivo y marcar varios a la vez.',
       'La respuesta a una sesión se guarda sola mientras respondes: ya no hay botón de guardar.',
+      'Borrar a una persona quita todo lo que la identifica, pero en los castells y las sesiones pasadas pone «Persona esborrada»: las alineaciones, la asistencia y los pagos quedan enteros.',
     ],
     en: [
       'Payments in sessions: price per person, per companion and per answer; whoever goes sees how much to pay, the IBAN or Bizum and the reference, says when they have paid and the board marks it as received.',
       'Announcements can carry a button to a session, to sign up and, if needed, pay.',
       'Payment deadline with a phone reminder, who is overdue, cash payments and marking several as received at once.',
       'Your answer to a session saves by itself as you go: no more save button.',
+      'Deleting a person removes everything that identifies them, but past castells and sessions show “Persona esborrada”: line-ups, attendance and payments stay complete.',
     ],
   },
   {

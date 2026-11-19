@@ -32,7 +32,7 @@ const ca = [
   ['privadesa', 'admin', 'Dades personals i menors', `
     <p>La <a href="#/privadesa">nota de protecció de dades</a> és un model: reviseu-la (millor amb algú que conegui el RGPD) i poseu-hi el contacte de la junta. Es pot imprimir per signar.</p>
     <p>Per als <strong>menors de 14 anys</strong> cal el consentiment del pare, mare o tutor/a: quan el tingueu signat, apunteu-ne la data a la seva fitxa. A <em>Persones</em> surt qui encara no el té.</p>
-    <p>Qualsevol persona pot demanar les seves dades (a la fitxa, <em>Descarrega les seves dades</em>) o que s'esborrin.</p>`],
+    <p>Qualsevol persona pot demanar les seves dades (a la fitxa, <em>Descarrega les seves dades</em>) o que s'esborrin. En esborrar-les, on sortia la persona posarà <em>Persona esborrada</em>: els castells, l'assistència i els pagaments passats queden sencers.</p>`],
   ['servidor', 'admin', 'Posar-la en marxa per a la colla', `
     <p>Cal un servidor amb <strong>Node 22.13 o més nou</strong> i un <strong>disc que es conservi</strong> (la versió de prova gratuïta de Render s'esborra a cada reinici). Opcions senzilles: Render amb un disc (pla de pagament), Fly.io amb un volum, o un servidor virtual (Hetzner, OVH…) amb HTTPS al davant (Caddy ho fa sol).</p>
     <p>Variables principals: <code>COLLA_NAME</code> (nom de la colla), <code>COLLA_CODE</code> (codi per entrar com a membre), <code>PRIVACY_CONTACT</code> (correu de la junta), <code>DB_PATH</code> (on és la base de dades, dins del disc). Arrenca amb <code>npm start</code>.</p>
@@ -77,7 +77,7 @@ const es = [
   ['privadesa', 'admin', 'Datos personales y menores', `
     <p>La <a href="#/privadesa">nota de protección de datos</a> es un modelo: revisadla (mejor con alguien que conozca el RGPD) y poned el contacto de la junta. Se puede imprimir para firmar.</p>
     <p>Para los <strong>menores de 14 años</strong> hace falta el consentimiento del padre, madre o tutor/a: cuando lo tengáis firmado, apuntad la fecha en su ficha. En <em>Personas</em> sale quién aún no lo tiene.</p>
-    <p>Cualquier persona puede pedir sus datos (en la ficha, <em>Descargar sus datos</em>) o que se borren.</p>`],
+    <p>Cualquier persona puede pedir sus datos (en la ficha, <em>Descargar sus datos</em>) o que se borren. Al borrarlos, donde salía la persona pondrá <em>Persona esborrada</em>: los castells, la asistencia y los pagos pasados quedan enteros.</p>`],
   ['servidor', 'admin', 'Ponerla en marcha para la colla', `
     <p>Hace falta un servidor con <strong>Node 22.13 o más nuevo</strong> y un <strong>disco que se conserve</strong> (la versión de prueba gratuita de Render se borra en cada reinicio). Opciones sencillas: Render con un disco (plan de pago), Fly.io con un volumen, o un servidor virtual (Hetzner, OVH…) con HTTPS delante (Caddy lo hace solo).</p>
     <p>Variables principales: <code>COLLA_NAME</code> (nombre de la colla), <code>COLLA_CODE</code> (código para entrar como miembro), <code>PRIVACY_CONTACT</code> (correo de la junta), <code>DB_PATH</code> (dónde está la base de datos, dentro del disco). Arranca con <code>npm start</code>.</p>
@@ -122,7 +122,7 @@ const en = [
   ['privadesa', 'admin', 'Personal data and minors', `
     <p>The <a href="#/privadesa">data protection notice</a> is a template: review it (ideally with someone who knows the GDPR) and add the board's contact. It can be printed to sign.</p>
     <p>For <strong>children under 14</strong>, consent from a parent or legal guardian is required: once it's signed, record the date on their record. <em>People</em> shows who still doesn't have it.</p>
-    <p>Anyone can ask for their data (on their record, <em>Download their data</em>) or for it to be deleted.</p>`],
+    <p>Anyone can ask for their data (on their record, <em>Download their data</em>) or for it to be deleted. Once deleted, wherever they appeared it will say <em>Persona esborrada</em>: past castells, attendance and payments stay complete.</p>`],
   ['servidor', 'admin', 'Running it for the colla', `
     <p>You need a server with <strong>Node 22.13 or newer</strong> and a <strong>persistent disk</strong> (Render's free demo is wiped on every restart). Simple options: Render with a disk (paid plan), Fly.io with a volume, or a virtual server (Hetzner, OVH…) with HTTPS in front (Caddy does it by itself).</p>
     <p>Main variables: <code>COLLA_NAME</code> (the colla's name), <code>COLLA_CODE</code> (code members need to sign in), <code>PRIVACY_CONTACT</code> (the board's email), <code>DB_PATH</code> (where the database lives, on the disk). Start it with <code>npm start</code>.</p>

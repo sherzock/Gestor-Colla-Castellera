@@ -887,6 +887,7 @@ route('GET', '/api/people', ({ user }) => {
   const people = db.prepare(`SELECT p.*, COALESCE(s.attended, 0) AS attended, COALESCE(s.confirmed, 0) AS confirmed
     FROM people p LEFT JOIN (SELECT a.person_id, SUM(${CAME_SQL}) AS attended, SUM(a.status = 'si') AS confirmed
         FROM events e JOIN attendance a ON a.event_id = e.id WHERE ${SEASON_SQL} GROUP BY a.person_id) s ON s.person_id = p.id
+    WHERE p.erased_at IS NULL
     ORDER BY p.active DESC, p.name COLLATE NOCASE`).all();
   const pastEvents = db.prepare(`SELECT COUNT(*) AS n FROM events e WHERE ${SEASON_SQL}`).get().n;
   return { people: people.map((p) => personFor(user, p)), pastEvents, season: String(new Date().getFullYear()) };
@@ -902,7 +903,7 @@ route('POST', '/api/people', ({ body, user }) => {
 }, 'people');
 
 route('PUT', '/api/people/:id', ({ params, body, user }) => {
-  const person = db.prepare('SELECT * FROM people WHERE id = ?').get(params.id) || fail(404, 'Persona no trobada');
+  const person = db.prepare('SELECT * FROM people WHERE id = ? AND erased_at IS NULL').get(params.id) || fail(404, 'Persona no trobada');
   const data = pickPersonFields(body, [...editableFields(user), 'active']);
   checkAliasUnique(data.alias, person.id);
   updateRow('people', person.id, data);
@@ -916,8 +917,34 @@ route('PUT', '/api/people/:id', ({ params, body, user }) => {
   return personFor(user, db.prepare('SELECT * FROM people WHERE id = ?').get(person.id));
 }, 'people');
 
+// Esborrar una persona (dret de supressió): no es treu la fila, sinó tot el que la identifica. Així els castells
+// passats es veuen sencers («Persona esborrada» a la seva posició) i els totals d'assistència i de pagaments no
+// canvien. Es treuen el nom, el contacte, les mides, les notes, els comentaris i les respostes de text lliure, els
+// noms dels acompanyants, els encàrrecs, les sessions obertes i els mòbils amb avisos.
+const ERASED_NAME = 'Persona esborrada';
+const PERSON_WIPE = PROFILE_FIELDS.filter((f) => f !== 'name');
 route('DELETE', '/api/people/:id', ({ params }) => {
-  db.prepare('DELETE FROM people WHERE id = ?').run(params.id);
+  const person = db.prepare('SELECT * FROM people WHERE id = ?').get(params.id) || fail(404, 'Persona no trobada');
+  transaction(() => {
+    db.prepare(`UPDATE people SET name = ?, ${PERSON_WIPE.map((f) => `${f} = NULL`).join(', ')}, active = 0,
+      erased_at = ? WHERE id = ?`).run(ERASED_NAME, nowUtc(), person.id);
+    const textFields = new Set(db.prepare("SELECT id FROM event_fields WHERE kind = 'text'").all().map((f) => String(f.id)));
+    for (const a of db.prepare('SELECT event_id, extra FROM attendance WHERE person_id = ?').all(person.id)) {
+      let extra = null;
+      try { extra = JSON.parse(a.extra || 'null'); } catch { /* malmès: es treu */ }
+      const kept = extra && typeof extra === 'object'
+        ? Object.fromEntries(Object.entries(extra).filter(([k]) => !textFields.has(String(k)))) : null;
+      db.prepare('UPDATE attendance SET comment = NULL, extra = ? WHERE event_id = ? AND person_id = ?')
+        .run(kept && Object.keys(kept).length ? JSON.stringify(kept) : null, a.event_id, person.id);
+    }
+    const companion = `Acompanyant de ${ERASED_NAME}`;
+    db.prepare('UPDATE event_guests SET name = ?, colla = NULL WHERE companion_of = ?').run(companion, person.id);
+    db.prepare('UPDATE castell_positions SET guest_name = ? WHERE guest_id IN (SELECT id FROM event_guests WHERE companion_of = ?)')
+      .run(companion, person.id);
+    for (const t of ['event_roles', 'auth_tokens', 'push_reminders']) db.prepare(`DELETE FROM ${t} WHERE person_id = ?`).run(person.id);
+    db.prepare('DELETE FROM push_subscriptions WHERE person_id = ? AND admin_id IS NULL').run(person.id);
+    db.prepare('UPDATE push_subscriptions SET person_id = NULL WHERE person_id = ?').run(person.id);
+  });
   // El diari de canvis (WAL) encara té les pàgines d'abans d'esborrar-la: es passa al fitxer (ja amb zeros, veure
   // secure_delete a db.js) i es buida, perquè no en quedi res llegible.
   db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -986,7 +1013,7 @@ route('POST', '/api/people/import', ({ req, body, user }) => {
   if (!rows.length) fail(400, 'El fitxer no té cap persona');
   if (rows.length > LIMITS.people) fail(400, 'Com a molt {n} persones', { n: LIMITS.people });
   const lang = ['es', 'en'].includes(req.headers['x-lang']) ? req.headers['x-lang'] : 'ca';
-  const existing = db.prepare('SELECT id, name, alias FROM people').all();
+  const existing = db.prepare('SELECT id, name, alias FROM people WHERE erased_at IS NULL').all();
   const byName = new Map(existing.map((p) => [normName(p.name), p]));
   const byAlias = new Map(existing.filter((p) => p.alias).map((p) => [normName(p.alias), p]));
   const seen = new Set();
@@ -2376,7 +2403,7 @@ route('GET', '/api/stats/people/:id', ({ params, user, query }) => {
 });
 
 route('GET', '/api/stats/people', memo('people', ({ query }) => {
-  const people = new Map(db.prepare('SELECT id, name, alias, instrument, active FROM people').all()
+  const people = new Map(db.prepare('SELECT id, name, alias, instrument, active FROM people WHERE erased_at IS NULL').all()
     .map((p) => [p.id, { ...p, castells: 0, sessions: 0, results: emptyResults(), cats: new Map() }]));
   for (const r of historyRows({ query })) {
     const p = people.get(r.person_id);

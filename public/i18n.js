@@ -307,8 +307,8 @@ const es = {
   'Carregant…': 'Cargando…',
   'Desat': 'Guardado',
   'Persona creada': 'Persona creada',
-  "Esborrar definitivament {name}? Es perdrà el seu historial d'assistència i les posicions. (Si només ha deixat la colla, millor desmarca «Activa».)":
-    '¿Borrar definitivamente a {name}? Se perderá su historial de asistencia y las posiciones. (Si solo ha dejado la colla, mejor desmarca «Activa».)',
+  "Esborrar les dades de {name}? Se'n treuen el nom, el contacte, les mides i els comentaris, i on surti posarà «Persona esborrada»: els castells i els totals passats queden sencers. No es pot desfer. (Si només ha deixat la colla, millor desmarca «Activa».)":
+    '¿Borrar los datos de {name}? Se quitan el nombre, el contacto, las medidas y los comentarios, y donde salga pondrá «Persona esborrada»: los castells y los totales pasados quedan enteros. No se puede deshacer. (Si solo ha dejado la colla, mejor desmarca «Activa».)',
   'El meu historial de posicions': 'Mi historial de posiciones',
   'No sóc jo': 'No soy yo',
   'Les meves dades': 'Mis datos',
@@ -1403,8 +1403,8 @@ const en = {
   'Carregant…': 'Loading…',
   'Desat': 'Saved',
   'Persona creada': 'Person created',
-  "Esborrar definitivament {name}? Es perdrà el seu historial d'assistència i les posicions. (Si només ha deixat la colla, millor desmarca «Activa».)":
-    'Permanently delete {name}? Their attendance history and positions will be lost. (If they just left the colla, untick “Active” instead.)',
+  "Esborrar les dades de {name}? Se'n treuen el nom, el contacte, les mides i els comentaris, i on surti posarà «Persona esborrada»: els castells i els totals passats queden sencers. No es pot desfer. (Si només ha deixat la colla, millor desmarca «Activa».)":
+    'Delete {name}\'s data? Their name, contact details, measurements and comments are removed, and wherever they appear it will say “Persona esborrada”: past castells and totals stay complete. This can\'t be undone. (If they just left the colla, untick “Active” instead.)',
   'El meu historial de posicions': 'My position history',
   'No sóc jo': 'Not me',
   'Les meves dades': 'My details',

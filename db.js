@@ -405,6 +405,8 @@ addColumn('admins', 'recovery_codes', 'TEXT');
 
 // Menors de 14 anys: quan es va rebre el consentiment del pare, mare o tutor/a (data).
 addColumn('people', 'guardian_consent', 'TEXT');
+// Quan s'han esborrat les dades d'una persona (en queda la fila, sense res que la identifiqui).
+addColumn('people', 'erased_at', 'TEXT');
 
 // Pagaments d'una sessió (viatge, sopar, samarretes…). Cada pregunta de la sessió pot tenir preu (sí/no: si diu que
 // sí; número: per unitat; llista: el de l'opció triada) i la sessió, un preu per persona i un per acompanyant. Qui

@@ -210,7 +210,7 @@ function personModal(person) {
       }
     };
     qs('#del-person', m)?.addEventListener('click', async () => {
-      if (!confirm(t("Esborrar definitivament {name}? Es perdrà el seu historial d'assistència i les posicions. (Si només ha deixat la colla, millor desmarca «Activa».)", { name: person.name }))) return;
+      if (!confirm(t("Esborrar les dades de {name}? Se'n treuen el nom, el contacte, les mides i els comentaris, i on surti posarà «Persona esborrada»: els castells i els totals passats queden sencers. No es pot desfer. (Si només ha deixat la colla, millor desmarca «Activa».)", { name: person.name }))) return;
       if (await attempt(() => api('DELETE', `/people/${person.id}`))) { closeModal(); render(); }
     });
   });

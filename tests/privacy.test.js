@@ -132,13 +132,14 @@ const PERSON_EXPORT = { name: 'nom', alias: 'malnom', email: 'correu', phone: 't
   height_cm: 'alcada_cm', shoulder_height_cm: 'alcada_espatlles_cm', shoulder_width_cm: 'amplada_espatlles_cm', weight_kg: 'pes_kg',
   notes: 'notes', instrument: 'instrument', section: 'grup', active: 'activa', created_at: 'alta', guardian_consent: 'consentiment_tutor' };
 // id; i usuari, contrasenya i rol de quan els administradors eren persones (ara sempre buits: veure db.js).
-const PERSON_NOT_DATA = ['id', 'username', 'password_hash', 'role'];
+const PERSON_NOT_DATA = ['id', 'username', 'password_hash', 'role', 'erased_at'];
 const ATTENDANCE_EXPORT = { status: 'resposta', came: 'ha_vingut', escoleta: 'escoleta', extra: 'camps', comment: 'comentari', updated_at: 'actualitzat',
   paid_at: 'diu_que_ha_pagat', received_at: 'pagament_rebut',
   received_cash: 'pagat_en_efectiu', pay_reminded_at: 'recordatori_de_pagament' };
 // «present» és d'una versió antiga (ara es calcula, veure CAME_SQL).
 const ATTENDANCE_NOT_DATA = ['event_id', 'person_id', 'present'];
 // Cada taula que guarda alguna cosa d'una persona i on surt a la descàrrega.
+const KEEPS_ERASED = ['attendance', 'castell_positions', 'event_guests'];
 const PERSON_TABLES = { attendance: 'assistencia', castell_positions: 'posicions', event_guests: 'acompanyants',
   push_subscriptions: 'mobils_amb_avisos', push_reminders: 'recordatoris', auth_tokens: 'sessions_obertes', event_roles: 'encarrecs' };
 
@@ -158,7 +159,7 @@ test('la descàrrega de les dades d\'una persona porta tot el que se\'n guarda',
   for (const a of r.d.assistencia) for (const key of Object.values(ATTENDANCE_EXPORT)) assert.ok(key in a, key);
 });
 
-test('esborrar una persona no en deixa cap rastre: ni a la base de dades, ni dins del fitxer, ni a les respostes', async () => {
+test('esborrar una persona no deixa res que la identifiqui, però els castells i els totals passats queden sencers', async () => {
   const A = s.admin;
   const p = (await A('POST', '/people', { name: 'Zeldaesborrable Puig', alias: 'zeldaesb', email: 'zelda@esborra.cat', phone: '600111999',
     notes: 'notaesborrable', birthdate: '1990-05-05', height_cm: 170 })).d;
@@ -193,7 +194,8 @@ test('esborrar una persona no en deixa cap rastre: ni a la base de dades, ni din
     for (const row of db.prepare(`SELECT * FROM ${name}`).all()) {
       const text = JSON.stringify(row);
       for (const n of needles) if (text.includes(n)) found.push(`${name}: ${n}`);
-      for (const col of refs) if (row[col] === p.id) found.push(`${name}.${col}`);
+      // Només hi queden lligats l'assistència (resposta, pagament), les posicions i els acompanyants, sense noms.
+      for (const col of refs) if (row[col] === p.id && !KEEPS_ERASED.includes(name)) found.push(`${name}.${col}`);
     }
   }
   db.close();
@@ -210,6 +212,18 @@ test('esborrar una persona no en deixa cap rastre: ni a la base de dades, ni din
   }
   assert.deepEqual(found, []);
   assert.equal((await m('GET', '/me')).s, 401);
+  // El castell continua amb la posició ocupada, i la sessió amb la seva resposta i el seu pagament.
+  const castell = (await A('GET', `/castells/${c.id}`)).d;
+  const pos = castell.positions.find((x) => x.pos_key === 't1-0');
+  assert.equal(pos?.person_id, p.id);
+  const event = (await A('GET', `/events/${ev.id}`)).d;
+  const row = event.attendance.find((a) => a.id === p.id);
+  assert.equal(row.status, 'si');
+  assert.ok(row.paid_at);
+  assert.equal((row.alias || row.name), 'Persona esborrada');
+  // Ja no surt a la llista de persones, i no es pot tornar a editar.
+  assert.ok(!(await A('GET', '/people')).d.people.some((x) => x.id === p.id));
+  assert.equal((await A('PUT', `/people/${p.id}`, { name: 'Torna' })).s, 404);
   await A('DELETE', `/events/${ev.id}`);
 });
 
